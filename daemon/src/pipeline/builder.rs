@@ -144,8 +144,12 @@ fn build_sink() -> Result<(gst::Element, String, OutputSink)> {
         OutputSink::PipeWire { ref node_name } => {
             let props = gst::Structure::builder("props")
                 .field("node.name", node_name.as_str())
-                .field("media.class", "Video/Source/Camera")
+                .field("media.class", "Video/Source")
+                .field("media.type", "Video")
+                .field("media.role", "Camera")
                 .field("node.description", "OpenEffects Virtual Camera")
+                .field("object.register", "true")
+                .field("node.export", "true")
                 .build();
             let element = gst::ElementFactory::make("pipewiresink")
                 .name("oe_output_sink")
