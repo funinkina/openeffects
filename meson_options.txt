@@ -1,0 +1,1 @@
+option('cargo_profile', type: 'combo', choices: ['debug', 'release'], value: 'release', description: 'Cargo profile to install from target/')

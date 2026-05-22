@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node name="/org/openeffects/Daemon">
+  <interface name="org.openeffects.Devices1">
+
+    <!-- Each dict: id, name, path, width, height, fps -->
+    <method name="ListCameras">
+      <arg name="cameras" type="aa{sv}" direction="out"/>
+    </method>
+
+    <method name="SelectCamera">
+      <arg name="id" type="s" direction="in"/>
+    </method>
+
+    <!-- path or PipeWire node name of the virtual camera -->
+    <property name="VirtualCameraInfo" type="a{sv}" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+
+    <property name="ActiveCamera" type="s" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+
+  </interface>
+</node>

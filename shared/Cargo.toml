@@ -1,0 +1,19 @@
+[package]
+name    = "shared"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+anyhow.workspace    = true
+thiserror.workspace = true
+serde.workspace     = true
+toml.workspace      = true
+dirs.workspace      = true
+tracing.workspace   = true
+zbus.workspace      = true
+zvariant.workspace  = true
+
+[dev-dependencies]
+tempfile = "3"

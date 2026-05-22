@@ -1,0 +1,46 @@
+[workspace]
+resolver = "2"
+members = [
+    "shared",
+    "daemon",
+    "cli",
+    "tray",
+    "gui",
+    "tests/integration",
+]
+
+[workspace.package]
+version       = "0.1.0"
+edition       = "2021"
+license       = "GPL-3.0-or-later"
+authors       = ["Aryan <aryankushwaha3101@gmail.com>"]
+rust-version  = "1.80"
+
+[workspace.dependencies]
+anyhow    = "1.0"
+thiserror = "2.0"
+
+serde = { version = "1.0", features = ["derive"] }
+toml  = "0.8"
+dirs  = "5.0"
+
+tokio = { version = "1", features = ["full"] }
+
+zbus = { version = "5", features = ["tokio"] }
+zvariant = "5"
+
+gstreamer       = "0.23"
+gstreamer-video = "0.23"
+gstreamer-app   = "0.23"
+
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+clap = { version = "4", features = ["derive"] }
+futures-util = "0.3"
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1
+strip         = "symbols"

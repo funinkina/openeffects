@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node name="/org/openeffects/Daemon">
+  <interface name="org.openeffects.Daemon1">
+
+    <method name="Start"/>
+    <method name="Stop"/>
+
+    <!-- "running" | "idle" | "error" | "stopped" -->
+    <property name="Status" type="s" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+    </property>
+
+    <!-- tier, ep, pipewire_version, virtual_cam_path -->
+    <property name="Capabilities" type="a{sv}" access="read">
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+    </property>
+
+    <signal name="StatusChanged">
+      <arg name="new_status" type="s" direction="out"/>
+    </signal>
+
+  </interface>
+</node>

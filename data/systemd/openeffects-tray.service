@@ -1,0 +1,11 @@
+[Unit]
+Description=OpenEffects tray applet
+PartOf=openeffectsd.service
+After=openeffectsd.service graphical-session.target
+
+[Service]
+ExecStart=%h/.local/bin/openeffects-tray
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target

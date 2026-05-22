@@ -1,0 +1,13 @@
+[Unit]
+Description=OpenEffects webcam effects daemon
+After=pipewire.service wireplumber.service graphical-session.target
+Requires=pipewire.service
+
+[Service]
+Type=dbus
+BusName=org.openeffects.Daemon
+ExecStart=%h/.local/bin/openeffectsd --start
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target
