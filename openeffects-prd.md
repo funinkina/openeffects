@@ -143,21 +143,31 @@ The tray applet is the control surface for all real-time adjustments. No profile
 - All surfaces are stateless D-Bus clients. Killing any one of them does not affect the pipeline.
 - `openeffects-tray` is a **separate binary** from `openeffects` (see §6.2 for rationale).
 
-### 6.2 Tray applet: separate process rationale
+## 6.2 Tray applet: separate process rationale
 
-The tray applet is a companion systemd user unit (`openeffects-tray.service`), not part of the GTK GUI binary.
+The tray applet is implemented as a lightweight Qt 6 process (`openeffects-tray`) separate from the main preferences GUI.
 
-| Concern                 | Separate process                                     | Tray inside GUI process                 |
-| ----------------------- | ---------------------------------------------------- | --------------------------------------- |
-| Tray survives GUI close | Yes                                                  | Requires `--no-window` hack             |
-| Tray survives GUI crash | Yes                                                  | No                                      |
-| Memory footprint        | ~20 MB (no GTK window)                               | ~80 MB (GTK + libadwaita always loaded) |
-| Auto-start model        | Simple systemd `PartOf=openeffectsd.service`         | Must auto-start the GUI binary hidden   |
-| Implementation          | Lean GTK-less binary using `libayatana-appindicator` | Full GTK app with hidden window         |
+Qt's native StatusNotifierItem support integrates naturally with KDE Plasma and works reliably under Wayland compositors supporting SNI.
 
-The tray is the primary daily-use surface; it must be reliable and cheap. The GUI is optional and heavyweight by comparison. Separate processes is the right model.
+The tray applet remains intentionally separate from the main GUI process for robustness and low idle overhead.
+
+| Concern                 | Separate process    | Tray inside GUI process                   |
+| ----------------------- | ------------------- | ----------------------------------------- |
+| Tray survives GUI close | Yes                 | Requires hidden-window behavior           |
+| Tray survives GUI crash | Yes                 | No                                        |
+| Memory footprint        | ~15–25 MB           | Higher due to full UI stack always loaded |
+| Auto-start model        | Simple systemd unit | Requires GUI background startup           |
+| Crash isolation         | Strong              | Weak                                      |
+| Startup latency         | Minimal             | GUI initialization required               |
+
+The tray process uses:
+- Qt 6
+- QSystemTrayIcon / StatusNotifierItem
+- D-Bus IPC to `openeffectsd`
+- QMenu-based dynamic menus
 
 `openeffects-tray.service`:
+
 ```ini
 [Unit]
 Description=OpenEffects tray applet
@@ -193,24 +203,69 @@ The hot path is designed for **zero CPU copies** of full frames on Tier 1/2 hard
 
 ---
 
-## 7. Technology stack
-
-| Layer                        | Choice                                                      | Rationale                                                                                                         |
-| ---------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| Language (daemon, CLI, tray) | **Rust**                                                    | Memory safety in a long-running media daemon; strong ecosystem for every dependency below.                        |
-| Language (GUI)               | Rust + `gtk4-rs` + `libadwaita-rs`                          | Native GNOME look; respects user themes; Wayland-native via GTK4.                                                 |
-| Media pipeline               | **GStreamer 1.24+** via `gstreamer-rs`                      | Mature; first-class PipeWire, Vulkan, VAAPI, GL integration.                                                      |
-| Camera I/O (primary)         | **PipeWire** via `pipewiresrc` / virtual node API           | Modern; portal-friendly; Wayland-native; no kernel module needed.                                                 |
-| Camera I/O (fallback)        | **v4l2loopback** + `v4l2src`/`v4l2sink`                     | For apps that bypass PipeWire or systems on older PipeWire versions.                                              |
-| GPU compute                  | **Vulkan** compute shaders + GLSL via `gst-gl`              | Vendor-neutral; `gst-gl` is well-exercised; Vulkan compute for custom kernels.                                    |
-| ML inference                 | **ONNX Runtime** via `ort` crate                            | Single API; broadest EP coverage; see §8.                                                                         |
-| Tray                         | `libayatana-appindicator`                                   | StatusNotifierItem spec; works across KDE, GNOME (with appindicator extension), most Wayland compositors via SNI. |
-| IPC                          | **D-Bus (session bus)** via `zbus`                          | Universal Linux IPC; works under Flatpak.                                                                         |
-| Config                       | **TOML** via `serde`                                        | Human-readable; power users can edit directly.                                                                    |
-| Build                        | `cargo` + `meson` (system install bits) + `flatpak-builder` | Mainline Linux tooling.                                                                                           |
-| Display protocol             | **Wayland only**                                            | X11 is deprecated on all major DEs targeted; simplifies GL context management.                                    |
-
+| Layer                  | Choice                                            | Rationale                                                                                                                                                     |
+| ---------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Language (daemon, CLI) | **Rust**                                          | Memory safety in a long-running media daemon; strong ecosystem for PipeWire, GStreamer, Vulkan, and D-Bus.                                                    |
+| Language (GUI + tray)  | **Qt 6 + QML (C++)**                              | Native KDE integration, mature Wayland support, high-performance GPU-accelerated UI, battle-tested multimedia tooling, excellent Linux desktop compatibility. |
+| Media pipeline         | **GStreamer 1.24+** via `gstreamer-rs`            | Mature; first-class PipeWire, Vulkan, VAAPI, GL integration.                                                                                                  |
+| Camera I/O (primary)   | **PipeWire** via `pipewiresrc` / virtual node API | Modern; portal-friendly; Wayland-native; no kernel module needed.                                                                                             |
+| Camera I/O (fallback)  | **v4l2loopback** + `v4l2src`/`v4l2sink`           | For apps that bypass PipeWire or systems on older PipeWire versions.                                                                                          |
+| GPU compute            | **Vulkan** compute shaders + GLSL via `gst-gl`    | Vendor-neutral; `gst-gl` is well-exercised; Vulkan compute for custom kernels.                                                                                |
+| ML inference           | **ONNX Runtime** via `ort` crate                  | Single API; broadest EP coverage.                                                                                                                             |
+| Tray                   | **Qt StatusNotifierItem / QSystemTrayIcon**       | Native KDE integration; SNI support across Plasma, GNOME (extension), XFCE, Hyprland waybar tray.                                                             |
+| IPC                    | **D-Bus (session bus)** via `zbus`                | Universal Linux IPC; works under Flatpak.                                                                                                                     |
+| Config                 | **TOML** via `serde`                              | Human-readable; power users can edit directly.                                                                                                                |
+| Build                  | `cargo` + `cmake` + `meson` + `flatpak-builder`   | Standard Linux tooling.                                                                                                                                       |
+| Display protocol       | **Wayland only**                                  | X11 is deprecated on all major DEs targeted; simplifies GPU context management.                                                                               |
 ---
+
+## 7.1 Frontend architecture
+
+The frontend stack is intentionally separated from the Rust media pipeline.
+
+Architecture:
+
+```
+Rust daemon (openeffectsd)
+        ▲
+        │ D-Bus
+        ▼
+Qt 6 frontend processes
+ ├── openeffects
+ └── openeffects-tray
+```
+
+Rationale:
+
+- GUI crashes cannot affect the media pipeline
+- Qt UI iteration remains independent from the Rust backend
+- Native Linux desktop behavior
+- Reduced coupling between media/inference code and presentation layer
+
+The GUI layer contains:
+
+- QML UI
+- View models
+- D-Bus proxy bindings
+- Preview rendering surfaces
+
+The Rust backend remains responsible for:
+
+- Media processing
+- ONNX inference
+- GStreamer pipelines
+- Device management
+- Configuration/state persistence
+- Performance management
+
+These changes align the PRD with:
+- KDE-first Linux UX
+- Qt-native Wayland integration
+- lower frontend maintenance burden
+- better tray reliability
+- cleaner multimedia integration
+- stronger long-term Linux desktop compatibility
+
 
 ## 8. Unified GPU inference layer (ONNX Runtime)
 
@@ -503,7 +558,26 @@ Daemon CPU usage when pipeline is paused: < 1% of one core.
 
 ### 14.1 Tray applet (`openeffects-tray`)
 
-Runs as a companion systemd user unit. Uses `libayatana-appindicator3` (StatusNotifierItem) — visible on KDE Plasma natively, XFCE, and GNOME with the AppIndicator extension; compatible with `waybar`'s tray module for Hyprland/Sway users.
+The tray applet is implemented in Qt 6 and serves as the primary real-time interaction surface.
+
+Features:
+- Native KDE Plasma integration
+- Wayland-native rendering
+- Dynamic menus via QMenu
+- StatusNotifierItem support
+- Zero dependency on GTK or libadwaita
+- Fast startup and low idle memory usage
+
+Supported environments:
+- KDE Plasma (native)
+- GNOME with AppIndicator extension
+- Hyprland/Sway via waybar tray
+- XFCE and other SNI-capable desktops
+
+Tray behavior:
+- Starts automatically with the daemon
+- Survives GUI crashes/restarts
+- Operates independently from the preferences window
 
 **GNOME without AppIndicator extension:** At startup, the tray probes for an SNI host via D-Bus (`org.kde.StatusNotifierWatcher`). If no host is found, the tray process remains running but invisible. On the next launch of `openeffects` (the GUI), a dismissible banner is shown: *"Tray applet not available — install the AppIndicator extension for quick toggles."* with a direct link to `extensions.gnome.org`. Once the extension is installed, the tray becomes visible on the next login without any manual restart of the daemon.
 
@@ -538,27 +612,61 @@ Runs as a companion systemd user unit. Uses `libayatana-appindicator3` (StatusNo
 
 Parameters changed via the tray take effect within one frame. State is persisted to `~/.config/openeffects/state.toml` on every change.
 
-### 14.2 Preferences GUI (`openeffects`)
+## 14.2 Preferences GUI (openeffects)
 
-Launched on demand from tray "Open OpenEffects…" or directly. GTK4 + libadwaita. Single window with sidebar and a live preview pane (reads the virtual camera node, displays at 240p).
+The preferences GUI is implemented using:
 
-Sidebar pages:
+- Qt 6
+- Qt Quick (QML)
+- Qt Multimedia
+- Qt Wayland
+- GPU-accelerated scene rendering
 
-- **Effects** — per-effect detail panels with full sliders, previews of each preset.
-- **Model Library** — lists bundled and opt-in models; download button, disk usage, which tier each model is used on, license.
-- **Camera** — device selection, resolution/framerate preferences.
-- **Backgrounds** — full background library management, import, delete.
-- **System** — hardware capabilities readout, EP in use, tier override, battery mode toggle.
-- **About** — version, licenses, links.
+The GUI is launched on-demand from the tray or directly from the application launcher.
 
-### 14.3 CLI (`openeffectsctl`)
+Design goals:
 
-Full control via D-Bus. Designed for keybind integration and scripting.
+- Native KDE feel
+- Acceptable GNOME appearance
+-  Smooth GPU-accelerated animations
+-  Low latency preview rendering
+-  Responsive controls
+-  Consistent Wayland behavior
 
-```sh
-openeffectsctl status                            # compact status line
+Main window layout:
+
+- Sidebar navigation
+- Central configuration panel
+- Live preview pane
+
+Pages:
+
+- Effects
+- Model Library
+- Camera
+- Backgrounds
+- System
+- About
+
+The live preview pane consumes the virtual camera node at reduced resolution (240p default) to minimize additional GPU load.
+
+Qt Multimedia + GStreamer integration is used for preview rendering.
+
+## 14.3 CLI (openeffectsctl)
+
+The CLI remains fully Rust-based and communicates exclusively through D-Bus.
+
+Primary use cases:
+
+- WM keybind integration
+- scripting
+- automation
+- status monitoring
+
+Examples:
+```
+openeffectsctl status
 openeffectsctl status --json                     # structured output for scripting
-
 openeffectsctl enable portrait_blur
 openeffectsctl disable reactions
 openeffectsctl toggle center_stage
@@ -583,6 +691,16 @@ Waybar module example (in `~/.config/waybar/config`):
 }
 ```
 
+## 14.4 DE integration points
+
+| DE              | Integration in v1.0                                                                 |
+| --------------- | ----------------------------------------------------------------------------------- |
+| KDE Plasma      | Native Qt integration; StatusNotifierItem works out of the box.                     |
+| GNOME           | Tray support via AppIndicator extension; GUI remains fully functional without tray. |
+| Hyprland / Sway | Tray supported through waybar tray module; CLI-first workflows fully supported.     |
+| XFCE            | Standard SNI/AppIndicator integration.                                              |
+
+Qt 6 provides consistent Wayland-native behavior across all supported environments.
 ---
 
 ## 15. Distribution and packaging
@@ -609,6 +727,11 @@ Opt-in models ship in a separate `openeffects-models-extra` package (RPM/DEB) so
 - D-Bus interface XML committed; `zbus` proxy codegen in build.
 - Empty daemon: registers `org.openeffects.Daemon` on session bus, responds to `Status()`.
 - State persistence: read/write `~/.config/openeffects/state.toml`.
+- Workspace structure:
+  - Rust crates: `daemon`, `cli`, `shared`
+  - Qt frontend projects: `gui`, `tray`
+- Qt 6 build integration via CMake
+- D-Bus interface XML committed; proxy generation shared between Rust and Qt layers
 
 **Exit criteria:** `openeffectsctl status` returns `stopped` against a manually launched daemon.
 
@@ -621,7 +744,7 @@ Opt-in models ship in a separate `openeffects-models-extra` package (RPM/DEB) so
 - Fallback: detect missing PipeWire virtual node; switch to `v4l2sink` via v4l2loopback.
 - GPU effects scaffolding (currently identity).
 - Basic non-ML effects: brightness/contrast, manual rectangular crop.
-- **Tray applet is the core deliverable of this phase.** Simple icon + menu with toggles for the basic effects, tested and working on **Arch Linux + KDE Plasma 6**. Uses `libayatana-appindicator3` (standard Arch package).
+- **Tray applet is the core deliverable of this phase.** Simple icon + menu with toggles for the basic effects, tested and working on **Arch Linux + KDE Plasma 6**. Uses Qt 6 StatusNotifierItem / QSystemTrayIcon integration
 - Systemd user service units for both daemon and tray.
 - CLI: `enable`, `disable`, `set`, `status`.
 - Daemon auto-pause when no virtual camera consumer for > 30 s.
@@ -816,27 +939,28 @@ Run at the end of each phase that changes the virtual camera or pipeline:
 
 Post-v1 targets: GNOME Quick Settings tile; KDE Plasmoid.
 
-### 18.4 Wayland considerations
+## 18.4 Wayland considerations
 
-- GTK4 renders natively on Wayland (no XWayland).
-- Camera preview in GUI uses `pipewiresrc` → `gtk4paintablesink` (GStreamer element), not an X11 overlay.
-- No `DISPLAY` environment variable assumed anywhere in the daemon or tray.
-- Screensharing / window-capture features (not in scope for v1) would require `xdg-desktop-portal-screencast`.
-
+- Qt 6 renders natively on Wayland.
+- No XWayland dependency.
+- Vulkan/OpenGL rendering paths operate directly through Wayland-native surfaces.
+- GUI preview rendering uses Qt Multimedia + GStreamer integration.
+- No `DISPLAY` environment variable assumptions anywhere in the stack.
+- PipeWire integration is fully Wayland-native.
 ---
 
 ## 19. Risks and mitigations
 
-| Risk                                                                        | Likelihood | Impact | Mitigation                                                                  |
-| --------------------------------------------------------------------------- | ---------- | ------ | --------------------------------------------------------------------------- |
-| PipeWire virtual node API instability across distro versions                | Medium     | High   | v4l2loopback fallback; pin to feature-tested PW versions.                   |
-| ORT Vulkan EP immature → gaps in vendor-neutral GPU coverage                | High       | Medium | Vulkan EP marked experimental; CPU+XNNPACK is the universal floor.          |
-| Apps (especially Electron-based) cache device list and miss the virtual cam | Medium     | Medium | Recommend daemon auto-start at session login; documented workaround.        |
-| Flatpak sandbox prevents v4l2loopback                                       | Confirmed  | Medium | Flatpak variant is PipeWire-only; documented clearly.                       |
-| NVIDIA driver/CUDA version mismatch causes silent inference error           | Medium     | High   | Probe with test model at startup; expose EP status in tray tooltip.         |
-| AppIndicator tray invisible on GNOME without extension                      | High       | Medium | Detect missing SNI host at startup; show in-GUI banner with extension link. |
-| Opt-in model download from CDN blocked (corporate firewalls)                | Low        | Low    | Document manual install path; models are plain ONNX files.                  |
-| Battery drain from always-on daemon                                         | Medium     | Medium | Auto-pause pipeline when no consumer; unload models after 5 min idle.       |
+| Risk                                                                        | Likelihood | Impact | Mitigation                                                                     |
+| --------------------------------------------------------------------------- | ---------- | ------ | ------------------------------------------------------------------------------ |
+| PipeWire virtual node API instability across distro versions                | Medium     | High   | v4l2loopback fallback; pin to feature-tested PW versions.                      |
+| ORT Vulkan EP immature → gaps in vendor-neutral GPU coverage                | High       | Medium | Vulkan EP marked experimental; CPU+XNNPACK is the universal floor.             |
+| Apps (especially Electron-based) cache device list and miss the virtual cam | Medium     | Medium | Recommend daemon auto-start at session login; documented workaround.           |
+| Flatpak sandbox prevents v4l2loopback                                       | Confirmed  | Medium | Flatpak variant is PipeWire-only; documented clearly.                          |
+| NVIDIA driver/CUDA version mismatch causes silent inference error           | Medium     | High   | Probe with test model at startup; expose EP status in tray tooltip.            |
+| GNOME tray support requires AppIndicator extension                          | High       | Medium | Detect missing SNI host at startup; surface guidance in GUI and documentation. |
+| Opt-in model download from CDN blocked (corporate firewalls)                | Low        | Low    | Document manual install path; models are plain ONNX files.                     |
+| Battery drain from always-on daemon                                         | Medium     | Medium | Auto-pause pipeline when no consumer; unload models after 5 min idle.          |
 
 ---
 
