@@ -1,8 +1,5 @@
 mod dbus_client;
-mod indicator;
-mod menu;
-
-use std::sync::mpsc;
+mod tray_item;
 
 use shared::dbus::VariantMap;
 use zvariant::OwnedValue;
@@ -17,36 +14,27 @@ pub enum TrayUpdate {
 
 #[derive(Debug)]
 pub enum TrayCommand {
-    SetEnabled {
-        id: String,
-        on: bool,
-    },
-    SetParam {
-        id: String,
-        key: String,
-        value: OwnedValue,
-    },
+    SetEnabled { id: String, on: bool },
+    SetParam { id: String, key: String, value: OwnedValue },
     Start,
     Stop,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .with_writer(std::io::stderr)
         .init();
 
-    gtk::init().expect("failed to initialize GTK");
+    let (cmd_tx, cmd_rx) = tokio::sync::mpsc::channel::<TrayCommand>(32);
 
-    #[allow(deprecated)]
-    let (state_tx, state_rx) = glib::MainContext::channel(glib::Priority::DEFAULT);
-    let (cmd_tx, cmd_rx) = mpsc::channel::<TrayCommand>();
+    let tray = tray_item::OpenEffectsTray::new(cmd_tx);
+    let service = ksni::TrayService::new(tray);
+    let handle = service.handle();
+    service.spawn();
 
-    std::thread::spawn(move || {
-        let runtime = tokio::runtime::Runtime::new().expect("failed to start tokio runtime");
-        runtime.block_on(dbus_client::run(state_tx, cmd_rx));
-    });
+    dbus_client::run(handle, cmd_rx).await;
 
-    let _indicator = indicator::build_and_show(state_rx, cmd_tx);
-    gtk::main();
+    Ok(())
 }

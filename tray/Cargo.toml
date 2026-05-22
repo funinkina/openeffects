@@ -16,15 +16,14 @@ anyhow.workspace             = true
 tokio.workspace              = true
 zbus.workspace               = true
 zvariant.workspace           = true
-serde.workspace              = true
 futures-util.workspace       = true
+serde.workspace              = true
 tracing.workspace            = true
 tracing-subscriber.workspace = true
 
-# Tray: GTK3 + ayatana-appindicator3 (appindicator requires GTK3, not GTK4)
-appindicator3 = "0.3"
-gtk           = "0.18"
-glib          = "0.18"
+# Pure-Rust StatusNotifierItem tray — no GTK, no C deps.
+# Works natively with KDE Plasma SNI, waybar tray, and any SNI-capable compositor.
+ksni = "0.2"
 
 [build-dependencies]
 zbus        = { version = "5", features = ["tokio"] }
