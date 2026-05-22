@@ -12,6 +12,7 @@ use super::{
 pub struct BuiltPipeline {
     pipeline: gst::Pipeline,
     output_sink: String,
+    sink_type: OutputSink,
 }
 
 impl BuiltPipeline {
@@ -35,9 +36,14 @@ impl BuiltPipeline {
     }
 
     pub fn consumer_connected(&self) -> Option<bool> {
-        self.pipeline
-            .by_name("oe_output_sink")
-            .and_then(|sink| sink.property_value("connected").get::<bool>().ok())
+        match &self.sink_type {
+            // fakesink: dev/test mode, treat as always connected so auto-pause never fires
+            OutputSink::None => Some(true),
+            // v4l2: no reliable consumer count; never auto-pause
+            OutputSink::V4l2Loopback { .. } => None,
+            // PipeWire: TODO use pw-registry links API; fall back to never auto-pause for now
+            OutputSink::PipeWire { .. } => None,
+        }
     }
 
     pub fn set_enabled(&self, id: &str, on: bool) {
@@ -77,10 +83,13 @@ impl BuiltPipeline {
 pub fn build_pipeline(app: &AppState) -> Result<BuiltPipeline> {
     let pipeline = gst::Pipeline::new();
     let source = build_source(app)?;
+    // Input caps: constrain source to a concrete format so downstream elements
+    // and pipewiresink(provide) can advertise a definite format to PipeWire.
     let caps = gst::ElementFactory::make("capsfilter")
         .property(
             "caps",
             gst::Caps::builder("video/x-raw")
+                .field("format", "I420")
                 .field("width", 1280i32)
                 .field("height", 720i32)
                 .field("framerate", gst::Fraction::new(30, 1))
@@ -89,7 +98,7 @@ pub fn build_pipeline(app: &AppState) -> Result<BuiltPipeline> {
         .build()
         .context("create capsfilter")?;
     let effects_bin = effects::build_effects_bin(app)?;
-    let (sink, output_sink) = build_sink()?;
+    let (sink, output_sink, sink_type) = build_sink()?;
 
     pipeline.add_many([&source, &caps, effects_bin.upcast_ref(), &sink])?;
     gst::Element::link_many([&source, &caps, effects_bin.upcast_ref(), &sink])?;
@@ -97,6 +106,7 @@ pub fn build_pipeline(app: &AppState) -> Result<BuiltPipeline> {
     Ok(BuiltPipeline {
         pipeline,
         output_sink,
+        sink_type,
     })
 }
 
@@ -110,8 +120,13 @@ fn build_source(app: &AppState) -> Result<gst::Element> {
             .context("create v4l2src");
     }
 
-    if gst::ElementFactory::find("pipewiresrc").is_some() {
+    // Non-empty, non-path selection = PipeWire node name/ID.
+    // Empty = no camera configured yet; pipewiresrc without a target-object
+    // fails caps negotiation, so fall through to videotestsrc until Phase 2
+    // camera enumeration is implemented.
+    if !app.camera.selected.is_empty() && gst::ElementFactory::find("pipewiresrc").is_some() {
         return gst::ElementFactory::make("pipewiresrc")
+            .property("target-object", &app.camera.selected)
             .build()
             .context("create pipewiresrc");
     }
@@ -123,30 +138,32 @@ fn build_source(app: &AppState) -> Result<gst::Element> {
         .context("create videotestsrc fallback")
 }
 
-fn build_sink() -> Result<(gst::Element, String)> {
+fn build_sink() -> Result<(gst::Element, String, OutputSink)> {
     let sink = probe_output_sink();
     match sink {
-        OutputSink::PipeWire { node_name } => {
+        OutputSink::PipeWire { ref node_name } => {
             let props = gst::Structure::builder("props")
                 .field("node.name", node_name.as_str())
-                .field("media.class", "Video/Source")
+                .field("media.class", "Video/Source/Camera")
                 .field("node.description", "OpenEffects Virtual Camera")
                 .build();
             let element = gst::ElementFactory::make("pipewiresink")
                 .name("oe_output_sink")
-                .property("mode", 3u32)
+                .property_from_str("mode", "provide")
                 .property("stream-properties", props)
                 .build()
                 .context("create pipewiresink")?;
-            Ok((element, format!("pipewire:{node_name}")))
+            let label = format!("pipewire:{node_name}");
+            Ok((element, label, sink))
         }
-        OutputSink::V4l2Loopback { device } => {
+        OutputSink::V4l2Loopback { ref device } => {
             let element = gst::ElementFactory::make("v4l2sink")
                 .name("oe_output_sink")
-                .property("device", &device)
+                .property("device", device.as_str())
                 .build()
                 .context("create v4l2sink")?;
-            Ok((element, format!("v4l2:{device}")))
+            let label = format!("v4l2:{device}");
+            Ok((element, label, sink))
         }
         OutputSink::None => {
             let element = gst::ElementFactory::make("fakesink")
@@ -154,7 +171,7 @@ fn build_sink() -> Result<(gst::Element, String)> {
                 .property("sync", false)
                 .build()
                 .context("create fakesink")?;
-            Ok((element, "none".into()))
+            Ok((element, "none".into(), sink))
         }
     }
 }

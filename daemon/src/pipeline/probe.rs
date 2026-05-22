@@ -35,18 +35,30 @@ pub fn probe_output_sink() -> OutputSink {
 }
 
 fn try_v4l2loopback() -> OutputSink {
-    if !fs::metadata("/sys/module/v4l2loopback").is_ok() {
+    if fs::metadata("/sys/module/v4l2loopback").is_err() {
         return OutputSink::None;
     }
 
     for idx in 0..64 {
         let device = format!("/dev/video{idx}");
-        if fs::metadata(&device).is_ok() {
+        if fs::metadata(&device).is_ok() && is_v4l2loopback_device(idx) {
             return OutputSink::V4l2Loopback { device };
         }
     }
 
     OutputSink::None
+}
+
+fn is_v4l2loopback_device(idx: u32) -> bool {
+    let sysfs = format!("/sys/class/video4linux/video{idx}/device/driver/module");
+    fs::read_link(&sysfs)
+        .ok()
+        .and_then(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n == "v4l2loopback")
+        })
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
