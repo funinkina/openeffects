@@ -17,7 +17,7 @@ thiserror.workspace = true
 tokio.workspace     = true
 zbus.workspace      = true
 zvariant.workspace  = true
-serde.workspace     = true
+serde.workspace = true
 tracing.workspace            = true
 tracing-subscriber.workspace = true
 

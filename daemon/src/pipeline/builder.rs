@@ -41,8 +41,6 @@ impl BuiltPipeline {
             OutputSink::None => Some(true),
             // v4l2: no reliable consumer count; never auto-pause
             OutputSink::V4l2Loopback { .. } => None,
-            // PipeWire: TODO use pw-registry links API; fall back to never auto-pause for now
-            OutputSink::PipeWire { .. } => None,
         }
     }
 
@@ -84,7 +82,7 @@ pub fn build_pipeline(app: &AppState) -> Result<BuiltPipeline> {
     let pipeline = gst::Pipeline::new();
     let source = build_source(app)?;
     // Input caps: constrain source to a concrete format so downstream elements
-    // and pipewiresink(provide) can advertise a definite format to PipeWire.
+    // and v4l2sink can advertise a definite format.
     let caps = gst::ElementFactory::make("capsfilter")
         .property(
             "caps",
@@ -97,6 +95,7 @@ pub fn build_pipeline(app: &AppState) -> Result<BuiltPipeline> {
         )
         .build()
         .context("create capsfilter")?;
+
     let effects_bin = effects::build_effects_bin(app)?;
     let (sink, output_sink, sink_type) = build_sink()?;
 
@@ -141,25 +140,6 @@ fn build_source(app: &AppState) -> Result<gst::Element> {
 fn build_sink() -> Result<(gst::Element, String, OutputSink)> {
     let sink = probe_output_sink();
     match sink {
-        OutputSink::PipeWire { ref node_name } => {
-            let props = gst::Structure::builder("props")
-                .field("node.name", node_name.as_str())
-                .field("media.class", "Video/Source")
-                .field("media.type", "Video")
-                .field("media.role", "Camera")
-                .field("node.description", "OpenEffects Virtual Camera")
-                .field("object.register", "true")
-                .field("node.export", "true")
-                .build();
-            let element = gst::ElementFactory::make("pipewiresink")
-                .name("oe_output_sink")
-                .property_from_str("mode", "provide")
-                .property("stream-properties", props)
-                .build()
-                .context("create pipewiresink")?;
-            let label = format!("pipewire:{node_name}");
-            Ok((element, label, sink))
-        }
         OutputSink::V4l2Loopback { ref device } => {
             let element = gst::ElementFactory::make("v4l2sink")
                 .name("oe_output_sink")

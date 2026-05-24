@@ -125,8 +125,8 @@ The tray applet is the control surface for all real-time adjustments. No profile
   openeffectsd  (systemd --user service)
   ┌──────────────────────────────────────────────────────────┐
   │  GStreamer pipeline                                      │
-  │  pipewiresrc → glupload → effects-bin → pipewiresink    │
-  │  ↳ fallback: pipewiresrc → v4l2sink (/dev/videoN)       │
+  │  pipewiresrc/v4l2src → effects-bin → v4l2sink           │
+  │  (output: v4l2loopback /dev/videoN)                     │
   │                                                          │
   │  D-Bus service: org.openeffects.Daemon (session bus)     │
   └──────────────────────────────────────────────────────────┘
@@ -192,7 +192,7 @@ The hot path is designed for **zero CPU copies** of full frames on Tier 1/2 hard
 4. **Inference** — ONNX session runs on selected EP; produces mask/landmarks.
 5. **Upload result** — small output tensor → GPU texture.
 6. **Composite** — single shader pass: segmentation mask + blur + background + face-region brightening + reaction sprites.
-7. **Publish** — `pipewiresink` (virtual camera node) or `v4l2sink` (/dev/videoN) as fallback.
+7. **Publish** — `v4l2sink` → `/dev/videoN` (v4l2loopback virtual device).
 
 ### 6.4 Threading model
 
@@ -208,8 +208,8 @@ The hot path is designed for **zero CPU copies** of full frames on Tier 1/2 hard
 | Language (daemon, CLI) | **Rust**                                          | Memory safety in a long-running media daemon; strong ecosystem for PipeWire, GStreamer, Vulkan, and D-Bus.                                                    |
 | Language (GUI + tray)  | **Qt 6 + QML (C++)**                              | Native KDE integration, mature Wayland support, high-performance GPU-accelerated UI, battle-tested multimedia tooling, excellent Linux desktop compatibility. |
 | Media pipeline         | **GStreamer 1.24+** via `gstreamer-rs`            | Mature; first-class PipeWire, Vulkan, VAAPI, GL integration.                                                                                                  |
-| Camera I/O (primary)   | **PipeWire** via `pipewiresrc` / virtual node API | Modern; portal-friendly; Wayland-native; no kernel module needed.                                                                                             |
-| Camera I/O (fallback)  | **v4l2loopback** + `v4l2src`/`v4l2sink`           | For apps that bypass PipeWire or systems on older PipeWire versions.                                                                                          |
+| Camera capture         | **PipeWire** via `pipewiresrc` (or `v4l2src`)     | `pipewiresrc` preferred for shared camera access; `v4l2src` for `/dev/videoN` paths.                                                                         |
+| Virtual camera output  | **v4l2loopback** + `v4l2sink`                     | Reliable; works with every app (Zoom, Chrome, Firefox, OBS, Slack) without PipeWire portal integration.                                                      |
 | GPU compute            | **Vulkan** compute shaders + GLSL via `gst-gl`    | Vendor-neutral; `gst-gl` is well-exercised; Vulkan compute for custom kernels.                                                                                |
 | ML inference           | **ONNX Runtime** via `ort` crate                  | Single API; broadest EP coverage.                                                                                                                             |
 | Tray                   | **Qt StatusNotifierItem / QSystemTrayIcon**       | Native KDE integration; SNI support across Plasma, GNOME (extension), XFCE, Hyprland waybar tray.                                                             |
@@ -449,17 +449,12 @@ Detected at startup; re-detected on daemon restart. User can force a lower tier 
 ### 10.3 Camera I/O fallback tree
 
 ```
-PipeWire ≥ 0.3.65 running?
-├── Yes → Can we create a PipeWire virtual camera node?
-│         ├── Yes → PRIMARY PATH. pipewiresrc → virtual node.
-│         └── No  → try v4l2loopback ↓
-└── No  → Is v4l2loopback available (module present + permissions)?
-          ├── Yes → FALLBACK PATH. pipewiresrc → v4l2sink → /dev/videoN.
-          └── No  → Virtual camera disabled. Surface actionable error in tray
-                    icon tooltip and GUI: "Install v4l2loopback or upgrade
-                    PipeWire to enable virtual camera."
-                    openeffectsd stays running; effects can still be previewed
-                    in the GUI's built-in preview pane.
+Is v4l2loopback module present + /dev/videoN writable?
+├── Yes → PRIMARY PATH. pipewiresrc/v4l2src → effects-bin → v4l2sink → /dev/videoN.
+└── No  → Virtual camera disabled. Surface actionable error in tray
+          icon tooltip and GUI: "Load v4l2loopback to enable virtual camera."
+          openeffectsd stays running; effects can still be previewed
+          in the GUI's built-in preview pane.
 ```
 
 ### 10.4 Runtime auto-degradation
