@@ -3,12 +3,16 @@ pub mod effects;
 pub mod probe;
 
 use shared::config::AppState;
+use std::io::Read;
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 use tokio::sync::mpsc::error::TryRecvError;
 use tracing::{error, info, warn};
 use zvariant::OwnedValue;
+
+use crate::pipeline::probe::OutputSink;
 
 #[derive(Debug)]
 pub enum PipelineCommand {
@@ -33,6 +37,7 @@ pub enum PipelineEvent {
     Idle,
     Stopped,
     Error(String),
+    VirtualCameraVerified { node_name: String, found: bool },
 }
 
 pub fn spawn_worker(
@@ -66,6 +71,9 @@ pub fn spawn_worker(
                                 let sink = pipeline.output_sink().to_string();
                                 info!(sink, "pipeline started");
                                 let _ = events.blocking_send(PipelineEvent::Started { sink });
+                                if let OutputSink::PipeWire { node_name } = pipeline.sink_type() {
+                                    spawn_pipewire_verifier(node_name.clone(), events.clone());
+                                }
                                 current = Some(pipeline);
                             }
                             Err(err) => {
@@ -136,4 +144,72 @@ pub fn spawn_worker(
             std::thread::sleep(Duration::from_millis(200));
         }
     })
+}
+
+fn spawn_pipewire_verifier(node_name: String, events: mpsc::Sender<PipelineEvent>) {
+    std::thread::spawn(move || {
+        // Brief delay so pipewiresink finishes registering the node with the
+        // PipeWire daemon before we probe; the GST PLAYING transition does not
+        // imply the registry has caught up.
+        std::thread::sleep(Duration::from_millis(300));
+
+        let mut child = match Command::new("pw-cli")
+            .args(["ls", "Node"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+        {
+            Ok(c) => c,
+            Err(err) => {
+                warn!(%err, "pw-cli verification skipped (spawn failed)");
+                let _ = events.blocking_send(PipelineEvent::VirtualCameraVerified {
+                    node_name,
+                    found: false,
+                });
+                return;
+            }
+        };
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            match child.try_wait() {
+                Ok(Some(_)) => break,
+                Ok(None) => {
+                    if Instant::now() >= deadline {
+                        warn!("pw-cli timed out after 2s; killing");
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        let _ = events.blocking_send(PipelineEvent::VirtualCameraVerified {
+                            node_name,
+                            found: false,
+                        });
+                        return;
+                    }
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(err) => {
+                    warn!(%err, "pw-cli wait failed");
+                    let _ = events.blocking_send(PipelineEvent::VirtualCameraVerified {
+                        node_name,
+                        found: false,
+                    });
+                    return;
+                }
+            }
+        }
+
+        let mut stdout = String::new();
+        if let Some(mut handle) = child.stdout.take() {
+            let _ = handle.read_to_string(&mut stdout);
+        }
+
+        let needle = format!("node.name = \"{node_name}\"");
+        let found = stdout.lines().any(|l| l.contains(&needle));
+        if found {
+            info!(%node_name, "virtual camera registered in PipeWire graph");
+        } else {
+            warn!(%node_name, "virtual camera not found in PipeWire graph");
+        }
+        let _ = events.blocking_send(PipelineEvent::VirtualCameraVerified { node_name, found });
+    });
 }

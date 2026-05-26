@@ -1,9 +1,13 @@
+use std::env;
 use std::fs;
 
 use gstreamer::ElementFactory;
 
+pub const PIPEWIRE_NODE_NAME: &str = "openeffects";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OutputSink {
+    PipeWire { node_name: String },
     V4l2Loopback { device: String },
     None,
 }
@@ -12,6 +16,7 @@ impl OutputSink {
     #[allow(dead_code)]
     pub fn label(&self) -> String {
         match self {
+            Self::PipeWire { node_name } => format!("pipewire:{node_name}"),
             Self::V4l2Loopback { device } => format!("v4l2:{device}"),
             Self::None => "none".into(),
         }
@@ -19,10 +24,23 @@ impl OutputSink {
 }
 
 pub fn probe_output_sink() -> OutputSink {
-    if ElementFactory::find("v4l2sink").is_none() {
-        return OutputSink::None;
+    // Escape hatch: force the v4l2loopback path for debugging or for systems
+    // where pipewiresink misbehaves.
+    if env::var("OPENEFFECTS_FORCE_V4L2").is_ok() {
+        return try_v4l2loopback();
     }
-    try_v4l2loopback()
+
+    if ElementFactory::find("pipewiresink").is_some() {
+        return OutputSink::PipeWire {
+            node_name: PIPEWIRE_NODE_NAME.into(),
+        };
+    }
+
+    if ElementFactory::find("v4l2sink").is_some() {
+        return try_v4l2loopback();
+    }
+
+    OutputSink::None
 }
 
 fn try_v4l2loopback() -> OutputSink {
@@ -39,7 +57,6 @@ fn try_v4l2loopback() -> OutputSink {
 
     OutputSink::None
 }
-
 
 fn is_v4l2loopback_device(idx: u32) -> bool {
     let sysfs = format!("/sys/class/video4linux/video{idx}/device/driver/module");
@@ -59,6 +76,13 @@ mod tests {
 
     #[test]
     fn sink_labels_are_stable() {
+        assert_eq!(
+            OutputSink::PipeWire {
+                node_name: "openeffects".into()
+            }
+            .label(),
+            "pipewire:openeffects"
+        );
         assert_eq!(
             OutputSink::V4l2Loopback {
                 device: "/dev/video9".into()

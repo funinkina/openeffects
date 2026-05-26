@@ -43,6 +43,7 @@ pub struct DaemonState {
     pub active_camera: String,
     pub virtual_camera_name: String,
     pub output_sink: String,
+    pub virtual_camera_verified: Option<bool>,
     pub last_error: Option<String>,
 }
 
@@ -55,6 +56,7 @@ impl DaemonState {
             active_camera,
             virtual_camera_name: "openeffects-virtual-camera".into(),
             output_sink: "none".into(),
+            virtual_camera_verified: None,
             last_error: None,
         }
     }
@@ -82,6 +84,12 @@ impl DaemonState {
             str_value("OpenEffects Virtual Camera"),
         );
         values.insert("sink".into(), str_value(&self.output_sink));
+        if self.output_sink.starts_with("pipewire:") {
+            values.insert("media.class".into(), str_value("Video/Source"));
+        }
+        if let Some(verified) = self.virtual_camera_verified {
+            values.insert("verified".into(), bool_value(verified));
+        }
         values
     }
 

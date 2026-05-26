@@ -43,16 +43,22 @@ async fn main() -> anyhow::Result<()> {
                     state.status = DaemonStatus::Running;
                     state.output_sink = sink;
                     state.last_error = None;
+                    state.virtual_camera_verified = None;
                 }
                 PipelineEvent::Idle => {
                     state.status = DaemonStatus::Idle;
                 }
                 PipelineEvent::Stopped => {
                     state.status = DaemonStatus::Stopped;
+                    state.virtual_camera_verified = None;
                 }
                 PipelineEvent::Error(error) => {
                     state.status = DaemonStatus::Error;
                     state.last_error = Some(error);
+                }
+                PipelineEvent::VirtualCameraVerified { node_name, found } => {
+                    state.virtual_camera_name = node_name;
+                    state.virtual_camera_verified = Some(found);
                 }
             }
         }
