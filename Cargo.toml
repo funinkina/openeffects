@@ -33,6 +33,8 @@ gstreamer       = "0.23"
 gstreamer-video = "0.23"
 gstreamer-app   = "0.23"
 
+pipewire = "0.10"
+
 tracing            = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 

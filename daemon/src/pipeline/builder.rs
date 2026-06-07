@@ -1,54 +1,56 @@
+use std::sync::Arc;
+
 use anyhow::{Context, Result};
 use gst::prelude::*;
 use gstreamer as gst;
+use gstreamer_app as gst_app;
 use shared::config::AppState;
+use tracing::{info, warn};
 use zvariant::OwnedValue;
 
-use super::{
-    effects,
-    probe::{probe_output_sink, OutputSink},
-};
+use super::bridge::Bridge;
+use super::{cameras, effects, FPS, HEIGHT, WIDTH};
 
-pub struct BuiltPipeline {
+/// The GStreamer half of the virtual camera: it captures the real webcam, runs
+/// the effects bin, and hands each processed frame to the [`Bridge`] via an
+/// appsink. It carries no PipeWire output sink — the native provide node
+/// ([`super::provider`]) publishes the result. This pipeline only exists while a
+/// consumer is connected; building it opens the camera, dropping it releases it.
+pub struct BuiltCapture {
     pipeline: gst::Pipeline,
-    output_sink: String,
-    sink_type: OutputSink,
 }
 
-impl BuiltPipeline {
+impl BuiltCapture {
     pub fn start(&self) -> Result<()> {
-        self.pipeline
-            .set_state(gst::State::Playing)
-            .context("set pipeline to playing")?;
+        if let Err(err) = self.pipeline.set_state(gst::State::Playing) {
+            let bus_err = drain_bus_error(&self.pipeline);
+            let _ = self.pipeline.set_state(gst::State::Null);
+            if let Some(detail) = bus_err {
+                return Err(anyhow::anyhow!("set pipeline to playing: {err}: {detail}"));
+            }
+            return Err(anyhow::Error::new(err).context("set pipeline to playing"));
+        }
+
+        // Block until PLAYING (or failure) up to 5 s so we surface real
+        // negotiation errors from elements (camera caps, etc.) instead of
+        // returning success on an async transition that later fails.
+        let (result, _current, _pending) =
+            self.pipeline.state(Some(gst::ClockTime::from_seconds(5)));
+        if result.is_err() {
+            let bus_err = drain_bus_error(&self.pipeline);
+            let _ = self.pipeline.set_state(gst::State::Null);
+            if let Some(detail) = bus_err {
+                return Err(anyhow::anyhow!(
+                    "pipeline failed to reach PLAYING: {detail}"
+                ));
+            }
+            return Err(anyhow::anyhow!("pipeline failed to reach PLAYING"));
+        }
         Ok(())
     }
 
     pub fn stop(self) {
         let _ = self.pipeline.set_state(gst::State::Null);
-    }
-
-    pub fn pause(&self) {
-        let _ = self.pipeline.set_state(gst::State::Paused);
-    }
-
-    pub fn output_sink(&self) -> &str {
-        &self.output_sink
-    }
-
-    pub fn sink_type(&self) -> &OutputSink {
-        &self.sink_type
-    }
-
-    pub fn consumer_connected(&self) -> Option<bool> {
-        match &self.sink_type {
-            // fakesink: dev/test mode, treat as always connected so auto-pause never fires
-            OutputSink::None => Some(true),
-            // v4l2: no reliable consumer count; never auto-pause
-            OutputSink::V4l2Loopback { .. } => None,
-            // pipewire: no cheap consumer probe; never auto-pause until a
-            // PipeWire registry-based count is wired up.
-            OutputSink::PipeWire { .. } => None,
-        }
     }
 
     pub fn set_enabled(&self, id: &str, on: bool) {
@@ -85,107 +87,159 @@ impl BuiltPipeline {
     }
 }
 
-pub fn build_pipeline(app: &AppState) -> Result<BuiltPipeline> {
+/// The fixed output caps: every processed frame the appsink delivers (and thus
+/// every frame the provide node serves) is I420 at this resolution/framerate.
+fn output_caps() -> gst::Caps {
+    gst::Caps::builder("video/x-raw")
+        .field("format", "I420")
+        .field("width", WIDTH as i32)
+        .field("height", HEIGHT as i32)
+        .field("framerate", gst::Fraction::new(FPS, 1))
+        .build()
+}
+
+pub fn build_capture_pipeline(app: &AppState, bridge: Arc<Bridge>) -> Result<BuiltCapture> {
     let pipeline = gst::Pipeline::new();
     let source = build_source(app)?;
-    // Input caps: constrain source to a concrete format so downstream elements
-    // and v4l2sink can advertise a definite format.
+
+    // Many cameras (including UVC webcams) only advertise compressed formats such
+    // as image/jpeg over PipeWire/V4L2. decodebin transparently plugs a decoder
+    // when needed and passes raw video through otherwise.
+    let decoder = gst::ElementFactory::make("decodebin")
+        .name("oe_in_decode")
+        .build()
+        .context("create input decodebin")?;
+
+    // Normalise any camera-native format to I420 at the fixed virtual-camera
+    // resolution/framerate. videoconvert handles colorspace/pixel-format,
+    // videoscale handles size, the capsfilter pins format + framerate.
+    let convert = gst::ElementFactory::make("videoconvert")
+        .name("oe_in_convert")
+        .build()
+        .context("create input videoconvert")?;
+    let scale = gst::ElementFactory::make("videoscale")
+        .name("oe_in_scale")
+        .build()
+        .context("create input videoscale")?;
     let caps = gst::ElementFactory::make("capsfilter")
-        .property(
-            "caps",
-            gst::Caps::builder("video/x-raw")
-                .field("format", "I420")
-                .field("width", 1280i32)
-                .field("height", 720i32)
-                .field("framerate", gst::Fraction::new(30, 1))
-                .build(),
-        )
+        .property("caps", output_caps())
         .build()
         .context("create capsfilter")?;
 
     let effects_bin = effects::build_effects_bin(app)?;
-    let (sink, output_sink, sink_type) = build_sink()?;
 
-    pipeline.add_many([&source, &caps, effects_bin.upcast_ref(), &sink])?;
-    gst::Element::link_many([&source, &caps, effects_bin.upcast_ref(), &sink])?;
+    // appsink delivers each processed frame to the bridge. drop + max-buffers=1
+    // keeps only the newest frame on the sink side too, matching the bridge's
+    // latest-frame semantics for a live camera.
+    let appsink = gst_app::AppSink::builder()
+        .name("oe_appsink")
+        .caps(&output_caps())
+        .max_buffers(1)
+        .drop(true)
+        .build();
 
-    Ok(BuiltPipeline {
-        pipeline,
-        output_sink,
-        sink_type,
-    })
+    appsink.set_callbacks(
+        gst_app::AppSinkCallbacks::builder()
+            .new_sample(move |sink| {
+                let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
+                let buffer = sample.buffer().ok_or(gst::FlowError::Error)?;
+                let map = buffer.map_readable().map_err(|_| gst::FlowError::Error)?;
+                bridge.store(map.as_slice().to_vec());
+                Ok(gst::FlowSuccess::Ok)
+            })
+            .build(),
+    );
+
+    pipeline.add_many([
+        &source,
+        &decoder,
+        &convert,
+        &scale,
+        &caps,
+        effects_bin.upcast_ref(),
+        appsink.upcast_ref(),
+    ])?;
+
+    // source → decoder is a static link. decoder → convert is linked from
+    // decodebin's pad-added signal because decodebin only exposes its src pad
+    // after caps negotiation completes.
+    gst::Element::link(&source, &decoder).context("link source -> decoder")?;
+    let convert_weak = convert.downgrade();
+    decoder.connect_pad_added(move |_dbin, src_pad| {
+        let Some(convert) = convert_weak.upgrade() else {
+            return;
+        };
+        let Some(sink_pad) = convert.static_pad("sink") else {
+            return;
+        };
+        if sink_pad.is_linked() {
+            return;
+        }
+        if let Err(err) = src_pad.link(&sink_pad) {
+            tracing::error!(?err, "failed to link decodebin -> videoconvert");
+        }
+    });
+    gst::Element::link_many([
+        &convert,
+        &scale,
+        &caps,
+        effects_bin.upcast_ref(),
+        appsink.upcast_ref(),
+    ])?;
+
+    Ok(BuiltCapture { pipeline })
+}
+
+fn drain_bus_error(pipeline: &gst::Pipeline) -> Option<String> {
+    let bus = pipeline.bus()?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(200);
+    while std::time::Instant::now() < deadline {
+        let Some(msg) = bus.timed_pop(Some(gst::ClockTime::from_mseconds(50))) else {
+            continue;
+        };
+        if let gst::MessageView::Error(err) = msg.view() {
+            let src = err
+                .src()
+                .map(|s| s.path_string().to_string())
+                .unwrap_or_else(|| "<unknown>".into());
+            let debug = err.debug().map(|d| format!(" [{d}]")).unwrap_or_default();
+            return Some(format!("{src}: {}{debug}", err.error()));
+        }
+    }
+    None
 }
 
 fn build_source(app: &AppState) -> Result<gst::Element> {
-    if app.camera.selected.starts_with("/dev/video")
-        && gst::ElementFactory::find("v4l2src").is_some()
-    {
-        return gst::ElementFactory::make("v4l2src")
-            .property("device", &app.camera.selected)
-            .build()
-            .context("create v4l2src");
+    let selected = app.camera.selected.trim();
+
+    if !selected.is_empty() {
+        if let Some(info) = cameras::enumerate().into_iter().find(|c| c.id == selected) {
+            info!(id = %info.id, name = %info.name, api = %info.api, "using configured camera");
+            return cameras::build_source_for(&info);
+        }
+        // Honour an explicit /dev/videoN even if DeviceMonitor missed it.
+        if selected.starts_with("/dev/video") && gst::ElementFactory::find("v4l2src").is_some() {
+            info!(device = %selected, "using configured v4l2 device");
+            return gst::ElementFactory::make("v4l2src")
+                .property("device", selected)
+                .build()
+                .context("create v4l2src");
+        }
+        warn!(
+            selected,
+            "configured camera not found; falling back to autodetect"
+        );
     }
 
-    // Non-empty, non-path selection = PipeWire node name/ID.
-    // Empty = no camera configured yet; pipewiresrc without a target-object
-    // fails caps negotiation, so fall through to videotestsrc until Phase 2
-    // camera enumeration is implemented.
-    if !app.camera.selected.is_empty() && gst::ElementFactory::find("pipewiresrc").is_some() {
-        return gst::ElementFactory::make("pipewiresrc")
-            .property("target-object", &app.camera.selected)
-            .build()
-            .context("create pipewiresrc");
+    if let Some(info) = cameras::autodetect() {
+        info!(id = %info.id, name = %info.name, api = %info.api, "auto-selected camera");
+        return cameras::build_source_for(&info);
     }
 
+    warn!("no camera available; using videotestsrc fallback");
     gst::ElementFactory::make("videotestsrc")
         .property("is-live", true)
         .property_from_str("pattern", "smpte")
         .build()
         .context("create videotestsrc fallback")
-}
-
-fn build_sink() -> Result<(gst::Element, String, OutputSink)> {
-    let sink = probe_output_sink();
-    match sink {
-        OutputSink::PipeWire { ref node_name } => {
-            // pipewiresink in mode=provide registers a new PipeWire node that
-            // other clients can consume. The media.class=Video/Source tag is
-            // what makes PipeWire-aware apps (browsers via xdg-portal, OBS,
-            // etc.) discover the node as a camera.
-            let props = gst::Structure::builder("props")
-                .field("media.class", "Video/Source")
-                .field("media.type", "Video")
-                .field("media.role", "Camera")
-                .field("node.name", node_name.as_str())
-                .field("node.description", "OpenEffects Virtual Camera")
-                .field("object.register", "true")
-                .field("node.export", "true")
-                .build();
-            let element = gst::ElementFactory::make("pipewiresink")
-                .name("oe_output_sink")
-                .property_from_str("mode", "provide")
-                .property("stream-properties", &props)
-                .build()
-                .context("create pipewiresink")?;
-            let label = format!("pipewire:{node_name}");
-            Ok((element, label, sink))
-        }
-        OutputSink::V4l2Loopback { ref device } => {
-            let element = gst::ElementFactory::make("v4l2sink")
-                .name("oe_output_sink")
-                .property("device", device.as_str())
-                .build()
-                .context("create v4l2sink")?;
-            let label = format!("v4l2:{device}");
-            Ok((element, label, sink))
-        }
-        OutputSink::None => {
-            let element = gst::ElementFactory::make("fakesink")
-                .name("oe_output_sink")
-                .property("sync", false)
-                .build()
-                .context("create fakesink")?;
-            Ok((element, "none".into(), sink))
-        }
-    }
 }

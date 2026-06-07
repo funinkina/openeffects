@@ -25,6 +25,9 @@ gstreamer.workspace       = true
 gstreamer-video.workspace = true
 gstreamer-app.workspace   = true
 
+# v0_3_34 enables pw_stream_trigger_process (driving the virtual source cadence).
+pipewire = { workspace = true, features = ["v0_3_34"] }
+
 [build-dependencies]
 zbus        = { version = "5", features = ["tokio"] }
 zbus_xmlgen = "5"

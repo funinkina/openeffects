@@ -66,12 +66,15 @@ String constants for all three are in `shared/src/dbus.rs`. **When you modify a 
 - `src/main.rs` — registers three zbus `#[interface]` structs on the session bus and drives the pipeline event loop
 - `src/state.rs` — `DaemonState` holds `AppState` (config) + runtime fields; `DaemonStatus` enum guards valid state transitions
 - `src/dbus_server.rs` — implements all three D-Bus interfaces; state mutations go through `Arc<RwLock<DaemonState>>`; pipeline commands go through `mpsc::Sender<PipelineCommand>`
-- `src/pipeline/` — GStreamer lives entirely in a `std::thread::spawn_blocking` thread (GStreamer elements are not `Send` across await points):
-  - `probe.rs` — detects whether to output to PipeWire virtual node, v4l2loopback, or fakesink. Force v4l2 path with `OPENEFFECTS_FORCE_V4L2=1`.
-  - `builder.rs` — constructs the pipeline: `pipewiresrc → capsfilter → effects_bin → pipewiresink` (or fallbacks). Source falls back to `videotestsrc` if `pipewiresrc` plugin is absent.
+- `src/pipeline/` — the virtual camera is a **two-stream + userspace bridge** design (see the "On-Demand PipeWire Virtual Camera" model). The provide side is a **native libpipewire** node; the capture side is GStreamer (elements are not `Send`, so they stay on the worker thread):
+  - `provider.rs` — native `pw_stream` `Video/Source` node (`media.class=Video/Source`, `node.name=openeffects`), runs its own `pw_main_loop` on a dedicated thread. **The on-demand hinge**: its `state_changed` callback maps `STREAMING → CaptureCmd::Start` (open camera, LED on) and `PAUSED`/`UNCONNECTED` → `CaptureCmd::Stop` (tear capture, LED off). `process()` serves the latest frame from the bridge (black placeholder until the first frame); `param_changed` answers the `Buffers` param after format negotiation.
+  - `bridge.rs` — `Bridge`: a `Mutex<Option<Vec<u8>>>` latest-frame slot, `Arc`-shared between the appsink writer and the provider reader. Newest frame overwrites the previous; `clear()` on capture stop so no stale frame is served on reconnect.
+  - `builder.rs` — builds the capture pipeline only: `source → decodebin → videoconvert → videoscale → capsfilter(I420 1280x720@30) → effects_bin → appsink`, where the appsink callback writes each processed frame into the bridge. Source falls back to `videotestsrc` if no camera is available.
+  - `probe.rs` — now just holds `PIPEWIRE_NODE_NAME` (`"openeffects"`); there is no GStreamer output sink to probe anymore.
   - `effects.rs` — the effects bin: `queue → videobalance(oe_videobalance) → videocrop(oe_videocrop) → videoconvert → videoscale`. Phase 1 only; ML effects come in Phase 2.
+  - Fixed format `I420 1280x720@30` (`WIDTH`/`HEIGHT`/`FPS`/`STRIDE`/`FRAME_SIZE` consts in `mod.rs`) is shared by the appsink and the provide node so frames are byte-compatible without per-frame conversion.
 
-Auto-pause: the pipeline worker polls consumer connectivity every 200 ms. After 30 s without a consumer linked to the PipeWire sink, the pipeline pauses and emits `PipelineEvent::Idle`.
+On-demand lifecycle: `Start` arms the provide node (advertised, `PAUSED`, real camera untouched → status `Idle`). When a consumer links, `STREAMING` opens the capture pipeline (status `Running`). When the consumer leaves, the capture pipeline is torn to `NULL` **immediately** (disconnect strategy), releasing the real camera. There is no auto-pause polling — gating is event-driven from the native node's `state_changed`.
 
 ### Tray (`tray/`)
 
@@ -92,8 +95,9 @@ Uses **`ksni`** (pure-Rust StatusNotifierItem) — no GTK, no C dependencies. Wo
 
 ## Runtime requirements (Arch Linux / KDE Plasma 6)
 
-- `gst-plugin-pipewire` must be installed for the PipeWire source/sink. Without it the daemon falls back to `videotestsrc → fakesink`.
-- `v4l2loopback-dkms` (AUR) needed for the `/dev/video*` fallback path.
+- A running **PipeWire** session (≥ 1.0) and **WirePlumber** (≥ 0.5). The provide node is published via native libpipewire (the `pipewire` crate), so `libpipewire-0.3` + `libspa-0.2` dev headers (pkg-config) and `clang`/`libclang` (bindgen) are needed at **build** time.
+- `gst-plugin-pipewire` / `gst-plugin-good` for the camera **source** (`pipewiresrc` / `v4l2src`); without a camera the daemon falls back to `videotestsrc`.
+- Output is **PipeWire-only** (`media.class=Video/Source`). Consumer reach is limited to PipeWire-camera-aware apps: Firefox (`media.webrtc.camera.allow-pipewire=true`), flagged Chromium (`--enable-features=WebRtcPipeWireCamera`), OBS. Legacy V4L2-only apps are not supported (no v4l2loopback bridge).
 - The daemon registers `Type=dbus` in its systemd unit so `openeffects-tray.service` (which is `After=openeffectsd.service`) waits for the bus name before starting.
 
 ## Notes

@@ -6,7 +6,7 @@ use zbus::{fdo, interface, object_server::SignalEmitter};
 use zvariant::OwnedValue;
 
 use crate::{
-    pipeline::PipelineCommand,
+    pipeline::{self, PipelineCommand},
     state::{DaemonState, DaemonStatus},
 };
 
@@ -199,22 +199,26 @@ impl Devices1Iface {
 #[interface(name = "org.openeffects.Devices1")]
 impl Devices1Iface {
     async fn list_cameras(&self) -> Vec<VariantMap> {
-        let state = self.state.read().await;
-        let mut camera = VariantMap::new();
-        camera.insert("id".into(), shared::dbus::str_value(&state.active_camera));
-        camera.insert(
-            "name".into(),
-            shared::dbus::str_value(default_camera_label(&state.active_camera)),
-        );
-        camera.insert("path".into(), shared::dbus::str_value(&state.active_camera));
-        camera.insert("width".into(), shared::dbus::u32_value(1280));
-        camera.insert("height".into(), shared::dbus::u32_value(720));
-        camera.insert("fps".into(), shared::dbus::u32_value(30));
-        vec![camera]
+        let active = self.state.read().await.active_camera.clone();
+        pipeline::cameras::enumerate()
+            .into_iter()
+            .map(|c| {
+                let mut m = VariantMap::new();
+                m.insert("id".into(), shared::dbus::str_value(&c.id));
+                m.insert("name".into(), shared::dbus::str_value(&c.name));
+                m.insert("path".into(), shared::dbus::str_value(&c.path));
+                m.insert("api".into(), shared::dbus::str_value(&c.api));
+                m.insert("active".into(), shared::dbus::bool_value(c.id == active));
+                m.insert("width".into(), shared::dbus::u32_value(1280));
+                m.insert("height".into(), shared::dbus::u32_value(720));
+                m.insert("fps".into(), shared::dbus::u32_value(30));
+                m
+            })
+            .collect()
     }
 
     async fn select_camera(&self, id: &str) -> fdo::Result<()> {
-        {
+        let (was_running, app) = {
             let mut state = self.state.write().await;
             state.active_camera = id.into();
             state.app.camera.selected = id.into();
@@ -222,11 +226,17 @@ impl Devices1Iface {
                 .app
                 .save()
                 .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+            (
+                matches!(
+                    state.status,
+                    DaemonStatus::Running | DaemonStatus::Idle | DaemonStatus::Starting
+                ),
+                state.app.clone(),
+            )
+        };
+        if was_running {
+            let _ = self.pipeline_tx.send(PipelineCommand::Start(app)).await;
         }
-        let _ = self
-            .pipeline_tx
-            .send(PipelineCommand::SelectCamera(id.into()))
-            .await;
         Ok(())
     }
 
@@ -238,14 +248,6 @@ impl Devices1Iface {
     #[zbus(property)]
     async fn active_camera(&self) -> String {
         self.state.read().await.active_camera.clone()
-    }
-}
-
-fn default_camera_label(id: &str) -> &str {
-    if id.is_empty() {
-        "Auto"
-    } else {
-        id
     }
 }
 

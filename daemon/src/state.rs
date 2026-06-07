@@ -3,6 +3,8 @@ use shared::{
     dbus::{bool_value, i32_value, str_value, u32_value, VariantMap},
 };
 
+use crate::pipeline::probe::PIPEWIRE_NODE_NAME;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DaemonStatus {
     Stopped,
@@ -54,7 +56,7 @@ impl DaemonState {
             status: DaemonStatus::Stopped,
             app,
             active_camera,
-            virtual_camera_name: "openeffects-virtual-camera".into(),
+            virtual_camera_name: PIPEWIRE_NODE_NAME.into(),
             output_sink: "none".into(),
             virtual_camera_verified: None,
             last_error: None,

@@ -43,7 +43,9 @@ async fn main() -> anyhow::Result<()> {
                     state.status = DaemonStatus::Running;
                     state.output_sink = sink;
                     state.last_error = None;
-                    state.virtual_camera_verified = None;
+                    // Note: virtual_camera_verified is intentionally left as-is.
+                    // It is a one-time fact set when the native provide node
+                    // registers, and Started now fires on every consumer connect.
                 }
                 PipelineEvent::Idle => {
                     state.status = DaemonStatus::Idle;
