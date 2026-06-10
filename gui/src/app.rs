@@ -90,16 +90,17 @@ pub fn build_window(
     toolbar.set_content(Some(&stack));
     toolbar.add_bottom_bar(&switcher_bar);
 
-    // Global live-preview bottom sheet wraps the whole content, so its
-    // always-visible bottom bar is present on every page.
+    // Global live-preview side pane wraps the whole content; its header toggle
+    // reveals it without covering the page controls or the narrow switcher bar.
     let preview = preview::build(&toolbar);
+    header.pack_end(&preview.toggle);
 
     let window = ApplicationWindow::builder()
         .application(app)
         .title("OpenEffects")
         .default_width(720)
         .default_height(640)
-        .content(&preview.sheet)
+        .content(&preview.split)
         .build();
 
     // Adaptive: hide the header switcher and reveal the bottom bar when narrow.
@@ -107,6 +108,8 @@ pub fn build_window(
         let breakpoint = adw::Breakpoint::new(condition);
         breakpoint.add_setter(&switcher, "visible", Some(&false.to_value()));
         breakpoint.add_setter(&switcher_bar, "reveal", Some(&true.to_value()));
+        // Narrow: overlay the preview pane instead of squeezing the page.
+        breakpoint.add_setter(&preview.split, "collapsed", Some(&true.to_value()));
         window.add_breakpoint(breakpoint);
     }
 
