@@ -18,12 +18,11 @@ pub const FRAMING_MODES: &[(&str, &str)] = &[("single", "Single Face"), ("group"
 pub const FRAMING_MODE_ICONS: &[&str] = &["avatar-default-symbolic", "system-users-symbolic"];
 
 /// Background page modes (stored value, display label). These are virtual:
-/// they map onto the `portrait_blur` / `bg_replace` enable flags.
-pub const BG_OFF: &str = "off";
+/// they map onto the `portrait_blur` / `bg_replace` enable flags. The page's
+/// master switch covers "off", so only Blur/Replace are toggle choices.
 pub const BG_BLUR: &str = "blur";
 pub const BG_REPLACE: &str = "replace";
-pub const BG_MODES: &[(&str, &str)] =
-    &[(BG_OFF, "Off"), (BG_BLUR, "Blur"), (BG_REPLACE, "Replace")];
+pub const BG_MODES: &[(&str, &str)] = &[(BG_BLUR, "Blur"), (BG_REPLACE, "Replace")];
 
 /// Blur strength buckets: toggle name (the stored `portrait_blur.strength`
 /// value as a string) and display label.

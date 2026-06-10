@@ -12,23 +12,21 @@ use adw::glib;
 use adw::prelude::*;
 use adw::ApplicationWindow;
 use gtk::gio;
-use shared::dbus::{
-    value_as_bool, value_as_i32, value_as_string, value_as_u32, VariantMap, EFFECT_IDS,
-};
+use shared::dbus::{value_as_bool, value_as_string, VariantMap, EFFECT_IDS};
 
 use crate::about;
 use crate::constants::NAV_PAGES;
 use crate::dbus_client::{CameraInfo, CmdTx, UiUpdate};
 use crate::pages::{background, center_stage, reactions, studio_light};
 use crate::preferences;
-use crate::widgets::{ParamWidget, Params, SpinParam, Switches};
+use crate::widgets::Switches;
 
 struct Widgets {
     banner: adw::Banner,
     switches: Switches,
-    params: Params,
     center_stage: center_stage::Widgets,
     background: background::Widgets,
+    studio_light: studio_light::Widgets,
     prefs: preferences::Widgets,
 }
 
@@ -41,11 +39,10 @@ pub fn build_window(
     let stack = adw::ViewStack::new();
 
     let mut switches = HashMap::new();
-    let mut params = HashMap::new();
 
     let (cs_page, cs_widgets) = center_stage::build(&cmd_tx);
     let (bg_page, bg_widgets) = background::build(&cmd_tx);
-    let sl_page = studio_light::build(&cmd_tx, &mut switches, &mut params);
+    let (sl_page, sl_widgets) = studio_light::build(&cmd_tx);
     let rx_page = reactions::build(&cmd_tx, &mut switches);
 
     let page_widgets: [&gtk::Widget; 4] = [
@@ -81,6 +78,7 @@ pub fn build_window(
         .build();
 
     let header = adw::HeaderBar::builder().title_widget(&switcher).build();
+    // header.pack_start(&gtk::Label::new(Some("OpenEffects")));
     header.pack_end(&menu_button);
 
     // Connection-trouble banner, sits just under the header.
@@ -126,9 +124,9 @@ pub fn build_window(
     let widgets = Rc::new(Widgets {
         banner,
         switches,
-        params,
         center_stage: cs_widgets,
         background: bg_widgets,
+        studio_light: sl_widgets,
         prefs: prefs_widgets,
     });
 
@@ -164,10 +162,8 @@ fn apply_effect(w: &Widgets, id: &str, params: &VariantMap) {
     match id {
         "center_stage" => w.center_stage.apply(params),
         "portrait_blur" | "bg_replace" => w.background.apply(id, params),
-        _ => {
-            apply_enabled(w, id, params);
-            apply_params(w, id, params);
-        }
+        "studio_light" => w.studio_light.apply(params),
+        _ => apply_enabled(w, id, params),
     }
 }
 
@@ -257,32 +253,5 @@ fn apply_enabled(w: &Widgets, id: &str, params: &VariantMap) {
         switch.block_signal(handler);
         switch.set_active(on);
         switch.unblock_signal(handler);
-    }
-}
-
-fn apply_params(w: &Widgets, id: &str, params: &VariantMap) {
-    for (key, value) in params {
-        if key == "enabled" {
-            continue;
-        }
-        let Some(widget) = w.params.get(&format!("{id}.{key}")) else {
-            continue;
-        };
-        match widget {
-            ParamWidget::Spin(SpinParam::U32 { row, handler }) => {
-                if let Some(v) = value_as_u32(value) {
-                    row.block_signal(handler);
-                    row.set_value(v as f64);
-                    row.unblock_signal(handler);
-                }
-            }
-            ParamWidget::Spin(SpinParam::I32 { row, handler }) => {
-                if let Some(v) = value_as_i32(value) {
-                    row.block_signal(handler);
-                    row.set_value(v as f64);
-                    row.unblock_signal(handler);
-                }
-            }
-        }
     }
 }

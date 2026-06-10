@@ -7,7 +7,7 @@ use shared::dbus::{value_as_bool, value_as_string, VariantMap};
 
 use crate::constants::{FRAMING_LEVELS, FRAMING_MODES, FRAMING_MODE_ICONS};
 use crate::dbus_client::{CmdTx, GuiCommand};
-use crate::widgets::{pref_group, toggle_group, ToggleCtl};
+use crate::widgets::{pref_group, toggle_group, toggle_group_stacked, ToggleCtl};
 
 /// Widgets the state-sync layer keeps in sync with the daemon.
 pub struct Widgets {
@@ -47,7 +47,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     let framing_group = pref_group("Framing", "How tightly to crop around the subject");
     let framing = {
         let cmd_tx = cmd_tx.clone();
-        toggle_group(FRAMING_LEVELS, None, move |value| {
+        toggle_group(FRAMING_LEVELS, move |value| {
             let _ = cmd_tx.send(GuiCommand::SetParam {
                 id: "center_stage".into(),
                 key: "zoom".into(),
@@ -62,7 +62,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     let mode_group = pref_group("Mode", "Track one face or frame the whole group");
     let mode = {
         let cmd_tx = cmd_tx.clone();
-        toggle_group(FRAMING_MODES, Some(FRAMING_MODE_ICONS), move |value| {
+        toggle_group_stacked(FRAMING_MODES, FRAMING_MODE_ICONS, move |value| {
             let _ = cmd_tx.send(GuiCommand::SetParam {
                 id: "center_stage".into(),
                 key: "mode".into(),
@@ -70,7 +70,6 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
             });
         })
     };
-    mode.group.add_css_class("oe-mode-toggles");
     mode_group.add(&mode.group);
     page.add(&mode_group);
 

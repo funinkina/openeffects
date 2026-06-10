@@ -1,21 +1,23 @@
-//! Background page: a single mode toggle (Off / Blur / Replace) that drives
-//! the two underlying effects — `portrait_blur` and `bg_replace`. Only the
-//! controls for the active mode are shown.
+//! Background page: a master switch plus a Blur/Replace mode toggle that
+//! drives the two underlying effects — `portrait_blur` and `bg_replace`.
+//! Only the controls for the active mode are shown, and everything below the
+//! master switch is disabled while it's off.
 //!
-//! The mode is *virtual*: it is derived from the two effects' `enabled` flags
-//! (`bg_replace` wins, then `portrait_blur`, else Off) and changing it just
-//! toggles those flags. Replace mode offers an image picker plus a row of
+//! The mode is *virtual*: `bg_replace.enabled` means Replace, otherwise
+//! Blur, and changing it just toggles those two effects' `enabled` flags
+//! (mutually exclusive). Replace mode offers an image picker plus a row of
 //! solid-color swatches with a custom-color button.
 
 use std::cell::Cell;
 use std::rc::Rc;
 
+use adw::glib;
 use adw::prelude::*;
 use gtk::gdk::RGBA;
 use gtk::gio;
 use shared::dbus::{value_as_bool, value_as_string, value_as_u32, VariantMap};
 
-use crate::constants::{BG_BLUR, BG_MODES, BG_OFF, BG_PRESETS, BG_REPLACE, BLUR_LEVELS};
+use crate::constants::{BG_BLUR, BG_MODES, BG_PRESETS, BG_REPLACE, BLUR_LEVELS};
 use crate::dbus_client::{CmdTx, GuiCommand};
 use crate::widgets::{pref_group, toggle_group, ToggleCtl};
 
@@ -23,6 +25,9 @@ const CUSTOM_SWATCH_CLASS: &str = "oe-custom-swatch";
 
 /// Widgets the state-sync layer keeps in sync with the daemon.
 pub struct Widgets {
+    switch: adw::SwitchRow,
+    switch_handler: glib::SignalHandlerId,
+    mode_group: adw::PreferencesGroup,
     mode: ToggleCtl,
     blur_group: adw::PreferencesGroup,
     blur_strength: ToggleCtl,
@@ -42,34 +47,55 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     let page = adw::PreferencesPage::new();
     let applying = Rc::new(Cell::new(false));
 
-    // ── Mode toggle: Off / Blur / Replace ────────────────────────────────────
-    let mode_group = pref_group(
-        "Background",
-        "Blur or replace everything behind the subject",
-    );
+    // ── Mode toggle: Blur / Replace ──────────────────────────────────────────
+    // Built before the master switch so its closure can capture the group.
+    let mode_group = pref_group("Mode", "Blur or replace everything behind the subject");
     let mode = {
         let cmd_tx = cmd_tx.clone();
         let applying = applying.clone();
-        toggle_group(BG_MODES, None, move |value| {
+        toggle_group(BG_MODES, move |value| {
             if applying.get() {
                 return;
             }
-            let (blur, bg) = match value {
-                BG_BLUR => (true, false),
-                BG_REPLACE => (false, true),
-                _ => (false, false),
-            };
-            let _ = cmd_tx.send(GuiCommand::SetEnabled {
-                id: "portrait_blur".into(),
-                on: blur,
-            });
-            let _ = cmd_tx.send(GuiCommand::SetEnabled {
-                id: "bg_replace".into(),
-                on: bg,
-            });
+            set_mode(&cmd_tx, value == BG_REPLACE);
         })
     };
     mode_group.add(&mode.group);
+
+    // ── Master switch ─────────────────────────────────────────────────────────
+    let main = pref_group(
+        "Background",
+        "Blur or replace everything behind the subject",
+    );
+    let switch = adw::SwitchRow::builder()
+        .title("Background")
+        .subtitle("Off shows the camera feed unmodified")
+        .build();
+    let switch_handler = {
+        let cmd_tx = cmd_tx.clone();
+        let applying = applying.clone();
+        let mode_group = mode.group.clone();
+        switch.connect_active_notify(move |row| {
+            if applying.get() {
+                return;
+            }
+            if row.is_active() {
+                let replace = mode_group.active_name().as_deref() == Some(BG_REPLACE);
+                set_mode(&cmd_tx, replace);
+            } else {
+                let _ = cmd_tx.send(GuiCommand::SetEnabled {
+                    id: "portrait_blur".into(),
+                    on: false,
+                });
+                let _ = cmd_tx.send(GuiCommand::SetEnabled {
+                    id: "bg_replace".into(),
+                    on: false,
+                });
+            }
+        })
+    };
+    main.add(&switch);
+    page.add(&main);
     page.add(&mode_group);
 
     // ── Blur strength: Low / Medium / High ───────────────────────────────────
@@ -77,7 +103,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     let blur_strength = {
         let cmd_tx = cmd_tx.clone();
         let applying = applying.clone();
-        toggle_group(BLUR_LEVELS, None, move |value| {
+        toggle_group(BLUR_LEVELS, move |value| {
             if applying.get() {
                 return;
             }
@@ -167,6 +193,9 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     page.add(&color_group);
 
     let widgets = Widgets {
+        switch,
+        switch_handler,
+        mode_group,
         mode,
         blur_group,
         blur_strength,
@@ -210,21 +239,35 @@ impl Widgets {
         self.applying.set(false);
     }
 
+    /// `bg_replace` wins; otherwise Blur. Used as the default mode shown
+    /// while neither effect is enabled (master switch off).
     fn current_mode(&self) -> &'static str {
         if self.bg_enabled.get() {
-            BG_REPLACE
-        } else if self.blur_enabled.get() {
-            BG_BLUR
-        } else {
-            BG_OFF
+            return BG_REPLACE;
+        }
+        if self.blur_enabled.get() {
+            return BG_BLUR;
+        }
+        match self.mode.group.active_name().as_deref() {
+            Some(BG_REPLACE) => BG_REPLACE,
+            _ => BG_BLUR,
         }
     }
 
     fn update_visibility(&self) {
+        let on = self.blur_enabled.get() || self.bg_enabled.get();
         let mode = self.current_mode();
+
+        self.switch.block_signal(&self.switch_handler);
+        self.switch.set_active(on);
+        self.switch.unblock_signal(&self.switch_handler);
+
         self.mode.set_value(mode);
+        self.mode_group.set_sensitive(on);
+        self.blur_group.set_sensitive(on);
         self.blur_group.set_visible(mode == BG_BLUR);
         for group in &self.replace_groups {
+            group.set_sensitive(on);
             group.set_visible(mode == BG_REPLACE);
         }
     }
@@ -257,17 +300,26 @@ impl Widgets {
     }
 }
 
-/// Set the background value and enable Replace mode.
+/// Enable the chosen mode's effect and disable the other one.
+fn set_mode(cmd_tx: &CmdTx, replace: bool) {
+    let _ = cmd_tx.send(GuiCommand::SetEnabled {
+        id: "bg_replace".into(),
+        on: replace,
+    });
+    let _ = cmd_tx.send(GuiCommand::SetEnabled {
+        id: "portrait_blur".into(),
+        on: !replace,
+    });
+}
+
+/// Set the background value and switch to Replace mode.
 fn set_background(cmd_tx: &CmdTx, value: &str) {
     let _ = cmd_tx.send(GuiCommand::SetParam {
         id: "bg_replace".into(),
         key: "background".into(),
         value: shared::dbus::str_value(value),
     });
-    let _ = cmd_tx.send(GuiCommand::SetEnabled {
-        id: "bg_replace".into(),
-        on: true,
-    });
+    set_mode(cmd_tx, true);
 }
 
 fn open_image_dialog(row: &adw::ActionRow, cmd_tx: &CmdTx) {
