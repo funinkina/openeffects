@@ -68,7 +68,7 @@ pub fn toggle_group_stacked(
             .halign(gtk::Align::Center)
             .valign(gtk::Align::Center)
             .margin_top(8)
-            .margin_bottom(12)
+            .margin_bottom(8)
             .margin_start(8)
             .margin_end(8)
             .build();
