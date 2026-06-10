@@ -80,7 +80,15 @@ mod imp {
             self.blur_enabled || self.bg_enabled || (self.cs_enabled && self.cs_zoom != "off")
         }
 
+        /// Whether selfie segmentation should run this frame: needed for the
+        /// blur/bg-replace composite, and as Center Stage's subject-framing
+        /// fallback when YuNet doesn't find a face.
         fn needs_mask(&self) -> bool {
+            self.blur_enabled || self.bg_enabled || (self.cs_enabled && self.cs_zoom != "off")
+        }
+
+        /// Whether the blur/bg-replace composite step should run.
+        fn needs_composite(&self) -> bool {
             self.blur_enabled || self.bg_enabled
         }
     }
@@ -354,7 +362,7 @@ mod imp {
             }
 
             // ── Portrait blur / background replace ───────────────────────────
-            if state.settings.needs_mask() {
+            if state.settings.needs_composite() {
                 if state.settings.bg_enabled {
                     ensure_bg(&mut state, w, h);
                 }

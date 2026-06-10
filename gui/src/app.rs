@@ -182,7 +182,7 @@ fn apply_status_banner(w: &Widgets, status: &str) {
     let message = match status {
         "stopped" => Some("Pipeline stopped"),
         "error" => Some("The pipeline reported an error"),
-        "disconnected" => Some("Disconnected from the OpenEffects daemon — retrying…"),
+        "disconnected" => Some("OpenEffects daemon is not running, please start it..."),
         _ => None,
     };
     match message {
