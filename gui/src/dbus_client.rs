@@ -18,6 +18,8 @@ mod proxies {
 }
 use proxies::{Daemon1Proxy, Devices1Proxy, Effects1Proxy};
 
+pub type CmdTx = mpsc::UnboundedSender<GuiCommand>;
+
 #[derive(Debug)]
 pub enum GuiCommand {
     SetEnabled {
