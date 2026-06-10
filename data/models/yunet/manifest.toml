@@ -1,7 +1,7 @@
 [model]
 id = "yunet"
 name = "YuNet Face Detector"
-version = "2023mar"
+version = "2026may"
 license = "MIT"
 
 [model.input]
@@ -76,8 +76,8 @@ min_vram_mb = 0
 
 [[model.variants]]
 name = "fp32"
-file = "face_detection_yunet_2023mar.onnx"
-sha256 = "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
+file = "face_detection_yunet_2026may.onnx"
+sha256 = "ebafce4e3c118d6554634be5c27ab333b4c047a9a8c3faf1d7cf93101c22f0f0"
 
 [model.source]
-url = "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"
+url = "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2026may.onnx"

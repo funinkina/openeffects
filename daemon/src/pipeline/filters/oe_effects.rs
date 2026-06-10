@@ -1,19 +1,26 @@
 //! `oe_effects` — the single CPU video filter that hosts every ML-driven
-//! effect. It receives RGBA frames in system memory, runs selfie segmentation
-//! once per frame (reused for one extra frame), and composites, in order:
+//! effect. It receives RGBA frames in system memory and applies:
 //!
 //! 1. **Portrait blur** / **Background replace** — `out = fg·mask + bg·(1-mask)`
 //!    where `bg` is either a box-blurred copy of the frame or a user image/color.
-//! 2. **Center Stage** — a YuNet (or mask-derived) subject box drives an
-//!    EMA-smoothed crop+zoom that keeps the subject framed without distorting
-//!    the aspect ratio.
+//! 2. **Center Stage** — a YuNet face box drives an EMA-smoothed, deadzoned
+//!    crop+zoom that keeps the face centered without distorting the aspect ratio.
+//!
+//! Two paths, chosen per frame:
+//!
+//! - **Center stage on**: framing is computed on the full frame, then the crop
+//!   ROI is extracted and blur/bg-replace run on *just that ROI* (the only
+//!   pixels the zoom keeps) before it's upscaled to the output. Compositing the
+//!   discarded border would be wasted work, so center stage is the source of
+//!   truth for the blur canvas.
+//! - **Center stage off**: blur/bg-replace run over the full frame.
+//!
+//! Energy: selfie segmentation (the per-frame ONNX cost) runs on a cadence
+//! (`SEG_INTERVAL`) with the mask reused in between, and YuNet detection on a
+//! coarser one (`FACE_INTERVAL`) — the reframe deadzone absorbs the staleness.
 //!
 //! Studio Light stays in the upstream `videobalance` element (no ML needed);
 //! Reactions arrive in Phase 4.
-//!
-//! Consolidating all ML effects into one element means segmentation runs once
-//! per frame regardless of how many effects are enabled, matching PRD §6.4's
-//! single-inference, mask-reuse threading model.
 
 use gst::glib;
 use gstreamer as gst;
@@ -50,6 +57,26 @@ mod imp {
     /// Tightest allowed crop (fraction of each axis); caps zoom at 4× so a
     /// small/distant face doesn't blow up into an unusably pixelated frame.
     const CS_MIN_CROP: f32 = 0.25;
+    /// Run selfie segmentation every Nth frame; the mask is reused in between.
+    /// 3 (≈10 Hz at 30 fps) keeps the ONNX call — the per-frame energy cost —
+    /// off two of every three frames while the subject's silhouette barely
+    /// moves frame-to-frame.
+    const SEG_INTERVAL: u64 = 3;
+    /// Run YuNet face detection every Nth frame. The deadzone below absorbs
+    /// detection jitter, so framing tolerates a slower (cheaper) detect cadence.
+    const FACE_INTERVAL: u64 = 4;
+    /// Center-stage reframe deadzone: the subject must shift more than this
+    /// fraction of the frame (position) / crop span (zoom) before the framing
+    /// target moves at all, so small head movements don't make the crop drift.
+    const CS_POS_DEADZONE: f32 = 0.04;
+    const CS_ZOOM_DEADZONE: f32 = 0.05;
+    /// Large-move escape hatch: a shift this big reframes immediately, ignoring
+    /// the cooldown, so the subject walking across the frame is tracked promptly.
+    const CS_POS_SNAP: f32 = 0.16;
+    const CS_ZOOM_SNAP: f32 = 0.22;
+    /// Frames to hold the framing target after a reframe before another small
+    /// reframe is allowed (≈0.5 s at 30 fps). Rate-limits twitchy re-centering.
+    const CS_COOLDOWN: u32 = 15;
 
     #[derive(Debug, Clone)]
     struct Settings {
@@ -80,13 +107,6 @@ mod imp {
         /// Whether any effect in this element does real work (otherwise the
         /// element runs in passthrough).
         fn active(&self) -> bool {
-            self.blur_enabled || self.bg_enabled || (self.cs_enabled && self.cs_zoom != "off")
-        }
-
-        /// Whether selfie segmentation should run this frame: needed for the
-        /// blur/bg-replace composite, and as Center Stage's subject-framing
-        /// fallback when YuNet doesn't find a face.
-        fn needs_mask(&self) -> bool {
             self.blur_enabled || self.bg_enabled || (self.cs_enabled && self.cs_zoom != "off")
         }
 
@@ -167,9 +187,19 @@ mod imp {
     struct State {
         settings: Settings,
         engine: Engine,
+        /// EMA-smoothed crop actually applied this frame.
         crop: CropState,
+        /// Committed framing target the crop eases toward; only updated when the
+        /// subject moves past the deadzone (see `update_target`).
+        target: CropState,
+        /// Frames remaining before another small reframe is allowed.
+        cs_cooldown: u32,
         frame: u64,
         mask: Option<Mask>,
+        /// Whether the cached `mask` was segmented from the center-stage ROI
+        /// (true) or the full frame (false); a mismatch forces a re-segment so a
+        /// normalized mask sampled in the wrong coordinate space is never reused.
+        mask_is_roi: bool,
         faces: Vec<Face>,
         bg: Option<BgImage>,
         width: usize,
@@ -325,6 +355,8 @@ mod imp {
             // Resolution change invalidates the smoothed crop, cached mask, and
             // pre-scaled background.
             state.crop = CropState::default();
+            state.target = CropState::default();
+            state.cs_cooldown = 0;
             state.mask = None;
             state.bg = None;
             drop(state);
@@ -352,68 +384,190 @@ mod imp {
             // Pack the (possibly strided) plane into a tight RGBA buffer.
             let mut img = pack(plane, w, h, stride);
 
-            // ── Segmentation (reused for one extra frame to halve cost) ──────
-            if state.settings.needs_mask()
-                && (state.mask.is_none() || state.frame.is_multiple_of(2))
-            {
-                if let Some(model) = state.engine.selfie() {
-                    match model.segment(&img, w, h, w * 4) {
-                        Ok(mask) => state.mask = Some(mask),
-                        Err(err) => warn!(%err, "segmentation failed this frame"),
-                    }
-                }
-            }
-
-            // ── Portrait blur / background replace ───────────────────────────
-            if state.settings.needs_composite() {
-                if state.settings.bg_enabled {
-                    ensure_bg(&mut state, w, h);
-                }
-                // Borrow split: take mask out so we can also touch state.bg.
-                if let Some(mask) = state.mask.take() {
-                    let bg_buf = if state.settings.bg_enabled {
-                        background_buffer(&state, w, h)
-                    } else {
-                        Some(box_blur(
-                            &img,
-                            w,
-                            h,
-                            blur_radius(state.settings.blur_strength),
-                        ))
-                    };
-                    if let Some(bg) = bg_buf {
-                        composite(&mut img, &bg, &mask, w, h);
-                    }
-                    state.mask = Some(mask);
-                }
-            }
-
-            // ── Center stage crop + zoom ─────────────────────────────────────
-            if state.settings.cs_enabled && state.settings.cs_zoom != "off" {
-                // Refresh face detection every 3rd frame (PRD §6.4 budget).
-                if state.frame % 3 == 1 {
-                    let faces = if let Some(model) = state.engine.yunet() {
-                        model
-                            .detect(&img, w, h, w * 4, FACE_SCORE_THRESH)
-                            .unwrap_or_default()
-                    } else {
-                        Vec::new()
-                    };
-                    state.faces = faces;
-                }
-                let subject =
-                    subject_box(&state.faces, state.mask.as_ref(), &state.settings.cs_mode);
-                let target = crop_target(subject, &state.settings.cs_zoom);
-                let crop = &mut state.crop;
-                crop.zf += (target.zf - crop.zf) * CS_ALPHA;
-                crop.cx += (target.cx - crop.cx) * CS_ALPHA;
-                crop.cy += (target.cy - crop.cy) * CS_ALPHA;
-                let crop = *crop;
-                resample_crop(&mut img, w, h, crop);
+            let cs_active = state.settings.cs_enabled && state.settings.cs_zoom != "off";
+            if cs_active {
+                // Center stage owns the canvas: framing is decided on the full
+                // frame, but blur/bg-replace then run only on the cropped ROI —
+                // the only pixels that survive the zoom — instead of segmenting
+                // and compositing the whole frame and discarding the border.
+                center_stage(&mut state, &mut img, w, h);
+            } else if state.settings.needs_composite() {
+                // No crop: blur / bg-replace over the full frame.
+                full_frame_composite(&mut state, &mut img, w, h);
             }
 
             unpack(&img, plane, w, h, stride);
             Ok(gst::FlowSuccess::Ok)
+        }
+    }
+
+    /// Full-frame portrait blur / background replace (center stage off).
+    fn full_frame_composite(state: &mut State, img: &mut [u8], w: usize, h: usize) {
+        ensure_mask(state, img, w, h, w * 4, false);
+        if state.settings.bg_enabled {
+            ensure_bg(state, w, h);
+        }
+        // Borrow split: take mask out so we can also touch state.bg.
+        if let Some(mask) = state.mask.take() {
+            let bg_buf = if state.settings.bg_enabled {
+                background_buffer(state, w, h)
+            } else {
+                Some(box_blur(
+                    img,
+                    w,
+                    h,
+                    blur_radius(state.settings.blur_strength),
+                ))
+            };
+            if let Some(bg) = bg_buf {
+                composite(img, &bg, &mask, w, h);
+            }
+            state.mask = Some(mask);
+        }
+    }
+
+    /// Center stage: decide framing on the full frame, then crop to the ROI and
+    /// run blur / bg-replace on just that ROI before upscaling it to the output.
+    fn center_stage(state: &mut State, img: &mut [u8], w: usize, h: usize) {
+        // Refresh face detection on the full frame on the detect cadence.
+        if state.frame % FACE_INTERVAL == 1 {
+            let faces = if let Some(model) = state.engine.yunet() {
+                model
+                    .detect(img, w, h, w * 4, FACE_SCORE_THRESH)
+                    .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            state.faces = faces;
+        }
+
+        // Face-only framing here: the cached mask (when present) is segmented
+        // from the ROI, so it can't supply a full-frame subject box. When no
+        // face is found the target is simply held, so brief look-aways don't
+        // make the crop drift.
+        let subject = subject_box(&state.faces, None, &state.settings.cs_mode);
+        if let Some(raw) = subject.map(|s| crop_target(Some(s), &state.settings.cs_zoom)) {
+            update_target(state, raw);
+        }
+
+        // Ease the applied crop toward the committed target.
+        let t = state.target;
+        let crop = &mut state.crop;
+        crop.zf += (t.zf - crop.zf) * CS_ALPHA;
+        crop.cx += (t.cx - crop.cx) * CS_ALPHA;
+        crop.cy += (t.cy - crop.cy) * CS_ALPHA;
+        let crop = *crop;
+
+        if !state.settings.needs_composite() {
+            // Crop + zoom only: a single full-frame resample.
+            resample_crop(img, w, h, crop);
+            return;
+        }
+
+        // Extract the ROI, composite on it (smaller area than the full frame),
+        // then upscale it back to the output resolution.
+        let (mut roi, rw, rh) = extract_roi(img, w, h, crop);
+        if rw == w && rh == h {
+            // No zoom (full-frame ROI): composite in place, no upscale needed.
+            full_frame_composite(state, img, w, h);
+            return;
+        }
+        ensure_mask(state, &roi, rw, rh, rw * 4, true);
+        if state.settings.bg_enabled {
+            ensure_bg(state, rw, rh);
+        }
+        if let Some(mask) = state.mask.take() {
+            let bg_buf = if state.settings.bg_enabled {
+                background_buffer(state, rw, rh)
+            } else {
+                Some(box_blur(
+                    &roi,
+                    rw,
+                    rh,
+                    blur_radius(state.settings.blur_strength),
+                ))
+            };
+            if let Some(bg) = bg_buf {
+                composite(&mut roi, &bg, &mask, rw, rh);
+            }
+            state.mask = Some(mask);
+        }
+        upscale_roi(img, w, h, &roi, rw, rh);
+    }
+
+    /// (Re)segment into `state.mask` on the segmentation cadence, or whenever no
+    /// valid mask is cached for the current coordinate space (full vs ROI).
+    fn ensure_mask(state: &mut State, buf: &[u8], w: usize, h: usize, stride: usize, is_roi: bool) {
+        let stale = state.mask.is_none()
+            || state.mask_is_roi != is_roi
+            || state.frame.is_multiple_of(SEG_INTERVAL);
+        if !stale {
+            return;
+        }
+        if let Some(model) = state.engine.selfie() {
+            match model.segment(buf, w, h, stride) {
+                Ok(mask) => {
+                    state.mask = Some(mask);
+                    state.mask_is_roi = is_roi;
+                }
+                Err(err) => warn!(%err, "segmentation failed this frame"),
+            }
+        }
+    }
+
+    /// Commit a new framing target only when the subject has moved beyond the
+    /// deadzone (ignores small head movements) and the cooldown has elapsed —
+    /// unless the move is large, which reframes immediately. Holds otherwise.
+    fn update_target(state: &mut State, raw: CropState) {
+        let t = state.target;
+        let dcx = (raw.cx - t.cx).abs();
+        let dcy = (raw.cy - t.cy).abs();
+        let dzf = (raw.zf - t.zf).abs();
+        let big = dcx > CS_POS_SNAP || dcy > CS_POS_SNAP || dzf > CS_ZOOM_SNAP;
+        let moved = dcx > CS_POS_DEADZONE || dcy > CS_POS_DEADZONE || dzf > CS_ZOOM_DEADZONE;
+        if big || (moved && state.cs_cooldown == 0) {
+            state.target = raw;
+            state.cs_cooldown = CS_COOLDOWN;
+        } else if state.cs_cooldown > 0 {
+            state.cs_cooldown -= 1;
+        }
+    }
+
+    /// Extract the crop window into a tight `rw×rh` RGBA buffer (bilinear), so
+    /// segmentation/blur/composite run on ROI-sized pixels. Returns the buffer
+    /// and its dimensions (`(w, h)` when the crop spans the whole frame).
+    fn extract_roi(img: &[u8], w: usize, h: usize, crop: CropState) -> (Vec<u8>, usize, usize) {
+        let zf = crop.zf.clamp(CS_MIN_CROP, 1.0);
+        if zf >= 0.999 {
+            return (img.to_vec(), w, h);
+        }
+        let span_x = zf * w as f32;
+        let span_y = zf * h as f32;
+        let x0 = (crop.cx - zf / 2.0) * w as f32;
+        let y0 = (crop.cy - zf / 2.0) * h as f32;
+        let rw = (span_x.round() as usize).max(1);
+        let rh = (span_y.round() as usize).max(1);
+        let mut roi = vec![0u8; rw * rh * 4];
+        for y in 0..rh {
+            let sv = y0 + (y as f32 + 0.5) / rh as f32 * span_y - 0.5;
+            for x in 0..rw {
+                let su = x0 + (x as f32 + 0.5) / rw as f32 * span_x - 0.5;
+                let dp = (y * rw + x) * 4;
+                sample_bilinear(img, w, h, su, sv, &mut roi[dp..dp + 4]);
+            }
+        }
+        (roi, rw, rh)
+    }
+
+    /// Upscale the composited ROI back into the full-frame output (bilinear).
+    fn upscale_roi(img: &mut [u8], w: usize, h: usize, roi: &[u8], rw: usize, rh: usize) {
+        for y in 0..h {
+            let sv = (y as f32 + 0.5) / h as f32 * rh as f32 - 0.5;
+            for x in 0..w {
+                let su = (x as f32 + 0.5) / w as f32 * rw as f32 - 0.5;
+                let dp = (y * w + x) * 4;
+                sample_bilinear(roi, rw, rh, su, sv, &mut img[dp..dp + 4]);
+            }
         }
     }
 

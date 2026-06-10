@@ -140,7 +140,7 @@ pub struct Face {
     pub score: f32,
 }
 
-/// YuNet face detector (2023mar). Input `input` is NCHW `[1,3,640,640]` BGR in
+/// YuNet face detector (2026may). Input `input` is NCHW `[1,3,640,640]` BGR in
 /// `0..255` (no normalization); outputs are anchor-free `cls`/`obj`/`bbox`/`kps`
 /// tensors at strides 8/16/32, decoded the same way as OpenCV's `FaceDetectorYN`.
 pub struct YuNet {

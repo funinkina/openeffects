@@ -144,7 +144,7 @@ url = "https://example.invalid/selfie_segmentation.onnx"
 [model]
 id = "yunet"
 name = "YuNet Face Detector"
-version = "2023mar"
+version = "2026may"
 license = "MIT"
 
 [model.input]
@@ -169,7 +169,7 @@ min_vram_mb = 0
 
 [[model.variants]]
 name = "fp32"
-file = "face_detection_yunet_2023mar.onnx"
+file = "face_detection_yunet_2026may.onnx"
 sha256 = "cafebabe"
 "#;
 
