@@ -40,15 +40,19 @@ pub fn value_as_bool(value: &OwnedValue) -> Option<bool> {
 }
 
 pub fn value_as_u32(value: &OwnedValue) -> Option<u32> {
-    u32::try_from(value)
-        .ok()
-        .or_else(|| i32::try_from(value).ok().and_then(|v| u32::try_from(v).ok()))
+    u32::try_from(value).ok().or_else(|| {
+        i32::try_from(value)
+            .ok()
+            .and_then(|v| u32::try_from(v).ok())
+    })
 }
 
 pub fn value_as_i32(value: &OwnedValue) -> Option<i32> {
-    i32::try_from(value)
-        .ok()
-        .or_else(|| u32::try_from(value).ok().and_then(|v| i32::try_from(v).ok()))
+    i32::try_from(value).ok().or_else(|| {
+        u32::try_from(value)
+            .ok()
+            .and_then(|v| i32::try_from(v).ok())
+    })
 }
 
 pub fn value_as_string(value: &OwnedValue) -> Option<String> {
