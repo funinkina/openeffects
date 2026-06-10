@@ -98,39 +98,14 @@ impl Mask {
         let bot = c + (d - c) * tx;
         top + (bot - top) * ty
     }
-
-    /// Tight normalized bounding box (`x0,y0,x1,y1` in `0..1`) of the masked
-    /// foreground above `thresh`. `None` if too little foreground is present.
-    pub fn bounding_box(&self, thresh: f32) -> Option<(f32, f32, f32, f32)> {
-        let m = self.size;
-        let (mut min_x, mut min_y, mut max_x, mut max_y) = (m, m, 0usize, 0usize);
-        let mut count = 0usize;
-        for y in 0..m {
-            for x in 0..m {
-                if self.values[y * m + x] >= thresh {
-                    min_x = min_x.min(x);
-                    min_y = min_y.min(y);
-                    max_x = max_x.max(x);
-                    max_y = max_y.max(y);
-                    count += 1;
-                }
-            }
-        }
-        // Require at least ~2% coverage to avoid framing on speckle noise.
-        if count < (m * m) / 50 || max_x <= min_x || max_y <= min_y {
-            return None;
-        }
-        let s = m as f32;
-        Some((
-            min_x as f32 / s,
-            min_y as f32 / s,
-            (max_x + 1) as f32 / s,
-            (max_y + 1) as f32 / s,
-        ))
-    }
 }
 
 /// A detected face, in normalized frame coordinates (`0..1`).
+///
+/// `eye_*` come from YuNet's 5-point landmarks: the eye midpoint and the
+/// interocular distance. These are expression-invariant (smiling widens the
+/// bbox but leaves the eyes put), so center-stage framing uses them instead of
+/// the bbox. `eye_dist == 0.0` means landmarks weren't available for this face.
 #[derive(Debug, Clone, Copy)]
 pub struct Face {
     pub cx: f32,
@@ -138,6 +113,9 @@ pub struct Face {
     pub w: f32,
     pub h: f32,
     pub score: f32,
+    pub eye_cx: f32,
+    pub eye_cy: f32,
+    pub eye_dist: f32,
 }
 
 /// YuNet face detector (2026may). Input `input` is NCHW `[1,3,640,640]` BGR in
@@ -200,6 +178,11 @@ impl YuNet {
             let bbox = outputs[format!("bbox_{stride_px}").as_str()]
                 .try_extract_tensor::<f32>()?
                 .1;
+            // Landmarks are optional: fall back to bbox framing if absent.
+            let kps = outputs
+                .get(format!("kps_{stride_px}").as_str())
+                .and_then(|v| v.try_extract_tensor::<f32>().ok())
+                .map(|t| t.1);
             let cols = s / stride_px;
             let rows = s / stride_px;
             for row in 0..rows {
@@ -216,12 +199,35 @@ impl YuNet {
                     let cy = (row as f32 + b[1]) * stride_px as f32 / s as f32;
                     let fw = b[2].exp() * stride_px as f32 / s as f32;
                     let fh = b[3].exp() * stride_px as f32 / s as f32;
+                    // YuNet kps layout: [r_eye, l_eye, nose, r_mouth, l_mouth],
+                    // each (x,y), decoded like the bbox center off the anchor.
+                    let (eye_cx, eye_cy, eye_dist) = kps
+                        .map(|k| {
+                            let kp = |i: usize| {
+                                let kx = (col as f32 + k[idx * 10 + i * 2]) * stride_px as f32
+                                    / s as f32;
+                                let ky = (row as f32 + k[idx * 10 + i * 2 + 1]) * stride_px as f32
+                                    / s as f32;
+                                (kx, ky)
+                            };
+                            let (rx, ry) = kp(0);
+                            let (lx, ly) = kp(1);
+                            (
+                                (rx + lx) / 2.0,
+                                (ry + ly) / 2.0,
+                                ((rx - lx).powi(2) + (ry - ly).powi(2)).sqrt(),
+                            )
+                        })
+                        .unwrap_or((0.0, 0.0, 0.0));
                     faces.push(Face {
                         cx,
                         cy,
                         w: fw,
                         h: fh,
                         score,
+                        eye_cx,
+                        eye_cy,
+                        eye_dist,
                     });
                 }
             }

@@ -48,8 +48,6 @@ mod imp {
     const DEFAULT_STRENGTH: u32 = 50;
     const DEFAULT_ZOOM: &str = "normal";
     const DEFAULT_MODE: &str = "single";
-    /// Foreground-probability threshold for the mask-derived subject box.
-    const MASK_FG_THRESH: f32 = 0.6;
     /// Minimum YuNet score to accept a face for framing.
     const FACE_SCORE_THRESH: f32 = 0.6;
     /// EMA smoothing factor for the center-stage crop (≈12 frames to 90%).
@@ -174,7 +172,7 @@ mod imp {
                 match YuNet::load() {
                     Ok(m) => self.yunet = Some(m),
                     Err(err) => {
-                        warn!(%err, "yunet unavailable; center stage falls back to mask framing");
+                        warn!(%err, "yunet unavailable; center stage cannot track a subject");
                         self.yunet_failed = true;
                     }
                 }
@@ -441,11 +439,10 @@ mod imp {
             state.faces = faces;
         }
 
-        // Face-only framing here: the cached mask (when present) is segmented
-        // from the ROI, so it can't supply a full-frame subject box. When no
-        // face is found the target is simply held, so brief look-aways don't
-        // make the crop drift.
-        let subject = subject_box(&state.faces, None, &state.settings.cs_mode);
+        // Framing is driven by the face's eye landmarks. When no face is found
+        // the target is simply held, so brief look-aways don't make the crop
+        // drift.
+        let subject = subject_box(&state.faces, &state.settings.cs_mode);
         if let Some(raw) = subject.map(|s| crop_target(Some(s), &state.settings.cs_zoom)) {
             update_target(state, raw);
         }
@@ -734,68 +731,86 @@ mod imp {
         Ok(out)
     }
 
-    /// Normalized subject to frame on: `(cx, cy, span, is_face)` where `span`
-    /// is the subject's largest normalized extent. From YuNet faces when
-    /// available (face box, or the union of all faces in group mode), else the
-    /// mask's foreground extent.
-    fn subject_box(
-        faces: &[Face],
-        mask: Option<&Mask>,
-        mode: &str,
-    ) -> Option<(f32, f32, f32, bool)> {
-        if !faces.is_empty() {
-            if mode == "group" {
-                let (mut x0, mut y0, mut x1, mut y1) = (1.0f32, 1.0f32, 0.0f32, 0.0f32);
-                for f in faces {
-                    x0 = x0.min(f.cx - f.w / 2.0);
-                    y0 = y0.min(f.cy - f.h / 2.0);
-                    x1 = x1.max(f.cx + f.w / 2.0);
-                    y1 = y1.max(f.cy + f.h / 2.0);
-                }
-                return Some((
-                    (x0 + x1) / 2.0,
-                    (y0 + y1) / 2.0,
-                    (x1 - x0).max(y1 - y0),
-                    true,
-                ));
-            }
-            let best = faces.iter().max_by(|a, b| a.score.total_cmp(&b.score))?;
-            return Some((best.cx, best.cy, best.w.max(best.h), true));
-        }
-        let (x0, y0, x1, y1) = mask?.bounding_box(MASK_FG_THRESH)?;
-        Some((
-            (x0 + x1) / 2.0,
-            (y0 + y1) / 2.0,
-            (x1 - x0).max(y1 - y0),
-            false,
-        ))
+    /// What the framing `span` was derived from, which sets its margin scale.
+    #[derive(Clone, Copy)]
+    enum SubjectKind {
+        /// A single face's bbox height (forehead→chin).
+        Face,
+        /// Union of head boxes (group mode).
+        Group,
     }
 
-    /// Spacing multipliers per zoom level: the crop span is `subject span ×
-    /// margin`, so a tighter setting leaves less room around the subject. The
-    /// first factor pads a YuNet face box, the second pads the mask's
-    /// full-body extent (already much larger than a face, so far less padding).
-    fn zoom_margins(zoom: &str) -> (f32, f32) {
-        match zoom {
-            "subtle" => (4.2, 1.5),
-            "normal" => (3.2, 1.25),
-            "tight" => (2.4, 1.05),
-            _ => (3.2, 1.25),
+    /// Normalized subject to frame on: `(cx, cy, span, kind)`.
+    ///
+    /// To keep the face fully in frame while staying steady through expressions:
+    /// the framing **center** uses the eye midpoint (expression-invariant — a
+    /// smile doesn't move the eyes), but the framing **span** uses the bbox
+    /// *height* (forehead→chin), which sets the zoom so the whole face fits with
+    /// headroom. Height is far more expression-stable than width (smiling widens
+    /// the mouth, not the face height), so the zoom barely moves either. Falls
+    /// back to the bbox center when landmarks are missing.
+    fn subject_box(faces: &[Face], mode: &str) -> Option<(f32, f32, f32, SubjectKind)> {
+        if faces.is_empty() {
+            return None;
+        }
+        if mode == "group" {
+            // Union of per-face head boxes; expression-stable since it's the
+            // outer extent of all faces, padded by the average face height.
+            let (mut x0, mut y0, mut x1, mut y1) = (1.0f32, 1.0f32, 0.0f32, 0.0f32);
+            let mut height_sum = 0.0f32;
+            for f in faces {
+                x0 = x0.min(f.cx - f.w / 2.0);
+                y0 = y0.min(f.cy - f.h / 2.0);
+                x1 = x1.max(f.cx + f.w / 2.0);
+                y1 = y1.max(f.cy + f.h / 2.0);
+                height_sum += f.h;
+            }
+            let pad = height_sum / faces.len() as f32;
+            return Some((
+                (x0 + x1) / 2.0,
+                (y0 + y1) / 2.0,
+                (x1 - x0).max(y1 - y0) + pad,
+                SubjectKind::Group,
+            ));
+        }
+        let best = faces.iter().max_by(|a, b| a.score.total_cmp(&b.score))?;
+        let (cx, cy) = if best.eye_dist > 0.0 {
+            // Eye midpoint, nudged down toward the face center (eyes sit above
+            // it) so the crop has balanced forehead/chin headroom.
+            (best.eye_cx, best.eye_cy + best.h * 0.25)
+        } else {
+            (best.cx, best.cy)
+        };
+        Some((cx, cy, best.h, SubjectKind::Face))
+    }
+
+    /// Crop span = `face height × margin`; a tighter zoom leaves less headroom.
+    /// All margins are > 1 so the crop always encloses the full face (the bbox
+    /// height) plus forehead/chin/hair room — even "tight" never cuts the face.
+    fn zoom_margin(zoom: &str, kind: SubjectKind) -> f32 {
+        match kind {
+            SubjectKind::Face => match zoom {
+                "subtle" => 3.4,
+                "tight" => 2.1,
+                _ => 2.7,
+            },
+            SubjectKind::Group => match zoom {
+                "subtle" => 1.6,
+                "tight" => 1.15,
+                _ => 1.4,
+            },
         }
     }
 
     /// Target crop: centered on the subject (clamped so the crop stays inside
     /// the frame) and sized relative to the subject, so the face is recentered
-    /// wherever it moves and the zoom level only changes the spacing around
-    /// it. No subject → relax back to the full frame so the zoom resets
-    /// smoothly.
-    fn crop_target(subject: Option<(f32, f32, f32, bool)>, zoom: &str) -> CropState {
-        let Some((cx, cy, span, is_face)) = subject else {
+    /// wherever it moves and the zoom level only changes the spacing around it.
+    /// No subject → relax back to the full frame so the zoom resets smoothly.
+    fn crop_target(subject: Option<(f32, f32, f32, SubjectKind)>, zoom: &str) -> CropState {
+        let Some((cx, cy, span, kind)) = subject else {
             return CropState::default();
         };
-        let (face_margin, mask_margin) = zoom_margins(zoom);
-        let margin = if is_face { face_margin } else { mask_margin };
-        let zf = (span * margin).clamp(CS_MIN_CROP, 1.0);
+        let zf = (span * zoom_margin(zoom, kind)).clamp(CS_MIN_CROP, 1.0);
         let half = zf / 2.0;
         CropState {
             cx: cx.clamp(half, 1.0 - half),
