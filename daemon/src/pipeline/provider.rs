@@ -28,7 +28,7 @@ use tracing::{error, info, warn};
 
 use super::bridge::Bridge;
 use super::probe::PIPEWIRE_NODE_NAME;
-use super::{CaptureCmd, PipelineEvent, FPS, FRAME_SIZE, HEIGHT, STRIDE, WIDTH};
+use super::{CaptureCmd, PipelineEvent, PipelineFormat};
 
 /// State carried through the stream callbacks.
 struct UserData {
@@ -37,6 +37,8 @@ struct UserData {
     capture_tx: StdSender<CaptureCmd>,
     events: mpsc::Sender<PipelineEvent>,
     bridge: Arc<Bridge>,
+    /// The advertised video format (the selected camera's native mode).
+    fmt: PipelineFormat,
     /// Monotonic frame counter for the buffer header meta (`seq`/`pts`).
     frame_count: u64,
 }
@@ -47,11 +49,12 @@ struct UserData {
 /// and the function returns; the worker treats the node as down.
 pub fn run(
     bridge: Arc<Bridge>,
+    fmt: PipelineFormat,
     capture_tx: StdSender<CaptureCmd>,
     events: mpsc::Sender<PipelineEvent>,
     quit_rx: pw::channel::Receiver<()>,
 ) {
-    if let Err(err) = run_inner(bridge, capture_tx, events.clone(), quit_rx) {
+    if let Err(err) = run_inner(bridge, fmt, capture_tx, events.clone(), quit_rx) {
         error!(%err, "provide node failed");
         let _ = events.blocking_send(PipelineEvent::Error(format!("provide node: {err}")));
     }
@@ -59,6 +62,7 @@ pub fn run(
 
 fn run_inner(
     bridge: Arc<Bridge>,
+    fmt: PipelineFormat,
     capture_tx: StdSender<CaptureCmd>,
     events: mpsc::Sender<PipelineEvent>,
     quit_rx: pw::channel::Receiver<()>,
@@ -80,6 +84,7 @@ fn run_inner(
         capture_tx,
         events,
         bridge,
+        fmt,
         frame_count: 0,
     };
 
@@ -128,7 +133,7 @@ fn run_inner(
                 StreamState::Connecting => {}
             }
         })
-        .param_changed(|stream, _ud, id, param| {
+        .param_changed(|stream, ud, id, param| {
             // When the format is fixated, answer with our buffer requirements so
             // the consumer/server allocates buffers big enough for one I420 frame.
             //
@@ -141,7 +146,7 @@ fn run_inner(
             if param.is_none() || id != pw::spa::param::ParamType::Format.as_raw() {
                 return;
             }
-            let buffers = build_buffers_pod();
+            let buffers = build_buffers_pod(ud.fmt);
             let meta_header = build_meta_header_pod();
             let (Some(buffers_pod), Some(meta_pod)) =
                 (Pod::from_bytes(&buffers), Pod::from_bytes(&meta_header))
@@ -170,8 +175,8 @@ fn run_inner(
                         None => {
                             // No processed frame yet -> emit black so a freshly
                             // connected consumer sees a valid signal immediately.
-                            let n = FRAME_SIZE.min(slice.len());
-                            fill_black_i420(&mut slice[..n]);
+                            let n = ud.fmt.frame_size().min(slice.len());
+                            fill_black_i420(&mut slice[..n], ud.fmt);
                             n
                         }
                     }
@@ -181,7 +186,7 @@ fn run_inner(
 
                 let chunk = data.chunk_mut();
                 *chunk.offset_mut() = 0;
-                *chunk.stride_mut() = STRIDE as i32;
+                *chunk.stride_mut() = ud.fmt.stride() as i32;
                 *chunk.size_mut() = written as u32;
             }
 
@@ -190,7 +195,7 @@ fn run_inner(
             // lives in the buffer's shared memory which the producer owns
             // during this cycle, so writing through the pointer is sound.
             if let Some(header) = buffer.find_meta::<spa::buffer::meta::MetaHeader>() {
-                let frame_duration_ns = 1_000_000_000u64 / FPS as u64;
+                let frame_duration_ns = 1_000_000_000u64 / ud.fmt.fps as u64;
                 let h = header as *const spa::buffer::meta::MetaHeader
                     as *mut pw::spa::sys::spa_meta_header;
                 unsafe {
@@ -205,7 +210,7 @@ fn run_inner(
         })
         .register()?;
 
-    let format = build_format_pod();
+    let format = build_format_pod(fmt);
     let Some(format_pod) = Pod::from_bytes(&format) else {
         return Err(pw::Error::CreationFailed);
     };
@@ -245,7 +250,7 @@ fn run_inner(
                 let _ = stream.trigger_process();
             }
         });
-        let interval = Duration::from_nanos(1_000_000_000 / FPS as u64);
+        let interval = Duration::from_nanos(1_000_000_000 / fmt.fps as u64);
         timer.update_timer(Some(interval), Some(interval));
         timer
     };
@@ -259,9 +264,10 @@ fn run_inner(
     Ok(())
 }
 
-/// The single video format we advertise to consumers: I420 at the fixed
-/// resolution/framerate the capture pipeline normalises to.
-fn build_format_pod() -> Vec<u8> {
+/// The single video format we advertise to consumers: I420 at the selected
+/// camera's native resolution/framerate, exactly what the capture pipeline
+/// delivers.
+fn build_format_pod(fmt: PipelineFormat) -> Vec<u8> {
     let obj = pw::spa::pod::object!(
         pw::spa::utils::SpaTypes::ObjectParamFormat,
         pw::spa::param::ParamType::EnumFormat,
@@ -284,15 +290,15 @@ fn build_format_pod() -> Vec<u8> {
             pw::spa::param::format::FormatProperties::VideoSize,
             Rectangle,
             pw::spa::utils::Rectangle {
-                width: WIDTH,
-                height: HEIGHT
+                width: fmt.width,
+                height: fmt.height
             }
         ),
         pw::spa::pod::property!(
             pw::spa::param::format::FormatProperties::VideoFramerate,
             Fraction,
             pw::spa::utils::Fraction {
-                num: FPS as u32,
+                num: fmt.fps as u32,
                 denom: 1
             }
         ),
@@ -309,7 +315,7 @@ fn build_format_pod() -> Vec<u8> {
 /// Buffer requirements answered during format negotiation. The buffer-param keys
 /// have no typed enum in libspa-rs, so we build the object from raw `spa_sys`
 /// constants.
-fn build_buffers_pod() -> Vec<u8> {
+fn build_buffers_pod(fmt: PipelineFormat) -> Vec<u8> {
     use pw::spa::pod::{ChoiceValue, Object, Property, Value};
     use pw::spa::sys;
     use pw::spa::utils::{Choice, ChoiceEnum, ChoiceFlags};
@@ -332,8 +338,14 @@ fn build_buffers_pod() -> Vec<u8> {
                 ))),
             ),
             Property::new(sys::SPA_PARAM_BUFFERS_blocks, Value::Int(1)),
-            Property::new(sys::SPA_PARAM_BUFFERS_size, Value::Int(FRAME_SIZE as i32)),
-            Property::new(sys::SPA_PARAM_BUFFERS_stride, Value::Int(STRIDE as i32)),
+            Property::new(
+                sys::SPA_PARAM_BUFFERS_size,
+                Value::Int(fmt.frame_size() as i32),
+            ),
+            Property::new(
+                sys::SPA_PARAM_BUFFERS_stride,
+                Value::Int(fmt.stride() as i32),
+            ),
             Property::new(
                 sys::SPA_PARAM_BUFFERS_dataType,
                 Value::Choice(ChoiceValue::Int(Choice(
@@ -381,8 +393,8 @@ fn build_meta_header_pod() -> Vec<u8> {
 }
 
 /// Fill an I420 buffer with limited-range black (Y=16, Cb=Cr=128).
-fn fill_black_i420(buf: &mut [u8]) {
-    let y_size = (WIDTH as usize) * (HEIGHT as usize);
+fn fill_black_i420(buf: &mut [u8], fmt: PipelineFormat) {
+    let y_size = (fmt.width as usize) * (fmt.height as usize);
     let chroma = y_size / 4;
     let end = (y_size + 2 * chroma).min(buf.len());
     let y_end = y_size.min(buf.len());

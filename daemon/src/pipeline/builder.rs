@@ -9,7 +9,7 @@ use tracing::{info, warn};
 use zvariant::OwnedValue;
 
 use super::bridge::Bridge;
-use super::{cameras, effects, FPS, HEIGHT, WIDTH};
+use super::{cameras, effects, PipelineFormat};
 
 /// The GStreamer half of the virtual camera: it captures the real webcam, runs
 /// the effects bin, and hands each processed frame to the [`Bridge`] via an
@@ -87,20 +87,58 @@ impl BuiltCapture {
     }
 }
 
-/// The fixed output caps: every processed frame the appsink delivers (and thus
-/// every frame the provide node serves) is I420 at this resolution/framerate.
-fn output_caps() -> gst::Caps {
+/// The output caps: every processed frame the appsink delivers (and thus every
+/// frame the provide node serves) is I420 at the camera's native mode.
+fn output_caps(fmt: PipelineFormat) -> gst::Caps {
     gst::Caps::builder("video/x-raw")
         .field("format", "I420")
-        .field("width", WIDTH as i32)
-        .field("height", HEIGHT as i32)
-        .field("framerate", gst::Fraction::new(FPS, 1))
+        .field("width", fmt.width as i32)
+        .field("height", fmt.height as i32)
+        .field("framerate", gst::Fraction::new(fmt.fps, 1))
         .build()
 }
 
-pub fn build_capture_pipeline(app: &AppState, bridge: Arc<Bridge>) -> Result<BuiltCapture> {
+/// Caps pinned directly on the camera source: same dimensions/rate as the
+/// output, in either raw or MJPEG (decodebin decodes the latter). This forces
+/// the camera to capture *at* the virtual-camera mode instead of letting
+/// negotiation pick an arbitrary default (e.g. raw 640x480 on cameras that only
+/// do 720p in MJPEG), which videoscale would then stretch to the output size
+/// and distort the aspect ratio.
+fn source_caps(fmt: PipelineFormat) -> gst::Caps {
+    let dims = |name: &str| {
+        gst::Structure::builder(name)
+            .field("width", fmt.width as i32)
+            .field("height", fmt.height as i32)
+            .field("framerate", gst::Fraction::new(fmt.fps, 1))
+            .build()
+    };
+    gst::Caps::builder_full()
+        .structure(dims("video/x-raw"))
+        .structure(dims("image/jpeg"))
+        .build()
+}
+
+/// The format the virtual camera should advertise for the currently selected
+/// camera: its preferred native mode, or the default if nothing can be probed
+/// (no camera -> `videotestsrc`, which renders any mode).
+pub fn probe_format(app: &AppState) -> PipelineFormat {
+    resolve_camera(app)
+        .and_then(|info| cameras::preferred_format(&info))
+        .unwrap_or(PipelineFormat::DEFAULT)
+}
+
+pub fn build_capture_pipeline(
+    app: &AppState,
+    fmt: PipelineFormat,
+    bridge: Arc<Bridge>,
+) -> Result<BuiltCapture> {
     let pipeline = gst::Pipeline::new();
     let source = build_source(app)?;
+    let src_filter = gst::ElementFactory::make("capsfilter")
+        .name("oe_src_caps")
+        .property("caps", source_caps(fmt))
+        .build()
+        .context("create source capsfilter")?;
 
     // Many cameras (including UVC webcams) only advertise compressed formats such
     // as image/jpeg over PipeWire/V4L2. decodebin transparently plugs a decoder
@@ -110,9 +148,10 @@ pub fn build_capture_pipeline(app: &AppState, bridge: Arc<Bridge>) -> Result<Bui
         .build()
         .context("create input decodebin")?;
 
-    // Normalise any camera-native format to I420 at the fixed virtual-camera
-    // resolution/framerate. videoconvert handles colorspace/pixel-format,
-    // videoscale handles size, the capsfilter pins format + framerate.
+    // Convert the camera-native pixel format to I420. The source capsfilter
+    // already pinned the dimensions/rate to the output mode, so videoconvert
+    // only changes colorspace/pixel-format and videoscale is a no-op kept as a
+    // safety net — it never has to change the aspect ratio.
     let convert = gst::ElementFactory::make("videoconvert")
         .name("oe_in_convert")
         .build()
@@ -122,7 +161,7 @@ pub fn build_capture_pipeline(app: &AppState, bridge: Arc<Bridge>) -> Result<Bui
         .build()
         .context("create input videoscale")?;
     let caps = gst::ElementFactory::make("capsfilter")
-        .property("caps", output_caps())
+        .property("caps", output_caps(fmt))
         .build()
         .context("create capsfilter")?;
 
@@ -133,7 +172,7 @@ pub fn build_capture_pipeline(app: &AppState, bridge: Arc<Bridge>) -> Result<Bui
     // latest-frame semantics for a live camera.
     let appsink = gst_app::AppSink::builder()
         .name("oe_appsink")
-        .caps(&output_caps())
+        .caps(&output_caps(fmt))
         .max_buffers(1)
         .drop(true)
         .build();
@@ -152,6 +191,7 @@ pub fn build_capture_pipeline(app: &AppState, bridge: Arc<Bridge>) -> Result<Bui
 
     pipeline.add_many([
         &source,
+        &src_filter,
         &decoder,
         &convert,
         &scale,
@@ -160,10 +200,11 @@ pub fn build_capture_pipeline(app: &AppState, bridge: Arc<Bridge>) -> Result<Bui
         appsink.upcast_ref(),
     ])?;
 
-    // source → decoder is a static link. decoder → convert is linked from
-    // decodebin's pad-added signal because decodebin only exposes its src pad
-    // after caps negotiation completes.
-    gst::Element::link(&source, &decoder).context("link source -> decoder")?;
+    // source → src_filter → decoder is a static link. decoder → convert is
+    // linked from decodebin's pad-added signal because decodebin only exposes
+    // its src pad after caps negotiation completes.
+    gst::Element::link_many([&source, &src_filter, &decoder])
+        .context("link source -> src caps -> decoder")?;
     let convert_weak = convert.downgrade();
     decoder.connect_pad_added(move |_dbin, src_pad| {
         let Some(convert) = convert_weak.upgrade() else {
@@ -209,21 +250,25 @@ fn drain_bus_error(pipeline: &gst::Pipeline) -> Option<String> {
     None
 }
 
-fn build_source(app: &AppState) -> Result<gst::Element> {
+/// Resolve which physical camera the pipeline should use: the configured one
+/// when it exists, otherwise autodetect. `None` means no camera at all
+/// (`videotestsrc` fallback). Shared by `probe_format` and `build_source` so
+/// the probed mode always belongs to the camera that is actually opened.
+pub(crate) fn resolve_camera(app: &AppState) -> Option<cameras::CameraInfo> {
     let selected = app.camera.selected.trim();
 
     if !selected.is_empty() {
         if let Some(info) = cameras::enumerate().into_iter().find(|c| c.id == selected) {
-            info!(id = %info.id, name = %info.name, api = %info.api, "using configured camera");
-            return cameras::build_source_for(&info);
+            return Some(info);
         }
         // Honour an explicit /dev/videoN even if DeviceMonitor missed it.
-        if selected.starts_with("/dev/video") && gst::ElementFactory::find("v4l2src").is_some() {
-            info!(device = %selected, "using configured v4l2 device");
-            return gst::ElementFactory::make("v4l2src")
-                .property("device", selected)
-                .build()
-                .context("create v4l2src");
+        if selected.starts_with("/dev/video") {
+            return Some(cameras::CameraInfo {
+                id: selected.to_string(),
+                name: selected.to_string(),
+                path: selected.to_string(),
+                api: String::from("v4l2"),
+            });
         }
         warn!(
             selected,
@@ -231,8 +276,12 @@ fn build_source(app: &AppState) -> Result<gst::Element> {
         );
     }
 
-    if let Some(info) = cameras::autodetect() {
-        info!(id = %info.id, name = %info.name, api = %info.api, "auto-selected camera");
+    cameras::autodetect()
+}
+
+fn build_source(app: &AppState) -> Result<gst::Element> {
+    if let Some(info) = resolve_camera(app) {
+        info!(id = %info.id, name = %info.name, api = %info.api, "using camera");
         return cameras::build_source_for(&info);
     }
 

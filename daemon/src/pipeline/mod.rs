@@ -19,15 +19,42 @@ use zvariant::OwnedValue;
 use crate::pipeline::bridge::Bridge;
 use crate::pipeline::probe::PIPEWIRE_NODE_NAME;
 
-/// Fixed virtual-camera format, shared by the capture appsink and the native
-/// provide node so frames are byte-compatible without per-frame conversion.
+/// Default virtual-camera format, used when the camera's native modes can't be
+/// probed (e.g. `videotestsrc` fallback).
 pub const WIDTH: u32 = 1280;
 pub const HEIGHT: u32 = 720;
 pub const FPS: i32 = 30;
-/// I420 Y-plane stride.
-pub const STRIDE: u32 = WIDTH;
-/// I420 frame size = W*H (Y) + 2 * (W/2 * H/2) (U,V) = W*H*3/2.
-pub const FRAME_SIZE: usize = (WIDTH as usize * HEIGHT as usize * 3) / 2;
+
+/// The I420 format shared by the capture appsink and the native provide node so
+/// frames are byte-compatible without per-frame conversion. The dimensions are
+/// taken from the physical camera's preferred native mode
+/// (`cameras::preferred_format`) and pinned on the *source* too, so the capture
+/// pipeline never rescales — rescaling a 4:3 camera mode into a fixed 16:9
+/// output is what made the feed look horizontally stretched.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PipelineFormat {
+    pub width: u32,
+    pub height: u32,
+    pub fps: i32,
+}
+
+impl PipelineFormat {
+    pub const DEFAULT: PipelineFormat = PipelineFormat {
+        width: WIDTH,
+        height: HEIGHT,
+        fps: FPS,
+    };
+
+    /// I420 Y-plane stride.
+    pub fn stride(&self) -> u32 {
+        self.width
+    }
+
+    /// I420 frame size = W*H (Y) + 2 * (W/2 * H/2) (U,V) = W*H*3/2.
+    pub fn frame_size(&self) -> usize {
+        (self.width as usize * self.height as usize * 3) / 2
+    }
+}
 
 /// Grace period before releasing the real camera once the provide node leaves
 /// STREAMING. Consumers that go through xdg-desktop-portal (browsers) probe the
@@ -36,7 +63,7 @@ pub const FRAME_SIZE: usize = (WIDTH as usize * HEIGHT as usize * 3) / 2;
 /// thrash the camera (open takes ~250 ms) and never deliver a stable stream.
 /// Holding briefly keeps the camera warm across blips while still releasing it
 /// promptly — and the LED off — when the consumer is really gone.
-const CAPTURE_RELEASE_GRACE: Duration = Duration::from_millis(5000);
+const CAPTURE_RELEASE_GRACE: Duration = Duration::from_millis(700);
 
 #[derive(Debug)]
 pub enum PipelineCommand {
@@ -109,6 +136,9 @@ fn worker_loop(
     let mut stored_app: Option<AppState> = None;
     let mut provider: Option<ProviderHandle> = None;
     let mut capture: Option<builder::BuiltCapture> = None;
+    // The format the provide node currently advertises; follows the selected
+    // camera's preferred native mode.
+    let mut current_fmt = PipelineFormat::DEFAULT;
     // Whether a consumer is currently pulling (provide node STREAMING).
     let mut consumer_streaming = false;
     // When set, the capture pipeline is released once this instant passes and no
@@ -118,7 +148,6 @@ fn worker_loop(
     loop {
         match commands.try_recv() {
             Ok(PipelineCommand::Start(app)) => {
-                stored_app = Some(app);
                 // Tear any running capture so a config/camera change takes effect.
                 if let Some(c) = capture.take() {
                     c.stop();
@@ -126,10 +155,25 @@ fn worker_loop(
                 bridge.clear();
                 stop_deadline = None;
 
+                // Adopt the selected camera's preferred native mode. A camera
+                // switch can change the advertised format, which requires
+                // re-advertising the provide node (consumers renegotiate on
+                // reconnect).
+                let fmt = builder::probe_format(&app);
+                stored_app = Some(app);
+                if provider.is_some() && fmt != current_fmt {
+                    info!(?fmt, "virtual camera format changed; re-advertising");
+                    if let Some(p) = provider.take() {
+                        p.stop();
+                    }
+                    consumer_streaming = false;
+                }
+                current_fmt = fmt;
+
                 // Arm the provide node if not already advertised. The node sits
                 // in PAUSED with the real camera untouched until a consumer links.
                 if provider.is_none() {
-                    provider = Some(spawn_provider(&bridge, &capture_tx, &events));
+                    provider = Some(spawn_provider(&bridge, current_fmt, &capture_tx, &events));
                     let _ = events.blocking_send(PipelineEvent::Started {
                         sink: format!("pipewire:{PIPEWIRE_NODE_NAME}"),
                     });
@@ -139,7 +183,7 @@ fn worker_loop(
                 // the capture immediately rather than waiting for a state change.
                 if consumer_streaming {
                     if let Some(app) = stored_app.clone() {
-                        start_capture(&app, &bridge, &events, &mut capture);
+                        start_capture(&app, current_fmt, &bridge, &events, &mut capture);
                     }
                 }
             }
@@ -193,7 +237,7 @@ fn worker_loop(
                 stop_deadline = None;
                 if capture.is_none() {
                     if let Some(app) = stored_app.clone() {
-                        start_capture(&app, &bridge, &events, &mut capture);
+                        start_capture(&app, current_fmt, &bridge, &events, &mut capture);
                     }
                 }
             }
@@ -230,6 +274,7 @@ fn worker_loop(
 
 fn spawn_provider(
     bridge: &Arc<Bridge>,
+    fmt: PipelineFormat,
     capture_tx: &std_mpsc::Sender<CaptureCmd>,
     events: &mpsc::Sender<PipelineEvent>,
 ) -> ProviderHandle {
@@ -238,7 +283,7 @@ fn spawn_provider(
     let capture_tx = capture_tx.clone();
     let events = events.clone();
     let join = std::thread::spawn(move || {
-        provider::run(bridge, capture_tx, events, quit_rx);
+        provider::run(bridge, fmt, capture_tx, events, quit_rx);
     });
     ProviderHandle {
         quit: quit_tx,
@@ -249,11 +294,12 @@ fn spawn_provider(
 /// Build + start the capture pipeline (opens the real camera) and report status.
 fn start_capture(
     app: &AppState,
+    fmt: PipelineFormat,
     bridge: &Arc<Bridge>,
     events: &mpsc::Sender<PipelineEvent>,
     capture: &mut Option<builder::BuiltCapture>,
 ) {
-    match builder::build_capture_pipeline(app, Arc::clone(bridge)).and_then(|c| {
+    match builder::build_capture_pipeline(app, fmt, Arc::clone(bridge)).and_then(|c| {
         c.start()?;
         Ok(c)
     }) {

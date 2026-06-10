@@ -4,6 +4,7 @@ use gstreamer as gst;
 use tracing::warn;
 
 use super::probe::PIPEWIRE_NODE_NAME;
+use super::PipelineFormat;
 
 #[derive(Debug, Clone)]
 pub struct CameraInfo {
@@ -37,6 +38,110 @@ pub fn enumerate() -> Vec<CameraInfo> {
 
 pub fn autodetect() -> Option<CameraInfo> {
     enumerate().into_iter().next()
+}
+
+/// Probe the camera's supported modes (DeviceMonitor caps — no device open, no
+/// LED) and pick the mode the virtual camera should advertise. The capture
+/// pipeline pins this exact mode on the source, so frames are never rescaled
+/// and the aspect ratio of the physical feed is preserved.
+///
+/// Preference order:
+/// 1. the default mode (1280x720) if the camera supports it natively
+/// 2. the mode with the area closest to the default, among modes >= 24 fps
+/// 3. the mode with the area closest to the default, regardless of fps
+pub fn preferred_format(info: &CameraInfo) -> Option<PipelineFormat> {
+    let monitor = gst::DeviceMonitor::new();
+    let _ = monitor.add_filter(Some("Video/Source"), None);
+    monitor.start().ok()?;
+    let devices = monitor.devices();
+    monitor.stop();
+
+    let device = devices
+        .into_iter()
+        .find(|d| device_to_info(d).is_some_and(|i| i.id == info.id))?;
+    let caps = device.caps()?;
+
+    // Collect (width, height) -> best fps across raw and MJPEG modes; the
+    // capture pipeline's decodebin handles either, so a camera that only does
+    // 720p in MJPEG (common for UVC webcams) still counts as native 720p.
+    let mut modes: Vec<(u32, u32, i32)> = Vec::new();
+    for s in caps.iter() {
+        let name = s.name().as_str();
+        if name != "video/x-raw" && name != "image/jpeg" {
+            continue;
+        }
+        let (Ok(w), Ok(h)) = (s.get::<i32>("width"), s.get::<i32>("height")) else {
+            continue;
+        };
+        if w <= 0 || h <= 0 {
+            continue;
+        }
+        let fps = best_fps(s);
+        if fps <= 0 {
+            continue;
+        }
+        match modes
+            .iter_mut()
+            .find(|(mw, mh, _)| *mw == w as u32 && *mh == h as u32)
+        {
+            Some(m) if better_fps(fps, m.2) => m.2 = fps,
+            Some(_) => {}
+            None => modes.push((w as u32, h as u32, fps)),
+        }
+    }
+    if modes.is_empty() {
+        return None;
+    }
+
+    let target_area = (super::WIDTH * super::HEIGHT) as i64;
+    let pick = |candidates: &[(u32, u32, i32)]| -> Option<(u32, u32, i32)> {
+        candidates
+            .iter()
+            .min_by_key(|(w, h, _)| ((*w as i64 * *h as i64) - target_area).abs())
+            .copied()
+    };
+
+    let smooth: Vec<_> = modes.iter().copied().filter(|(_, _, f)| *f >= 24).collect();
+    let (width, height, fps) = pick(&smooth).or_else(|| pick(&modes))?;
+    Some(PipelineFormat { width, height, fps })
+}
+
+/// Pick the structure's frame rate closest to 30 fps (handles fixed fractions,
+/// lists of fractions, and ranges).
+fn best_fps(s: &gst::StructureRef) -> i32 {
+    fn frac_to_fps(f: gst::Fraction) -> i32 {
+        if f.denom() <= 0 {
+            return 0;
+        }
+        ((f.numer() as f64 / f.denom() as f64).round() as i32).clamp(0, 120)
+    }
+
+    if let Ok(f) = s.get::<gst::Fraction>("framerate") {
+        return frac_to_fps(f);
+    }
+    if let Ok(list) = s.get::<gst::List>("framerate") {
+        let mut best = 0;
+        for v in list.iter() {
+            if let Ok(f) = v.get::<gst::Fraction>() {
+                let fps = frac_to_fps(f);
+                if better_fps(fps, best) {
+                    best = fps;
+                }
+            }
+        }
+        return best;
+    }
+    if let Ok(range) = s.get::<gst::FractionRange>("framerate") {
+        let max = frac_to_fps(range.max());
+        return max.min(super::FPS);
+    }
+    0
+}
+
+/// `a` beats `b` if it is closer to the 30 fps sweet spot (ties -> lower rate).
+fn better_fps(a: i32, b: i32) -> bool {
+    let d = |f: i32| (f - super::FPS).abs();
+    d(a) < d(b) || (d(a) == d(b) && a < b)
 }
 
 /// Build a GStreamer source element for the given camera. We always construct
