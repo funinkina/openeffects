@@ -3,6 +3,11 @@
 
 pub const APP_ID: &str = "org.openeffects.OpenEffects";
 
+/// PipeWire node name the daemon advertises the virtual camera under. The
+/// preview pipeline targets this to show the processed output. Must match the
+/// daemon's `PIPEWIRE_NODE_NAME`.
+pub const VCAM_NODE_NAME: &str = "openeffects";
+
 /// Center Stage framing levels (stored value, display label). "Off" is the
 /// page's master switch, so it is not a framing choice here.
 pub const FRAMING_LEVELS: &[(&str, &str)] = &[

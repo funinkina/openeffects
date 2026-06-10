@@ -1561,6 +1561,7 @@ dependencies = [
  "anyhow",
  "async-channel",
  "futures-util",
+ "gstreamer",
  "gtk4",
  "libadwaita",
  "shared",

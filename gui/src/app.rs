@@ -19,6 +19,7 @@ use crate::constants::NAV_PAGES;
 use crate::dbus_client::{CameraInfo, CmdTx, UiUpdate};
 use crate::pages::{background, center_stage, reactions, studio_light};
 use crate::preferences;
+use crate::preview;
 use crate::widgets::Switches;
 
 struct Widgets {
@@ -89,12 +90,16 @@ pub fn build_window(
     toolbar.set_content(Some(&stack));
     toolbar.add_bottom_bar(&switcher_bar);
 
+    // Global live-preview bottom sheet wraps the whole content, so its
+    // always-visible bottom bar is present on every page.
+    let preview = preview::build(&toolbar);
+
     let window = ApplicationWindow::builder()
         .application(app)
         .title("OpenEffects")
         .default_width(720)
         .default_height(640)
-        .content(&toolbar)
+        .content(&preview.sheet)
         .build();
 
     // Adaptive: hide the header switcher and reveal the bottom bar when narrow.

@@ -23,6 +23,7 @@ async-channel = "2"
 
 gtk = { package = "gtk4", version = "0.11", features = ["v4_12"] }
 adw = { package = "libadwaita", version = "0.9", features = ["v1_7"] }
+gstreamer.workspace = true
 
 [build-dependencies]
 zbus = { version = "5", features = ["tokio"] }
