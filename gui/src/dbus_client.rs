@@ -16,7 +16,7 @@ use zvariant::{OwnedValue, Value};
 mod proxies {
     include!(concat!(env!("OUT_DIR"), "/proxies.rs"));
 }
-use proxies::{Daemon1Proxy, Effects1Proxy};
+use proxies::{Daemon1Proxy, Devices1Proxy, Effects1Proxy};
 
 #[derive(Debug)]
 pub enum GuiCommand {
@@ -29,13 +29,31 @@ pub enum GuiCommand {
         key: String,
         value: OwnedValue,
     },
+    SelectCamera {
+        id: String,
+    },
+}
+
+/// A physical camera as shown in the Camera page picker.
+#[derive(Debug, Clone)]
+pub struct CameraInfo {
+    pub id: String,
+    pub name: String,
 }
 
 #[derive(Debug)]
 pub enum UiUpdate {
     AllState(VariantMap),
-    EffectChanged { id: String, params: VariantMap },
+    EffectChanged {
+        id: String,
+        params: VariantMap,
+    },
     Status(String),
+    Capabilities(VariantMap),
+    Cameras {
+        cameras: Vec<CameraInfo>,
+        active: String,
+    },
     Disconnected,
 }
 
@@ -70,15 +88,24 @@ async fn run_once(
     let conn = zbus::Connection::session().await?;
     let effects = Effects1Proxy::new(&conn).await?;
     let daemon = Daemon1Proxy::new(&conn).await?;
+    let devices = Devices1Proxy::new(&conn).await?;
 
-    let all_state = effects.get_all_state().await?;
-    update_tx.send(UiUpdate::AllState(all_state)).await.ok();
-
-    let status = daemon.status().await?;
-    update_tx.send(UiUpdate::Status(status)).await.ok();
+    // Initial snapshot.
+    update_tx
+        .send(UiUpdate::AllState(effects.get_all_state().await?))
+        .await
+        .ok();
+    update_tx
+        .send(UiUpdate::Status(daemon.status().await?))
+        .await
+        .ok();
+    push_capabilities(&daemon, update_tx).await;
+    push_cameras(&devices, update_tx).await;
 
     let mut effect_changed = effects.receive_effect_changed().await?;
     let mut status_changed = daemon.receive_daemon_status_changed().await?;
+    let mut caps_changed = daemon.receive_capabilities_changed().await;
+    let mut active_cam_changed = devices.receive_active_camera_changed().await;
 
     loop {
         tokio::select! {
@@ -90,6 +117,9 @@ async fn run_once(
                     Some(GuiCommand::SetParam { id, key, value }) => {
                         let value: Value<'_> = value.into();
                         effects.set_param(&id, &key, &value).await?;
+                    }
+                    Some(GuiCommand::SelectCamera { id }) => {
+                        devices.select_camera(&id).await?;
                     }
                     None => return Ok(()),
                 }
@@ -118,7 +148,49 @@ async fn run_once(
                     .send(UiUpdate::Status(args.new_status.to_string()))
                     .await
                     .ok();
+                // Status transitions (idle/running) may change the active EP/tier readout.
+                push_capabilities(&daemon, update_tx).await;
+            }
+            change = caps_changed.next() => {
+                if change.is_none() {
+                    return Err(anyhow::anyhow!("Capabilities property stream closed"));
+                }
+                push_capabilities(&daemon, update_tx).await;
+            }
+            change = active_cam_changed.next() => {
+                if change.is_none() {
+                    return Err(anyhow::anyhow!("ActiveCamera property stream closed"));
+                }
+                push_cameras(&devices, update_tx).await;
             }
         }
     }
+}
+
+async fn push_capabilities(daemon: &Daemon1Proxy<'_>, update_tx: &async_channel::Sender<UiUpdate>) {
+    if let Ok(caps) = daemon.capabilities().await {
+        update_tx.send(UiUpdate::Capabilities(caps)).await.ok();
+    }
+}
+
+async fn push_cameras(devices: &Devices1Proxy<'_>, update_tx: &async_channel::Sender<UiUpdate>) {
+    let Ok(raw) = devices.list_cameras().await else {
+        return;
+    };
+    let active = devices.active_camera().await.unwrap_or_default();
+    let cameras = raw
+        .into_iter()
+        .filter_map(|m| {
+            let id = shared::dbus::value_as_string(m.get("id")?)?;
+            let name = m
+                .get("name")
+                .and_then(shared::dbus::value_as_string)
+                .unwrap_or_else(|| id.clone());
+            Some(CameraInfo { id, name })
+        })
+        .collect();
+    update_tx
+        .send(UiUpdate::Cameras { cameras, active })
+        .await
+        .ok();
 }

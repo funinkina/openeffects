@@ -669,7 +669,7 @@ Opt-in models ship in a separate `openeffects-models-extra` package (RPM/DEB) so
 - **GUI MVP is the core deliverable of this phase.** A GTK4/libadwaita `AdwApplicationWindow` listing the five effects with `AdwSwitchRow` toggles, tested and working on **Arch Linux + GNOME**. Toggling a row round-trips `SetEnabled` → `EffectChanged`.
 - Systemd user service unit for the daemon (`Type=dbus` autostart).
 - CLI: `enable`, `disable`, `set`, `status`.
-- Daemon auto-pause when no virtual camera consumer for > 30 s.
+- Daemon auto-pause when no virtual camera consumer for > 0.7 s.
 
 **Exit criteria:**
 - Build on Arch Linux with `cargo build --release` and `meson install`.

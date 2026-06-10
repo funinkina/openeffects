@@ -1,0 +1,28 @@
+[model]
+id = "selfie_segmentation"
+name = "MediaPipe Selfie Segmentation"
+version = "1"
+license = "Apache-2.0"
+
+[model.input]
+name = "pixel_values"
+shape = [1, 3, 256, 256]
+layout = "NCHW"
+preprocessing = "scale_0_1"
+
+[model.output.alphas]
+name = "alphas"
+shape = [1, 1, 256, 256]
+postprocessing = "none"
+
+[model.execution]
+supported_eps = ["cpu", "cuda", "tensorrt", "openvino"]
+min_vram_mb = 0
+
+[[model.variants]]
+name = "fp32"
+file = "selfie_segmentation.onnx"
+sha256 = "3241ac4ad8aa35bdaf33946776db29f7c283a413aa0b0dacb9483594b4531aad"
+
+[model.source]
+url = "https://huggingface.co/onnx-community/mediapipe_selfie_segmentation/resolve/main/onnx/model.onnx"

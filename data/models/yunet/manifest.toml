@@ -1,0 +1,83 @@
+[model]
+id = "yunet"
+name = "YuNet Face Detector"
+version = "2023mar"
+license = "MIT"
+
+[model.input]
+name = "input"
+shape = [1, 3, 640, 640]
+layout = "NCHW"
+preprocessing = "none"
+
+[model.output.cls_8]
+name = "cls_8"
+shape = [1, 6400, 1]
+postprocessing = "sigmoid"
+
+[model.output.cls_16]
+name = "cls_16"
+shape = [1, 1600, 1]
+postprocessing = "sigmoid"
+
+[model.output.cls_32]
+name = "cls_32"
+shape = [1, 400, 1]
+postprocessing = "sigmoid"
+
+[model.output.obj_8]
+name = "obj_8"
+shape = [1, 6400, 1]
+postprocessing = "sigmoid"
+
+[model.output.obj_16]
+name = "obj_16"
+shape = [1, 1600, 1]
+postprocessing = "sigmoid"
+
+[model.output.obj_32]
+name = "obj_32"
+shape = [1, 400, 1]
+postprocessing = "sigmoid"
+
+[model.output.bbox_8]
+name = "bbox_8"
+shape = [1, 6400, 4]
+postprocessing = "decode_bbox"
+
+[model.output.bbox_16]
+name = "bbox_16"
+shape = [1, 1600, 4]
+postprocessing = "decode_bbox"
+
+[model.output.bbox_32]
+name = "bbox_32"
+shape = [1, 400, 4]
+postprocessing = "decode_bbox"
+
+[model.output.kps_8]
+name = "kps_8"
+shape = [1, 6400, 10]
+postprocessing = "decode_kps"
+
+[model.output.kps_16]
+name = "kps_16"
+shape = [1, 1600, 10]
+postprocessing = "decode_kps"
+
+[model.output.kps_32]
+name = "kps_32"
+shape = [1, 400, 10]
+postprocessing = "decode_kps"
+
+[model.execution]
+supported_eps = ["cpu", "cuda", "tensorrt", "openvino"]
+min_vram_mb = 0
+
+[[model.variants]]
+name = "fp32"
+file = "face_detection_yunet_2023mar.onnx"
+sha256 = "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
+
+[model.source]
+url = "https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx"

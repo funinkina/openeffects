@@ -4,6 +4,17 @@ use gstreamer as gst;
 
 use shared::config::AppState;
 
+/// Build the effects bin:
+///
+/// `queue → videobalance(studio light) → videoconvert → RGBA caps → oe_effects
+///  → videoconvert → videoscale`
+///
+/// Studio Light is a cheap brightness/contrast lift handled by the stock
+/// `videobalance`. The ML effects (portrait blur, background replace, center
+/// stage) all live in the single `oe_effects` CPU filter, which runs on RGBA
+/// system memory — hence the `videoconvert` + RGBA capsfilter wrapping it. The
+/// trailing `videoconvert`/`videoscale` convert back toward the I420 output the
+/// appsink and provide node expect.
 pub fn build_effects_bin(app: &AppState) -> Result<gst::Bin> {
     let bin = gst::Bin::new();
 
@@ -16,21 +27,49 @@ pub fn build_effects_bin(app: &AppState) -> Result<gst::Bin> {
         .name("oe_videobalance")
         .build()
         .context("create videobalance")?;
-    let crop = gst::ElementFactory::make("videocrop")
-        .name("oe_videocrop")
+    let convert_in = gst::ElementFactory::make("videoconvert")
         .build()
-        .context("create videocrop")?;
-    let convert = gst::ElementFactory::make("videoconvert")
+        .context("create videoconvert (to RGBA)")?;
+    let rgba_caps = gst::ElementFactory::make("capsfilter")
+        .property(
+            "caps",
+            gst::Caps::builder("video/x-raw")
+                .field("format", "RGBA")
+                .build(),
+        )
         .build()
-        .context("create videoconvert")?;
+        .context("create RGBA capsfilter")?;
+    let effects = gst::ElementFactory::make("oe_effects")
+        .name("oe_effects")
+        .build()
+        .context("create oe_effects")?;
+    let convert_out = gst::ElementFactory::make("videoconvert")
+        .build()
+        .context("create videoconvert (from RGBA)")?;
     let scale = gst::ElementFactory::make("videoscale")
         .build()
         .context("create videoscale")?;
 
-    apply_app_state_to_elements(&balance, &crop, app);
+    apply_app_state_to_elements(&balance, &effects, app);
 
-    bin.add_many([&queue, &balance, &crop, &convert, &scale])?;
-    gst::Element::link_many([&queue, &balance, &crop, &convert, &scale])?;
+    bin.add_many([
+        &queue,
+        &balance,
+        &convert_in,
+        &rgba_caps,
+        &effects,
+        &convert_out,
+        &scale,
+    ])?;
+    gst::Element::link_many([
+        &queue,
+        &balance,
+        &convert_in,
+        &rgba_caps,
+        &effects,
+        &convert_out,
+        &scale,
+    ])?;
 
     let sink_pad = queue.static_pad("sink").context("queue sink pad")?;
     let src_pad = scale.static_pad("src").context("scale src pad")?;
@@ -40,7 +79,9 @@ pub fn build_effects_bin(app: &AppState) -> Result<gst::Bin> {
     Ok(bin)
 }
 
-pub fn apply_app_state_to_elements(balance: &gst::Element, crop: &gst::Element, app: &AppState) {
+/// Push the current config into the live pipeline elements: Studio Light onto
+/// `videobalance`, and the three ML effects onto `oe_effects`.
+pub fn apply_app_state_to_elements(balance: &gst::Element, effects: &gst::Element, app: &AppState) {
     let studio = &app.effects.studio_light;
     let intensity = if studio.enabled {
         studio.intensity as f64 / 100.0
@@ -53,54 +94,146 @@ pub fn apply_app_state_to_elements(balance: &gst::Element, crop: &gst::Element, 
     balance.set_property("brightness", brightness.clamp(-1.0, 1.0));
     balance.set_property("contrast", contrast.clamp(0.0, 2.0));
 
+    let blur = &app.effects.portrait_blur;
+    effects.set_property("portrait-blur-enabled", blur.enabled);
+    effects.set_property("portrait-blur-strength", blur.strength as u32);
+
+    let bg = &app.effects.bg_replace;
+    effects.set_property("bg-replace-enabled", bg.enabled);
+    effects.set_property("bg-replace-path", &bg.background);
+
     let center = &app.effects.center_stage;
-    let crop_value = |value: u32| -> i32 {
-        if center.enabled {
-            value.min(512) as i32
-        } else {
-            0
-        }
-    };
-    crop.set_property("top", crop_value(center.crop.top));
-    crop.set_property("bottom", crop_value(center.crop.bottom));
-    crop.set_property("left", crop_value(center.crop.left));
-    crop.set_property("right", crop_value(center.crop.right));
+    effects.set_property("center-stage-enabled", center.enabled);
+    effects.set_property("center-stage-zoom", &center.zoom);
+    effects.set_property("center-stage-mode", &center.mode);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn effects_available() -> bool {
+        gst::init().unwrap();
+        super::super::filters::register().unwrap();
+        gst::ElementFactory::find("videoconvert").is_some()
+    }
+
     #[test]
     fn effects_bin_builds_without_panic() {
-        gst::init().unwrap();
+        if !effects_available() {
+            eprintln!("skipping: base GStreamer plugins not available");
+            return;
+        }
         let bin = build_effects_bin(&AppState::default()).unwrap();
         assert!(bin.static_pad("sink").is_some());
         assert!(bin.static_pad("src").is_some());
     }
 
     #[test]
-    fn phase1_effects_map_state_to_gstreamer_elements() {
+    fn oe_effects_registers_with_default_properties() {
         gst::init().unwrap();
+        super::super::filters::register().unwrap();
+
+        let effects = gst::ElementFactory::make("oe_effects").build().unwrap();
+        assert!(!effects.property::<bool>("portrait-blur-enabled"));
+        assert_eq!(effects.property::<u32>("portrait-blur-strength"), 50);
+        assert!(!effects.property::<bool>("center-stage-enabled"));
+        assert_eq!(effects.property::<String>("center-stage-zoom"), "normal");
+        assert_eq!(effects.property::<String>("center-stage-mode"), "single");
+        assert!(!effects.property::<bool>("bg-replace-enabled"));
+    }
+
+    #[test]
+    fn app_state_maps_to_elements() {
+        gst::init().unwrap();
+        super::super::filters::register().unwrap();
         let balance = gst::ElementFactory::make("videobalance").build().unwrap();
-        let crop = gst::ElementFactory::make("videocrop").build().unwrap();
+        let effects = gst::ElementFactory::make("oe_effects").build().unwrap();
         let mut app = AppState::default();
 
-        apply_app_state_to_elements(&balance, &crop, &app);
+        apply_app_state_to_elements(&balance, &effects, &app);
         assert_eq!(balance.property::<f64>("brightness"), 0.0);
         assert_eq!(balance.property::<f64>("contrast"), 1.0);
-        assert_eq!(crop.property::<i32>("left"), 0);
+        assert!(!effects.property::<bool>("portrait-blur-enabled"));
+        assert!(!effects.property::<bool>("center-stage-enabled"));
 
         app.effects.studio_light.enabled = true;
         app.effects.studio_light.intensity = 50;
         app.effects.studio_light.brightness = 80;
         app.effects.studio_light.contrast = 100;
         app.effects.center_stage.enabled = true;
-        app.effects.center_stage.crop.left = 24;
+        app.effects.center_stage.zoom = "tight".into();
+        app.effects.portrait_blur.enabled = true;
+        app.effects.portrait_blur.strength = 75;
+        app.effects.bg_replace.enabled = true;
+        app.effects.bg_replace.background = "#102030".into();
 
-        apply_app_state_to_elements(&balance, &crop, &app);
+        apply_app_state_to_elements(&balance, &effects, &app);
         assert_eq!(balance.property::<f64>("brightness"), 0.4);
         assert_eq!(balance.property::<f64>("contrast"), 1.5);
-        assert_eq!(crop.property::<i32>("left"), 24);
+        assert!(effects.property::<bool>("center-stage-enabled"));
+        assert_eq!(effects.property::<String>("center-stage-zoom"), "tight");
+        assert!(effects.property::<bool>("portrait-blur-enabled"));
+        assert_eq!(effects.property::<u32>("portrait-blur-strength"), 75);
+        assert!(effects.property::<bool>("bg-replace-enabled"));
+        assert_eq!(effects.property::<String>("bg-replace-path"), "#102030");
+    }
+
+    /// End-to-end smoke test of the hot path: push real frames through the
+    /// effects bin with portrait blur + center stage enabled, exercising
+    /// `oe_effects::transform_frame_ip` (segmentation, composite, crop) on the
+    /// GStreamer streaming thread. Runs to EOS without error.
+    #[test]
+    fn effects_bin_processes_frames() {
+        if !effects_available() || gst::ElementFactory::find("videotestsrc").is_none() {
+            eprintln!("skipping: GStreamer plugins not available");
+            return;
+        }
+        let mut app = AppState::default();
+        app.effects.portrait_blur.enabled = true;
+        app.effects.portrait_blur.strength = 70;
+        app.effects.center_stage.enabled = true;
+        app.effects.center_stage.zoom = "normal".into();
+
+        let pipeline = gst::Pipeline::new();
+        let src = gst::ElementFactory::make("videotestsrc")
+            .property("num-buffers", 6i32)
+            .build()
+            .unwrap();
+        let caps = gst::ElementFactory::make("capsfilter")
+            .property(
+                "caps",
+                gst::Caps::builder("video/x-raw")
+                    .field("width", 320i32)
+                    .field("height", 240i32)
+                    .build(),
+            )
+            .build()
+            .unwrap();
+        let bin = build_effects_bin(&app).unwrap();
+        let sink = gst::ElementFactory::make("fakesink").build().unwrap();
+        pipeline
+            .add_many([&src, &caps, bin.upcast_ref(), &sink])
+            .unwrap();
+        gst::Element::link_many([&src, &caps, bin.upcast_ref(), &sink]).unwrap();
+
+        pipeline.set_state(gst::State::Playing).unwrap();
+        let bus = pipeline.bus().unwrap();
+        let mut saw_eos = false;
+        for msg in bus.iter_timed(gst::ClockTime::from_seconds(15)) {
+            match msg.view() {
+                gst::MessageView::Eos(_) => {
+                    saw_eos = true;
+                    break;
+                }
+                gst::MessageView::Error(err) => {
+                    pipeline.set_state(gst::State::Null).unwrap();
+                    panic!("pipeline error: {} ({:?})", err.error(), err.debug());
+                }
+                _ => {}
+            }
+        }
+        pipeline.set_state(gst::State::Null).unwrap();
+        assert!(saw_eos, "pipeline did not reach EOS within timeout");
     }
 }

@@ -2,6 +2,7 @@ pub mod bridge;
 pub mod builder;
 pub mod cameras;
 pub mod effects;
+pub mod filters;
 pub mod probe;
 pub mod provider;
 
@@ -118,6 +119,10 @@ pub fn spawn_worker(
 ) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         if let Err(err) = gstreamer::init() {
+            let _ = events.blocking_send(PipelineEvent::Error(err.to_string()));
+            return;
+        }
+        if let Err(err) = filters::register() {
             let _ = events.blocking_send(PipelineEvent::Error(err.to_string()));
             return;
         }

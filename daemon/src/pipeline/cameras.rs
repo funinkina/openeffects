@@ -57,7 +57,7 @@ fn pick_default_camera(cameras: Vec<CameraInfo>) -> Option<CameraInfo> {
             usize::MAX - idx,
             u32::MAX - video_num,
         );
-        if best.map_or(true, |current| key > current) {
+        if best.is_none_or(|current| key > current) {
             best = Some(key);
         }
     }

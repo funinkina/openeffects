@@ -1,4 +1,5 @@
 mod dbus_server;
+mod inference;
 mod pipeline;
 mod state;
 
@@ -10,7 +11,7 @@ use shared::{
     dbus::{OBJECT_PATH, SERVICE_NAME},
 };
 use tokio::sync::{mpsc, RwLock};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use zbus::object_server::SignalEmitter;
 
 use crate::{
@@ -40,7 +41,22 @@ async fn main() -> anyhow::Result<()> {
             }
         }
     }
-    let state = Arc::new(RwLock::new(DaemonState::new(app)));
+    let ep = inference::probe_ep();
+    if inference::init_runtime() {
+        info!(ep = ep.as_str(), "ONNX Runtime environment initialized");
+    } else {
+        warn!("ONNX Runtime environment was already configured");
+    }
+    let tier = inference::Tier::from_override(&app.pipeline.tier_override)
+        .unwrap_or_else(inference::detect_tier);
+    info!(tier = tier.as_str(), "hardware tier");
+    let models_ready = inference::registry::find_model("yunet").is_some()
+        && inference::registry::find_model("selfie_segmentation").is_some();
+    if !models_ready {
+        warn!("ML models not found; run scripts/fetch-models.sh to enable Portrait Blur and Center Stage");
+    }
+
+    let state = Arc::new(RwLock::new(DaemonState::new(app, ep, tier, models_ready)));
     let (pipeline_tx, pipeline_rx) = mpsc::channel(32);
     let (event_tx, mut event_rx) = mpsc::channel(32);
     let worker = pipeline::spawn_worker(pipeline_rx, event_tx);

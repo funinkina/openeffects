@@ -18,15 +18,22 @@ tokio.workspace     = true
 zbus.workspace      = true
 zvariant.workspace  = true
 serde.workspace = true
+toml.workspace  = true
+dirs.workspace  = true
 tracing.workspace            = true
 tracing-subscriber.workspace = true
 
 gstreamer.workspace       = true
 gstreamer-video.workspace = true
 gstreamer-app.workspace   = true
+gstreamer-base.workspace  = true
 
 # v0_3_34 enables pw_stream_trigger_process (driving the virtual source cadence).
 pipewire = { workspace = true, features = ["v0_3_34"] }
+
+ort.workspace   = true
+sha2.workspace  = true
+image.workspace = true
 
 [build-dependencies]
 zbus        = { version = "5", features = ["tokio"] }
@@ -35,3 +42,4 @@ zbus_xml    = "5"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
+tempfile = "3"

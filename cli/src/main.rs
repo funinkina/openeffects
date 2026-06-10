@@ -98,17 +98,34 @@ async fn main() -> anyhow::Result<()> {
 async fn status(conn: &Connection, json: bool, short: bool) -> anyhow::Result<()> {
     let daemon = daemon_proxy(conn).await?;
     let status = daemon.get_property::<String>("Status").await?;
-    if json {
-        println!("{}", serde_json::json!({ "status": status }));
-    } else if short {
+    if short {
         println!("{status}");
+        return Ok(());
+    }
+    let caps = daemon
+        .get_property::<VariantMap>("Capabilities")
+        .await
+        .unwrap_or_default();
+    let tier = simple_value(&caps, "tier").unwrap_or_else(|| "unknown".into());
+    let ep = simple_value(&caps, "ep").unwrap_or_else(|| "unknown".into());
+    let models = match simple_value(&caps, "models_ready").as_deref() {
+        Some("true") => "ready",
+        _ => "missing",
+    };
+    let sink = simple_value(&caps, "output_sink").unwrap_or_else(|| "unknown".into());
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "status": status,
+                "tier": tier,
+                "ep": ep,
+                "models": models,
+                "sink": sink,
+            })
+        );
     } else {
-        let caps = daemon
-            .get_property::<VariantMap>("Capabilities")
-            .await
-            .unwrap_or_default();
-        let sink = simple_value(&caps, "output_sink").unwrap_or_else(|| "unknown".into());
-        println!("{status} (sink: {sink})");
+        println!("{status} (tier: {tier}, ep: {ep}, models: {models}, sink: {sink})");
     }
     Ok(())
 }

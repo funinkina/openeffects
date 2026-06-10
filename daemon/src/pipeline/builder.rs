@@ -53,11 +53,11 @@ impl BuiltCapture {
     }
 
     pub fn apply_app_state(&self, app: &AppState) {
-        if let (Some(balance), Some(crop)) = (
+        if let (Some(balance), Some(effects_el)) = (
             self.pipeline.by_name("oe_videobalance"),
-            self.pipeline.by_name("oe_videocrop"),
+            self.pipeline.by_name("oe_effects"),
         ) {
-            effects::apply_app_state_to_elements(&balance, &crop, app);
+            effects::apply_app_state_to_elements(&balance, &effects_el, app);
         }
     }
 }
