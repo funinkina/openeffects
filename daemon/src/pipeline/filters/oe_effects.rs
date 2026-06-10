@@ -60,21 +60,29 @@ mod imp {
     /// off two of every three frames while the subject's silhouette barely
     /// moves frame-to-frame.
     const SEG_INTERVAL: u64 = 3;
-    /// Run YuNet face detection every Nth frame. The deadzone below absorbs
+    /// Run YuNet face detection every Nth frame. The comfort zone below absorbs
     /// detection jitter, so framing tolerates a slower (cheaper) detect cadence.
     const FACE_INTERVAL: u64 = 4;
-    /// Center-stage reframe deadzone: the subject must shift more than this
-    /// fraction of the frame (position) / crop span (zoom) before the framing
-    /// target moves at all, so small head movements don't make the crop drift.
-    const CS_POS_DEADZONE: f32 = 0.04;
-    const CS_ZOOM_DEADZONE: f32 = 0.05;
-    /// Large-move escape hatch: a shift this big reframes immediately, ignoring
-    /// the cooldown, so the subject walking across the frame is tracked promptly.
-    const CS_POS_SNAP: f32 = 0.16;
-    const CS_ZOOM_SNAP: f32 = 0.22;
-    /// Frames to hold the framing target after a reframe before another small
-    /// reframe is allowed (≈0.5 s at 30 fps). Rate-limits twitchy re-centering.
-    const CS_COOLDOWN: u32 = 15;
+    /// Comfort zone (macOS-Center-Stage-style lock): while the subject's ideal
+    /// crop center stays within this fraction of the *committed crop's span*
+    /// from the committed center, the framing is locked — rotating, tilting,
+    /// grinning, leaning, small back-and-forth never move the crop.
+    const CS_COMFORT_POS: f32 = 0.20;
+    /// Zoom side of the comfort zone: locked while `ideal zf / committed zf`
+    /// stays within this ratio band (expression/pose noise lands well inside).
+    const CS_COMFORT_ZOOM_LO: f32 = 0.78;
+    const CS_COMFORT_ZOOM_HI: f32 = 1.30;
+    /// A breach this large (fraction of committed span / zoom ratio) is
+    /// "drastic": the subject stood up, walked across, or the face count
+    /// changed (which jolts the union box). Confirmed on the fast path.
+    const CS_BREACH_POS: f32 = 0.45;
+    const CS_BREACH_ZOOM_LO: f32 = 0.55;
+    const CS_BREACH_ZOOM_HI: f32 = 1.85;
+    /// Consecutive out-of-comfort frames required before reframing: ≈1 s for a
+    /// moderate drift (lean that stays), ≈0.3 s for a drastic one. A move that
+    /// returns to the comfort zone before confirming never reframes at all.
+    const CS_CONFIRM: u32 = 30;
+    const CS_FAST_CONFIRM: u32 = 9;
 
     #[derive(Debug, Clone)]
     struct Settings {
@@ -187,11 +195,13 @@ mod imp {
         engine: Engine,
         /// EMA-smoothed crop actually applied this frame.
         crop: CropState,
-        /// Committed framing target the crop eases toward; only updated when the
-        /// subject moves past the deadzone (see `update_target`).
+        /// Committed framing target the crop eases toward; locked until the
+        /// subject sustains a position outside the comfort zone (see
+        /// `update_target`).
         target: CropState,
-        /// Frames remaining before another small reframe is allowed.
-        cs_cooldown: u32,
+        /// Consecutive frames the subject's ideal crop has been outside the
+        /// committed target's comfort zone.
+        cs_out_frames: u32,
         frame: u64,
         mask: Option<Mask>,
         /// Whether the cached `mask` was segmented from the center-stage ROI
@@ -354,7 +364,7 @@ mod imp {
             // pre-scaled background.
             state.crop = CropState::default();
             state.target = CropState::default();
-            state.cs_cooldown = 0;
+            state.cs_out_frames = 0;
             state.mask = None;
             state.bg = None;
             drop(state);
@@ -512,21 +522,41 @@ mod imp {
         }
     }
 
-    /// Commit a new framing target only when the subject has moved beyond the
-    /// deadzone (ignores small head movements) and the cooldown has elapsed —
-    /// unless the move is large, which reframes immediately. Holds otherwise.
+    /// Lock-and-confirm reframing (the macOS Center Stage feel). The committed
+    /// target is *locked* while the subject's ideal crop stays inside the
+    /// comfort zone around it — natural movement (rotate, tilt, grin, lean,
+    /// small back-and-forth) never reframes, no matter how long it lasts. Only
+    /// a displacement that *stays* outside the comfort zone for the
+    /// confirmation window commits a new target: ≈1 s for a moderate drift,
+    /// ≈0.3 s for a drastic one (stood up, walked across, face count changed).
+    /// A transient excursion that returns in time resets the counter and never
+    /// moves the crop.
     fn update_target(state: &mut State, raw: CropState) {
         let t = state.target;
-        let dcx = (raw.cx - t.cx).abs();
-        let dcy = (raw.cy - t.cy).abs();
-        let dzf = (raw.zf - t.zf).abs();
-        let big = dcx > CS_POS_SNAP || dcy > CS_POS_SNAP || dzf > CS_ZOOM_SNAP;
-        let moved = dcx > CS_POS_DEADZONE || dcy > CS_POS_DEADZONE || dzf > CS_ZOOM_DEADZONE;
-        if big || (moved && state.cs_cooldown == 0) {
+        // Errors are relative to the committed crop's span: what matters
+        // visually is how far the subject wandered within the current framing,
+        // so a zoomed-in crop is proportionally more sensitive.
+        let span = t.zf.max(CS_MIN_CROP);
+        let ex = (raw.cx - t.cx).abs() / span;
+        let ey = (raw.cy - t.cy).abs() / span;
+        let rz = raw.zf / t.zf;
+
+        let comfortable = ex < CS_COMFORT_POS
+            && ey < CS_COMFORT_POS
+            && (CS_COMFORT_ZOOM_LO..CS_COMFORT_ZOOM_HI).contains(&rz);
+        if comfortable {
+            state.cs_out_frames = 0;
+            return;
+        }
+
+        state.cs_out_frames += 1;
+        let drastic = ex > CS_BREACH_POS
+            || ey > CS_BREACH_POS
+            || !(CS_BREACH_ZOOM_LO..=CS_BREACH_ZOOM_HI).contains(&rz);
+        let confirm = if drastic { CS_FAST_CONFIRM } else { CS_CONFIRM };
+        if state.cs_out_frames >= confirm {
             state.target = raw;
-            state.cs_cooldown = CS_COOLDOWN;
-        } else if state.cs_cooldown > 0 {
-            state.cs_cooldown -= 1;
+            state.cs_out_frames = 0;
         }
     }
 
