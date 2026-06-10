@@ -11,7 +11,7 @@ cargo build --workspace --release
 
 # Build a single crate
 cargo build -p openeffectsd
-cargo build -p openeffects-tray
+cargo build -p openeffects
 cargo build -p openeffectsctl
 
 # Run all tests
@@ -33,18 +33,17 @@ cargo clippy --workspace -- -D warnings
 cargo fmt --all -- --check
 ```
 
-The CI workflow (`.github/workflows/ci.yml`) runs `cargo fmt --check` and `cargo test --workspace`. The CI file references older GTK system packages that are **no longer needed** — the tray no longer depends on GTK.
+The CI workflow (`.github/workflows/ci.yml`) runs `cargo fmt --check` and `cargo test --workspace`. Building the `gui` crate requires `gtk4` and `libadwaita` dev packages (pkg-config) in addition to the GStreamer/PipeWire deps below.
 
 ## Architecture
 
 ### Process model
 
-Four binaries communicate exclusively over D-Bus session bus (`org.openeffects.Daemon`, `/org/openeffects/Daemon`):
+Three binaries communicate exclusively over D-Bus session bus (`org.openeffects.Daemon`, `/org/openeffects/Daemon`):
 
 ```
-openeffectsd ──D-Bus──► openeffects-tray   (companion systemd unit, always running)
-             ──D-Bus──► openeffectsctl      (ad-hoc CLI)
-             ──D-Bus──► openeffects         (GUI, on-demand stub for now)
+openeffectsd ──D-Bus──► openeffectsctl      (ad-hoc CLI)
+             ──D-Bus──► openeffects         (GTK4/libadwaita GUI, on-demand)
 ```
 
 The daemon is the only process that touches GStreamer, PipeWire, or cameras. All clients are stateless D-Bus consumers.
@@ -59,7 +58,7 @@ Three interfaces live at the same object path, all defined in `data/dbus/*.xml`:
 | `org.openeffects.Effects1` | Effect toggles and params (`SetEnabled`, `SetParam`, `GetAllState`), `EffectChanged` signal |
 | `org.openeffects.Devices1` | Camera enumeration and selection, `VirtualCameraInfo` property |
 
-String constants for all three are in `shared/src/dbus.rs`. **When you modify a `.xml` file, `build.rs` in `daemon`, `cli`, and `tray` automatically regenerates proxy code into `$OUT_DIR/proxies.rs`** via `zbus_xmlgen`. You do not need to hand-edit generated code.
+String constants for all three are in `shared/src/dbus.rs`. **When you modify a `.xml` file, `build.rs` in `daemon`, `cli`, and `gui` automatically regenerates proxy code into `$OUT_DIR/proxies.rs`** via `zbus_xmlgen`. You do not need to hand-edit generated code.
 
 ### Daemon internals (`daemon/`)
 
@@ -91,13 +90,14 @@ google-chrome-stable --headless=new --use-fake-ui-for-media-stream \
 # scripts/camtest.html: getUserMedia → canvas → console.log luma samples
 ```
 
-### Tray (`tray/`)
+### GUI (`gui/`)
 
-Uses **`ksni`** (pure-Rust StatusNotifierItem) — no GTK, no C dependencies. Works natively with KDE Plasma's SNI protocol and any SNI-capable compositor (waybar, XFCE, etc.).
+`openeffects` is a single **GTK4 + libadwaita** (`gtk4-rs` / `adw` crates) `AdwApplicationWindow`, the primary control surface (Arch + GNOME is the dev target). It is on-demand — launched from the GNOME Activities/app grid via a `.desktop` entry, with no companion systemd unit; the daemon's own lifecycle is unaffected by whether the GUI is open.
 
-- `src/tray_item.rs` — implements `ksni::Tray`; holds `status` + per-effect `enabled` map; `apply_update()` is called from the D-Bus thread via `ksni::Handle::update()`
-- `src/dbus_client.rs` — async tokio loop that subscribes to `EffectChanged` signals and polls `Status` every 5 s; pushes updates to the tray via `handle.update(|t| t.apply_update(...))`
-- Threading: `ksni::TrayService::spawn()` runs the SNI service internally; the `tokio` runtime drives D-Bus; `TrayCommand`s flow from ksni callbacks → tokio channel → D-Bus calls using `blocking_send()`
+- `build.rs` runs the same `zbus_xmlgen` codegen as `daemon`/`cli`, generating proxies into `$OUT_DIR/proxies.rs` from `data/dbus/*.xml`.
+- D-Bus client pattern: a background tokio task owns the `zbus::Connection` and an `mpsc` command channel; `tokio::select!` merges GUI→daemon commands (`SetEnabled`, `SetParam`, `SelectCamera`, `Start`/`Stop`) with `EffectChanged`/`StatusChanged`/Devices1 signal streams, plus an initial `GetAllState()` + `ListCameras()` on connect. Updates are pushed to the GTK main loop via a `glib::MainContext` channel.
+- Layout: `AdwNavigationSplitView` sidebar with Effects, Camera, Backgrounds, Model Library, and About pages. Effects page has one `AdwPreferencesGroup` per `EFFECT_IDS` entry with an `AdwSwitchRow` for enable plus `AdwSpinRow`/`AdwComboRow` for params. Header bar reflects `Daemon1.Status`/`StatusChanged`.
+- Camera page: `Devices1.ListCameras()`/`SelectCamera()` device picker, `VirtualCameraInfo` display, live preview via `gst-plugin-gtk4`'s `gtk4paintablesink` rendering the virtual camera feed into a `gtk::Picture`.
 
 ### Shared library (`shared/`)
 
@@ -108,15 +108,16 @@ Uses **`ksni`** (pure-Rust StatusNotifierItem) — no GTK, no C dependencies. Wo
 
 `AppState` is the single source of truth for persisted config. The daemon loads it on startup; every `SetEnabled` / `SetParam` D-Bus call immediately saves the updated state. Effect IDs are the five strings in `shared::dbus::EFFECT_IDS`: `center_stage`, `portrait_blur`, `bg_replace`, `studio_light`, `reactions`.
 
-## Runtime requirements (Arch Linux / KDE Plasma 6)
+## Runtime requirements (Arch Linux / GNOME)
 
 - A running **PipeWire** session (≥ 1.0) and **WirePlumber** (≥ 0.5). The provide node is published via native libpipewire (the `pipewire` crate), so `libpipewire-0.3` + `libspa-0.2` dev headers (pkg-config) and `clang`/`libclang` (bindgen) are needed at **build** time.
 - `gst-plugin-pipewire` / `gst-plugin-good` for the camera **source** (`pipewiresrc` / `v4l2src`); without a camera the daemon falls back to `videotestsrc`.
 - Output is **PipeWire-only** (`media.class=Video/Source`). Consumer reach is limited to PipeWire-camera-aware apps: Firefox (`media.webrtc.camera.allow-pipewire=true`), flagged Chromium (`--enable-features=WebRtcPipeWireCamera`), OBS. Legacy V4L2-only apps are not supported (no v4l2loopback bridge).
-- The daemon registers `Type=dbus` in its systemd unit so `openeffects-tray.service` (which is `After=openeffectsd.service`) waits for the bus name before starting.
+- The `gui` crate needs `gtk4` and `libadwaita` dev headers (pkg-config) at **build** time.
+- The daemon registers `Type=dbus` in its systemd unit so D-Bus clients (`openeffects`, `openeffectsctl`) can rely on the bus name being available once the unit is active.
 
 ## Notes
 
-- The README.md mentions GTK4/libadwaita for the GUI — this is outdated. The tray uses `ksni` (pure Rust), and the GUI crate is currently a stub. No GTK dependencies exist anywhere in the workspace.
+- The `tray` crate (ksni-based) has been removed from the workspace; `openeffects` (GTK4/libadwaita) is now the primary GUI surface and is being built out from a stub.
 - The `--start` flag on `openeffectsd` auto-starts the pipeline on launch (useful for manual testing without a D-Bus `Start()` call).
 - `openeffectsctl status --short` is the Waybar-compatible one-liner output.

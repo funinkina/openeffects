@@ -1,6 +1,6 @@
 # OpenEffects — Product Requirements Document
 
-> Components: **`openeffectsd`** (daemon) · **`openeffects`** (GUI) · **`openeffectsctl`** (CLI) · **`openeffects-tray`** (tray applet)
+> Components: **`openeffectsd`** (daemon) · **`openeffects`** (GUI) · **`openeffectsctl`** (CLI)
 
 ---
 
@@ -8,11 +8,11 @@
 
 | Field        | Value                                                              |
 | ------------ | ------------------------------------------------------------------ |
-| Version      | 0.4 (implementation-ready)                                         |
+| Version      | 0.5 (implementation-ready)                                         |
 | Status       | Ready for development                                              |
 | Owner        | Aryan                                                              |
-| Last updated | 2026-05-22                                                         |
-| Prev version | 0.3 — design decisions inlined into relevant sections; §20 removed |
+| Last updated | 2026-06-10                                                         |
+| Prev version | 0.4 — Qt6/tray-primary architecture for KDE; superseded by GTK4/libadwaita GUI-primary architecture for Arch+GNOME |
 
 ---
 
@@ -20,13 +20,13 @@
 
 OpenEffects is a Linux-native webcam effects engine that brings macOS-class features — Center Stage, Portrait mode, Studio Light, Background Replacement, and Reactions — to any Linux desktop, transparently, for any consumer of a PipeWire camera node or `/dev/video*` device (Zoom, Chrome, Firefox, Slack, OBS, etc.).
 
-The system is architected as a **headless GPU-accelerated daemon** (`openeffectsd`) that owns the capture → process → publish pipeline, plus three client surfaces: a **tray applet** (`openeffects-tray`) as the primary day-to-day control surface, a **preferences GUI** (`openeffects`) for advanced configuration, and a **CLI** (`openeffectsctl`) for scripting and tiling-WM keybinds.
+The system is architected as a **headless GPU-accelerated daemon** (`openeffectsd`) that owns the capture → process → publish pipeline, plus two client surfaces: a **GTK4/libadwaita GUI** (`openeffects`) as the primary day-to-day control surface for live effect toggles, params, and camera/device settings, and a **CLI** (`openeffectsctl`) for scripting and tiling-WM keybinds.
 
 ML inference is unified behind a single **ONNX Runtime** abstraction with an Execution Provider (EP) priority chain that degrades from vendor-specific accelerators (TensorRT, CUDA, ROCm, OpenVINO) to vendor-neutral GPU (Vulkan) to CPU to heuristic fallbacks, so the app is useful across hardware from an 11th-gen Intel laptop to an RTX 4090. Heavier/higher-quality models are opt-in downloads; a functional base set is bundled.
 
 Wayland is the only supported display protocol. X11 sessions are not a target.
 
-**Development platform:** Primary development is on **Arch Linux** with **KDE Plasma 6**. The project is designed to be straightforward to build and deploy on Arch; it uses standard Arch packages and follows Linux best practices.
+**Development platform:** Primary development is on **Arch Linux** with **GNOME** (GNOME Shell, Wayland). The project is designed to be straightforward to build and deploy on Arch; it uses standard Arch packages and follows Linux best practices.
 
 ---
 
@@ -35,15 +35,15 @@ Wayland is the only supported display protocol. X11 sessions are not a target.
 ### 3.1 Goals
 
 - **G1** — Provide a virtual webcam that any Linux app can consume, with real-time effects applied.
-- **G2** — Integrate naturally on GNOME, KDE, and tiling compositors (Hyprland, Sway, river) without a mandatory GUI window.
+- **G2** — Integrate naturally on GNOME (primary target); remain usable on KDE and tiling compositors (Hyprland, Sway, river) via the GTK4 GUI and CLI without requiring a tray.
 - **G3** — Use the GPU wherever available, via a unified ONNX Runtime inference path that works across NVIDIA, AMD, and Intel.
 - **G4** — Degrade gracefully on systems without GPU acceleration, kernel-modular virtual camera, or recent PipeWire.
-- **G5** — Tray applet is the primary control surface; GUI is advanced configuration only. CLI is first-class for power users.
+- **G5** — `openeffects` (GTK4/libadwaita) is the primary control surface for live effect toggles, params, and camera settings. CLI is first-class for power users.
 - **G6** — Sub-50 ms added end-to-end latency on Tier 1 hardware; sub-100 ms on Tier 2.
 
 ### 3.2 Non-goals (v1.0)
 
-- No profiles or saved presets (current effect state is live; camera on → tray available → adjust inline).
+- No profiles or saved presets (current effect state is live; camera on → `openeffects` GUI available → adjust inline).
 - No per-app auto-switching of effect configurations.
 - No virtual studio / scene compositing (that's OBS's job).
 - No remote or cloud inference.
@@ -57,10 +57,10 @@ Wayland is the only supported display protocol. X11 sessions are not a target.
 
 | Persona                    | DE / setup                  | Primary surface                                              | Notes                                                           |
 | -------------------------- | --------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------- |
-| **Mira** — design lead     | Fedora + GNOME, Intel iGPU  | Tray quick toggles; `openeffects` GUI for advanced settings  | Wants toggle-on-join; fine-tunes blur strength once, leaves it. |
-| **Rohit** — KDE user       | KDE 6 on AMD discrete GPU   | Tray applet in system tray, KWin integration                 | Expects quick toggles without opening a window.                 |
+| **Mira** — design lead     | Arch/Fedora + GNOME, Intel iGPU | `openeffects` GUI: Effects page for quick toggles, Camera page for settings | Wants toggle-on-join; fine-tunes blur strength once, leaves it. |
+| **Rohit** — KDE user       | KDE 6 on AMD discrete GPU   | `openeffects` GUI (GTK4/libadwaita, runs via Adwaita styling) | Secondary target; functional but non-native look on Plasma.    |
 | **Aryan** — tiling WM user | Arch + Hyprland, NVIDIA     | `openeffectsctl` bound to keybinds; waybar module for status | Never opens a GUI window; drives everything from keybinds.      |
-| **Sam** — older laptop     | Ubuntu LTS, no discrete GPU | Tray toggle                                                  | Cares that *something* works; happy with CPU-path blur.         |
+| **Sam** — older laptop     | Ubuntu LTS, no discrete GPU | `openeffects` GUI toggle                                     | Cares that *something* works; happy with CPU-path blur.         |
 
 ---
 
@@ -70,9 +70,9 @@ Wayland is the only supported display protocol. X11 sessions are not a target.
 
 Frames a person centered in the output by detecting their face/body bounding box and applying a smoothed crop+zoom over time.
 
-- **5.1.1** Track up to N=4 faces; user-selectable "primary face follow" vs "group framing" (quick toggle in tray submenu).
+- **5.1.1** Track up to N=4 faces; user-selectable "primary face follow" vs "group framing" (toggle in the `openeffects` GUI's Effects page).
 - **5.1.2** Smoothing avoids visible jitter on micro-movements while reacting within ~400 ms to deliberate motion.
-- **5.1.3** Zoom level user-configurable: `off`, `subtle`, `normal`, `tight` — exposed as tray submenu and GUI slider.
+- **5.1.3** Zoom level user-configurable: `off`, `subtle`, `normal`, `tight` — exposed as a GUI slider (`AdwSpinRow`).
 - **5.1.4** Must preserve the aspect ratio of the consumer's requested format.
 
 ### 5.2 Portrait mode (P0)
@@ -80,7 +80,7 @@ Frames a person centered in the output by detecting their face/body bounding box
 Blurs the background while keeping the subject crisp.
 
 - **5.2.1** Segmentation mask refreshed every frame; feathered edges; temporally stable across frames.
-- **5.2.2** Blur strength exposed as a tray submenu shortcut (`light`, `medium`, `heavy`) and a continuous slider in GUI.
+- **5.2.2** Blur strength exposed as a continuous slider in the GUI, with `light`/`medium`/`heavy` presets.
 - **5.2.3** v1.0 ships Gaussian blur; disc/bokeh kernel is a stretch goal.
 
 ### 5.3 Background replacement (P0)
@@ -88,7 +88,7 @@ Blurs the background while keeping the subject crisp.
 Replaces background with a user asset or solid color.
 
 - **5.3.1** User assets in `~/.local/share/openeffects/backgrounds/`. Ships with 6 built-in defaults (gradients, abstract, neutral).
-- **5.3.2** Background selection exposed in tray submenu (thumbnail grid, max 8 shown).
+- **5.3.2** Background selection exposed in the GUI's Effects page (thumbnail grid, max 8 shown, "Browse…" for more).
 - **5.3.3** Edge refinement (guided filter) on Tier 1/2 hardware.
 
 ### 5.4 Studio Light (P1)
@@ -96,7 +96,7 @@ Replaces background with a user asset or solid color.
 Subtly brightens and separates the subject.
 
 - **5.4.1** Face-region-aware brightness/contrast lift on T1/T2; global tone curve fallback otherwise.
-- **5.4.2** Intensity slider in GUI; tray quick toggle on/off only.
+- **5.4.2** Enable toggle and intensity slider both in the GUI's Effects page.
 
 ### 5.5 Reactions (P1)
 
@@ -104,16 +104,16 @@ Hand-gesture-triggered animated overlays.
 
 - **5.5.1** Built-in gestures: thumbs-up → 👍 burst, peace sign → confetti, heart (two-hand) → hearts, open palm → wave, fist → fireworks.
 - **5.5.2** Debounce: same gesture cannot retrigger within 3 s.
-- **5.5.3** **Off by default.** Explicitly enable via tray toggle or GUI.
+- **5.5.3** **Off by default.** Explicitly enable via the GUI's Effects page.
 
-### 5.6 Quick controls (tray-defined, not a separate feature)
+### 5.6 Live controls (`openeffects` GUI)
 
-The tray applet is the control surface for all real-time adjustments. No profile concept exists — state is live and immediate.
+The `openeffects` GUI is the control surface for all real-time adjustments. No profile concept exists — state is live and immediate.
 
-- **5.6.1** Tray appears as soon as `openeffectsd` is running; does not require a consumer to be active.
-- **5.6.2** Each effect has a top-level toggle (checkbox) and a submenu for its fast parameters.
-- **5.6.3** "Open OpenEffects…" opens the GUI for advanced settings (model selection, background library, calibration).
-- **5.6.4** Indicator icon reflects daemon state: running+active (colored), running+idle (dim), error (warning symbol).
+- **5.6.1** The GUI can be opened at any time, independent of whether `openeffectsd` has an active consumer; it connects to the daemon over D-Bus on launch and reflects current state via `GetAllState()`.
+- **5.6.2** Each effect has a top-level enable switch (`AdwSwitchRow`) and inline rows for its fast parameters.
+- **5.6.3** Model selection, background library management, and calibration live alongside the live toggles in the same window (Camera/Backgrounds/Model Library pages).
+- **5.6.4** The header bar subtitle reflects daemon state: running+active, running+idle, or error (via `Daemon1.Status`/`StatusChanged`).
 
 ---
 
@@ -122,65 +122,39 @@ The tray applet is the control surface for all real-time adjustments. No profile
 ### 6.1 Process model
 
 ```
-  openeffectsd  (systemd --user service)
+  openeffectsd  (systemd --user service, Type=dbus)
   ┌──────────────────────────────────────────────────────────┐
-  │  GStreamer pipeline                                      │
-  │  pipewiresrc/v4l2src → effects-bin → v4l2sink           │
-  │  (output: v4l2loopback /dev/videoN)                     │
+  │  GStreamer capture pipeline → effects-bin                │
+  │  Native PipeWire provide node (pw_stream,                │
+  │  media.class=Video/Source, node.name=openeffects)        │
+  │  On-demand: capture opens when a consumer links          │
   │                                                          │
   │  D-Bus service: org.openeffects.Daemon (session bus)     │
   └──────────────────────────────────────────────────────────┘
-         ▲                  ▲                  ▲
-         │                  │                  │
-  openeffects-tray    openeffects (GUI)   openeffectsctl
-  (systemd --user,    (on-demand,         (ad-hoc / keybinds)
-   companion unit)    launched by tray
-                      or directly)
+         ▲                              ▲
+         │                              │
+  openeffects (GUI)              openeffectsctl
+  (on-demand, launched           (ad-hoc / keybinds)
+   from app grid)
 ```
 
-- `openeffectsd` and `openeffects-tray` are both `--user` systemd units; they start together.
-- `openeffects` (the GUI) is launched on demand from the tray menu or directly. Closing the window does not affect the daemon or tray.
-- All surfaces are stateless D-Bus clients. Killing any one of them does not affect the pipeline.
-- `openeffects-tray` is a **separate binary** from `openeffects` (see §6.2 for rationale).
+- `openeffectsd` is a `--user` systemd unit (`Type=dbus`); it autostarts at login independent of any client.
+- `openeffects` (the GUI) is launched on demand from the GNOME app grid/Activities or directly. Closing the window does not affect the daemon.
+- Both surfaces are stateless D-Bus clients. Killing either does not affect the pipeline.
 
-## 6.2 Tray applet: separate process rationale
+## 6.2 GUI process: connection & lifecycle
 
-The tray applet is implemented as a lightweight Qt 6 process (`openeffects-tray`) separate from the main preferences GUI.
+`openeffects` is a single GTK4 + libadwaita process, connecting to `openeffectsd` over the same D-Bus session-bus interfaces as the CLI.
 
-Qt's native StatusNotifierItem support integrates naturally with KDE Plasma and works reliably under Wayland compositors supporting SNI.
+D-Bus client pattern:
+- `gui/build.rs` runs the same `zbus_xmlgen` codegen as `daemon`/`cli`, generating proxies into `$OUT_DIR/proxies.rs` from `data/dbus/*.xml`.
+- A background tokio task owns the `zbus::Connection` and an `mpsc` command channel, `tokio::select!`ing between: GUI→daemon commands (`SetEnabled`, `SetParam`, `SelectCamera`, `Start`/`Stop`), `EffectChanged`/`StatusChanged`/Devices1 property-change signal streams, and an initial `GetAllState()` + `ListCameras()` on connect.
+- Updates are pushed to the GTK main loop via a `glib::MainContext` channel, where they update `AdwSwitchRow`/`AdwSpinRow`/etc. state.
 
-The tray applet remains intentionally separate from the main GUI process for robustness and low idle overhead.
-
-| Concern                 | Separate process    | Tray inside GUI process                   |
-| ----------------------- | ------------------- | ----------------------------------------- |
-| Tray survives GUI close | Yes                 | Requires hidden-window behavior           |
-| Tray survives GUI crash | Yes                 | No                                        |
-| Memory footprint        | ~15–25 MB           | Higher due to full UI stack always loaded |
-| Auto-start model        | Simple systemd unit | Requires GUI background startup           |
-| Crash isolation         | Strong              | Weak                                      |
-| Startup latency         | Minimal             | GUI initialization required               |
-
-The tray process uses:
-- Qt 6
-- QSystemTrayIcon / StatusNotifierItem
-- D-Bus IPC to `openeffectsd`
-- QMenu-based dynamic menus
-
-`openeffects-tray.service`:
-
-```ini
-[Unit]
-Description=OpenEffects tray applet
-PartOf=openeffectsd.service
-After=openeffectsd.service
-
-[Service]
-ExecStart=%h/.local/bin/openeffects-tray
-Restart=on-failure
-
-[Install]
-WantedBy=graphical-session.target
-```
+Lifecycle:
+- `openeffectsd` keeps its existing `systemd --user` `Type=dbus` autostart; it runs headless regardless of whether the GUI is open.
+- `openeffects` is launched on demand via its `.desktop` entry from GNOME Activities/the app grid. Closing the window does not stop the daemon — the existing on-demand virtual-camera + release-debounce design (see CLAUDE.md) already handles idling when no GUI/consumer is present.
+- No companion systemd unit for the GUI.
 
 ### 6.3 Pipeline data flow
 
@@ -206,16 +180,15 @@ The hot path is designed for **zero CPU copies** of full frames on Tier 1/2 hard
 | Layer                  | Choice                                            | Rationale                                                                                                                                                     |
 | ---------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Language (daemon, CLI) | **Rust**                                          | Memory safety in a long-running media daemon; strong ecosystem for PipeWire, GStreamer, Vulkan, and D-Bus.                                                    |
-| Language (GUI + tray)  | **Qt 6 + QML (C++)**                              | Native KDE integration, mature Wayland support, high-performance GPU-accelerated UI, battle-tested multimedia tooling, excellent Linux desktop compatibility. |
+| Language (GUI)         | **Rust + `gtk4-rs` + `libadwaita`**               | Native GNOME integration, single-language workspace, memory-safe, Wayland-native rendering.                                                                   |
 | Media pipeline         | **GStreamer 1.24+** via `gstreamer-rs`            | Mature; first-class PipeWire, Vulkan, VAAPI, GL integration.                                                                                                  |
 | Camera capture         | **PipeWire** via `pipewiresrc` (or `v4l2src`)     | `pipewiresrc` preferred for shared camera access; `v4l2src` for `/dev/videoN` paths.                                                                         |
-| Virtual camera output  | **v4l2loopback** + `v4l2sink`                     | Reliable; works with every app (Zoom, Chrome, Firefox, OBS, Slack) without PipeWire portal integration.                                                      |
+| Virtual camera output  | **Native PipeWire provide node** via the `pipewire` crate | `pw_stream` `Video/Source` node (`media.class=Video/Source`); on-demand, no kernel module required.                                                  |
 | GPU compute            | **Vulkan** compute shaders + GLSL via `gst-gl`    | Vendor-neutral; `gst-gl` is well-exercised; Vulkan compute for custom kernels.                                                                                |
 | ML inference           | **ONNX Runtime** via `ort` crate                  | Single API; broadest EP coverage.                                                                                                                             |
-| Tray                   | **Qt StatusNotifierItem / QSystemTrayIcon**       | Native KDE integration; SNI support across Plasma, GNOME (extension), XFCE, Hyprland waybar tray.                                                             |
 | IPC                    | **D-Bus (session bus)** via `zbus`                | Universal Linux IPC; works under Flatpak.                                                                                                                     |
 | Config                 | **TOML** via `serde`                              | Human-readable; power users can edit directly.                                                                                                                |
-| Build                  | `cargo` + `cmake` + `meson` + `flatpak-builder`   | Standard Linux tooling.                                                                                                                                       |
+| Build                  | `cargo` + `meson` + `flatpak-builder`             | Single Rust/cargo build for all binaries; `meson`/`flatpak-builder` for packaging only.                                                                       |
 | Display protocol       | **Wayland only**                                  | X11 is deprecated on all major DEs targeted; simplifies GPU context management.                                                                               |
 ---
 
@@ -230,24 +203,22 @@ Rust daemon (openeffectsd)
         ▲
         │ D-Bus
         ▼
-Qt 6 frontend processes
- ├── openeffects
- └── openeffects-tray
+openeffects (GTK4 + libadwaita)
 ```
 
 Rationale:
 
 - GUI crashes cannot affect the media pipeline
-- Qt UI iteration remains independent from the Rust backend
-- Native Linux desktop behavior
+- Single language (Rust) across the whole workspace
+- Native GNOME look and feel via libadwaita; GTK4 renders Wayland-natively
 - Reduced coupling between media/inference code and presentation layer
 
 The GUI layer contains:
 
-- QML UI
+- GTK4/libadwaita widgets (`AdwApplicationWindow`, `AdwViewStack`, preferences rows)
 - View models
-- D-Bus proxy bindings
-- Preview rendering surfaces
+- zbus proxy bindings (D-Bus)
+- Preview rendering surfaces (`gtk4paintablesink`)
 
 The Rust backend remains responsible for:
 
@@ -259,10 +230,9 @@ The Rust backend remains responsible for:
 - Performance management
 
 These changes align the PRD with:
-- KDE-first Linux UX
-- Qt-native Wayland integration
-- lower frontend maintenance burden
-- better tray reliability
+- GNOME-first Linux UX
+- GTK4-native Wayland integration
+- lower frontend maintenance burden (single language, no tray)
 - cleaner multimedia integration
 - stronger long-term Linux desktop compatibility
 
@@ -293,7 +263,7 @@ impl InferenceEngine {
     /// Free GPU/CPU memory when a feature is disabled or daemon idles.
     pub fn unload(&mut self, h: ModelHandle);
 
-    /// Exposed to tray/GUI for the "Running on: CUDA" status badge.
+    /// Exposed to the GUI for the "Running on: CUDA" status badge.
     pub fn capabilities(&self) -> EngineCapabilities;
 }
 ```
@@ -344,7 +314,7 @@ For EPs that share memory with GStreamer's GL/Vulkan context (CUDA via CUcontext
 
 ### 8.5 Inference budget enforcement
 
-Every `infer()` call records wall time. A rolling P95 is maintained per (model, EP). If P95 exceeds the per-feature budget for **30 consecutive frames**, the engine emits a `BudgetExceeded` event; the `FeatureManager` downgrades one tier (§10) and persists the decision to config. The tray icon shows a brief "quality reduced" tooltip.
+Every `infer()` call records wall time. A rolling P95 is maintained per (model, EP). If P95 exceeds the per-feature budget for **30 consecutive frames**, the engine emits a `BudgetExceeded` event; the `FeatureManager` downgrades one tier (§10) and persists the decision to config. The GUI shows a brief "quality reduced" toast.
 
 ---
 
@@ -451,8 +421,8 @@ Detected at startup; re-detected on daemon restart. User can force a lower tier 
 ```
 Is v4l2loopback module present + /dev/videoN writable?
 ├── Yes → PRIMARY PATH. pipewiresrc/v4l2src → effects-bin → v4l2sink → /dev/videoN.
-└── No  → Virtual camera disabled. Surface actionable error in tray
-          icon tooltip and GUI: "Load v4l2loopback to enable virtual camera."
+└── No  → Virtual camera disabled. Surface actionable error in the
+          GUI: "Load v4l2loopback to enable virtual camera."
           openeffectsd stays running; effects can still be previewed
           in the GUI's built-in preview pane.
 ```
@@ -463,7 +433,7 @@ A `FeatureManager` watches a rolling 5-second frame-time window per feature. If 
 
 1. Downgrade feature one tier.
 2. Persist the decision to `~/.cache/openeffects/tier-overrides.toml`.
-3. Show tray tooltip: "Portrait blur quality reduced — GPU budget exceeded."
+3. Show a GUI toast: "Portrait blur quality reduced — GPU budget exceeded."
 
 Tier upgrade only happens on explicit user action (GUI or `openeffectsctl`); the system never silently raises quality on its own.
 
@@ -491,7 +461,7 @@ Service: `org.openeffects.Daemon` on the **session bus**. Object path: `/org/ope
 | `SetEnabled(id: s, on: b)`            | method           | Toggle effect on/off.                                                                           |
 | `SetParam(id: s, key: s, value: v)`   | method           | Set a parameter. E.g. `blur_strength` = `u32(75)`, `background` = `s("/path/to/img.jpg")`.      |
 | `GetParams(id: s)`                    | method → `a{sv}` | Current params for an effect.                                                                   |
-| `GetAllState()`                       | method → `a{sv}` | All effects + params in one call (used by tray on init).                                        |
+| `GetAllState()`                       | method → `a{sv}` | All effects + params in one call (used by the GUI on init).                                     |
 | `EffectChanged(id: s, params: a{sv})` | signal           | Emitted on any change; all clients stay in sync.                                                |
 
 ### 11.3 `org.openeffects.Devices1`
@@ -509,9 +479,9 @@ Service: `org.openeffects.Daemon` on the **session bus**. Object path: `/org/ope
 2. Among equally-ranked candidates, prefer the lowest `/dev/video*` device number.
 3. If no heuristic match is found, fall back to the first camera in the enumeration order.
 
-The selected default is stored in state and surfaced in the tray as `Camera: <name>`. Users can override at any time via `openeffectsctl camera select "<name>"` or the GUI's Camera page; the override is persisted.
+The selected default is stored in state and surfaced in the GUI's Camera page as `Camera: <name>`. Users can override at any time via `openeffectsctl camera select "<name>"` or the GUI's Camera page; the override is persisted.
 
-All four binaries share generated D-Bus proxy types from a single `interface.xml`, ensuring the API stays in sync.
+All three binaries share generated D-Bus proxy types from a single `interface.xml`, ensuring the API stays in sync.
 
 ---
 
@@ -551,103 +521,65 @@ Daemon CPU usage when pipeline is paused: < 1% of one core.
 
 ## 14. UI surfaces
 
-### 14.1 Tray applet (`openeffects-tray`)
+### 14.1 `openeffects` GUI (primary surface)
 
-The tray applet is implemented in Qt 6 and serves as the primary real-time interaction surface.
+The `openeffects` GUI is implemented using:
 
-Features:
-- Native KDE Plasma integration
-- Wayland-native rendering
-- Dynamic menus via QMenu
-- StatusNotifierItem support
-- Zero dependency on GTK or libadwaita
-- Fast startup and low idle memory usage
+- GTK4 (`gtk4-rs`)
+- libadwaita (`adw` crate)
+- zbus D-Bus proxy bindings (see §6.2)
+- `gst-plugin-gtk4`'s `gtk4paintablesink` for preview rendering
 
-Supported environments:
-- KDE Plasma (native)
-- GNOME with AppIndicator extension
-- Hyprland/Sway via waybar tray
-- XFCE and other SNI-capable desktops
-
-Tray behavior:
-- Starts automatically with the daemon
-- Survives GUI crashes/restarts
-- Operates independently from the preferences window
-
-**GNOME without AppIndicator extension:** At startup, the tray probes for an SNI host via D-Bus (`org.kde.StatusNotifierWatcher`). If no host is found, the tray process remains running but invisible. On the next launch of `openeffects` (the GUI), a dismissible banner is shown: *"Tray applet not available — install the AppIndicator extension for quick toggles."* with a direct link to `extensions.gnome.org`. Once the extension is installed, the tray becomes visible on the next login without any manual restart of the daemon.
-
-**Camera portal permission:** `openeffects-tray` requests camera access via `xdg-desktop-portal-camera` at startup. The user grants or denies once via the standard portal dialog; the decision is persisted by the portal. This unifies camera permission under one access model across daemon and tray, and preps for a future live thumbnail in the tray icon without requiring a second permission prompt later.
-
-**Tray menu structure:**
-
-```
-● OpenEffects  [icon: colored=active, dim=idle, ⚠=error]
-───────────────────────────────────────
-☑  Center Stage
-   ↳ Framing: Subtle / Normal / Tight
-   ↳ Mode: Single face / Group
-☑  Portrait Blur
-   ↳ Strength: Light / Medium / Heavy
-□  Background Replace
-   ↳ [thumbnail] None
-   ↳ [thumbnail] Blur only
-   ↳ [thumbnail] Office.jpg
-   ↳ [thumbnail] Abstract Blue
-   ↳ [thumbnail] Gradient Warm
-   ↳ Browse…
-□  Studio Light
-☑  Reactions
-───────────────────────────────────────
-   Camera: Logitech C920 ▸
-   Running on: CUDA (T1 · 1080p60)
-───────────────────────────────────────
-   Open OpenEffects…
-   Quit
-```
-
-Parameters changed via the tray take effect within one frame. State is persisted to `~/.config/openeffects/state.toml` on every change.
-
-## 14.2 Preferences GUI (openeffects)
-
-The preferences GUI is implemented using:
-
-- Qt 6
-- Qt Quick (QML)
-- Qt Multimedia
-- Qt Wayland
-- GPU-accelerated scene rendering
-
-The GUI is launched on-demand from the tray or directly from the application launcher.
+Launched on demand from the GNOME app grid/Activities (`.desktop` entry) or directly; connects to `openeffectsd` over D-Bus on launch and reflects current state via `GetAllState()` (§6.2).
 
 Design goals:
 
-- Native KDE feel
-- Acceptable GNOME appearance
--  Smooth GPU-accelerated animations
--  Low latency preview rendering
--  Responsive controls
--  Consistent Wayland behavior
+- Native GNOME (libadwaita) look and feel
+- Functional on KDE and other GTK4-capable desktops via Adwaita styling
+- Low-latency preview rendering
+- Responsive controls
+- Consistent Wayland behavior
 
 Main window layout:
 
-- Sidebar navigation
-- Central configuration panel
-- Live preview pane
+- `AdwNavigationSplitView`: sidebar navigation + content pages
+- Live preview pane on the Camera page
 
 Pages:
 
 - Effects
-- Model Library
 - Camera
 - Backgrounds
-- System
+- Model Library
 - About
 
-The live preview pane consumes the virtual camera node at reduced resolution (240p default) to minimize additional GPU load.
+**Effects page** (the primary day-to-day surface — every effect's enable switch and fast parameters live here):
 
-Qt Multimedia + GStreamer integration is used for preview rendering.
+```
+┌─ openeffects ──────────────────────────────────┐
+│ ≡  Effects   Camera   Backgrounds   ⋯           │
+├──────────────────────────────────────────────────┤
+│ Center Stage                              ⏻ on  │
+│    Framing: Subtle ▾    Mode: Single face ▾     │
+│ Portrait Blur                             ⏻ on  │
+│    Strength  ──────●──── 75%                    │
+│ Background Replace                        ⏻ off │
+│    [thumbnails: None · Blur · Office · …  Browse…]│
+│ Studio Light                              ⏻ off │
+│    Intensity ──●─────── 30%                     │
+│ Reactions                                 ⏻ on  │
+├──────────────────────────────────────────────────┤
+│ Camera: Logitech C920          Running on: CUDA │
+└──────────────────────────────────────────────────┘
+```
 
-## 14.3 CLI (openeffectsctl)
+**Camera portal permission:** `openeffects` requests access to the virtual camera's PipeWire node via `xdg-desktop-portal-camera` at startup, for its live preview pane on the Camera page. The user grants or denies once via the standard portal dialog; the decision is persisted by the portal.
+
+The live preview pane consumes the virtual camera node at reduced resolution (240p default) to minimize additional GPU load, rendered via `gst-plugin-gtk4`'s `gtk4paintablesink` into a `gtk::Picture`.
+
+Effect changes take effect within one frame. State is persisted to `~/.config/openeffects/state.toml` on every change.
+
+### 14.2 CLI (openeffectsctl)
 
 The CLI remains fully Rust-based and communicates exclusively through D-Bus.
 
@@ -686,16 +618,16 @@ Waybar module example (in `~/.config/waybar/config`):
 }
 ```
 
-## 14.4 DE integration points
+### 14.3 DE integration points
 
 | DE              | Integration in v1.0                                                                 |
 | --------------- | ----------------------------------------------------------------------------------- |
-| KDE Plasma      | Native Qt integration; StatusNotifierItem works out of the box.                     |
-| GNOME           | Tray support via AppIndicator extension; GUI remains fully functional without tray. |
-| Hyprland / Sway | Tray supported through waybar tray module; CLI-first workflows fully supported.     |
-| XFCE            | Standard SNI/AppIndicator integration.                                              |
+| GNOME           | Native target. `openeffects` launches from Activities/app grid; daemon autostarts via systemd regardless of GUI state. |
+| KDE Plasma      | `openeffects` runs via GTK4/Adwaita styling (Breeze icon theme honored); fully functional, non-native look. |
+| Hyprland / Sway | No DE integration needed; GUI launches as a normal Wayland toplevel; CLI for keybinds. |
+| XFCE            | GTK4/libadwaita runs natively (GTK-based DE).                                       |
 
-Qt 6 provides consistent Wayland-native behavior across all supported environments.
+GTK4 provides consistent Wayland-native behavior across all supported environments.
 ---
 
 ## 15. Distribution and packaging
@@ -717,16 +649,12 @@ Opt-in models ship in a separate `openeffects-models-extra` package (RPM/DEB) so
 ### Phase 0 — Foundations (weeks 1–2)
 
 **Scope:**
-- Cargo workspace: crates `daemon`, `cli`, `tray`, `gui`, `shared`.
+- Cargo workspace: crates `daemon`, `cli`, `gui`, `shared`.
 - CI: GitHub Actions; Fedora + Ubuntu + Arch containers; `cargo test`, `cargo clippy`, formatting.
-- D-Bus interface XML committed; `zbus` proxy codegen in build.
+- D-Bus interface XML committed; `zbus` proxy codegen in build for `daemon`, `cli`, and `gui`.
 - Empty daemon: registers `org.openeffects.Daemon` on session bus, responds to `Status()`.
 - State persistence: read/write `~/.config/openeffects/state.toml`.
-- Workspace structure:
-  - Rust crates: `daemon`, `cli`, `shared`
-  - Qt frontend projects: `gui`, `tray`
-- Qt 6 build integration via CMake
-- D-Bus interface XML committed; proxy generation shared between Rust and Qt layers
+- Single Rust/cargo workspace build — no separate Qt/CMake build step.
 
 **Exit criteria:** `openeffectsctl status` returns `stopped` against a manually launched daemon.
 
@@ -739,15 +667,15 @@ Opt-in models ship in a separate `openeffects-models-extra` package (RPM/DEB) so
 - Fallback: detect missing PipeWire virtual node; switch to `v4l2sink` via v4l2loopback.
 - GPU effects scaffolding (currently identity).
 - Basic non-ML effects: brightness/contrast, manual rectangular crop.
-- **Tray applet is the core deliverable of this phase.** Simple icon + menu with toggles for the basic effects, tested and working on **Arch Linux + KDE Plasma 6**. Uses Qt 6 StatusNotifierItem / QSystemTrayIcon integration
-- Systemd user service units for both daemon and tray.
+- **GUI MVP is the core deliverable of this phase.** A GTK4/libadwaita `AdwApplicationWindow` listing the five effects with `AdwSwitchRow` toggles, tested and working on **Arch Linux + GNOME**. Toggling a row round-trips `SetEnabled` → `EffectChanged`.
+- Systemd user service unit for the daemon (`Type=dbus` autostart).
 - CLI: `enable`, `disable`, `set`, `status`.
 - Daemon auto-pause when no virtual camera consumer for > 30 s.
 
 **Exit criteria:**
 - Build on Arch Linux with `cargo build --release` and `meson install`.
 - Virtual camera visible in `wpctl status` (PipeWire) and/or `v4l2-ctl --list-devices` (loopback).
-- Tray applet appears in KDE Plasma system tray; effects toggle on/off via menu with live feedback.
+- `openeffects` GUI opens, lists the five effects, and toggling a switch enables/disables the effect with live feedback (round-trip `SetEnabled`/`EffectChanged`).
 - Open virtual camera in Chrome `getUserMedia` demo, Firefox, OBS, Zoom — frames appear.
 - Adjust brightness live via CLI.
 - Daemon restarts gracefully via systemd.
@@ -755,8 +683,8 @@ Opt-in models ship in a separate `openeffects-models-extra` package (RPM/DEB) so
 **Testing:**
 - Unit: config (de)serialization, D-Bus method dispatch with mocked pipeline.
 - Pipeline: `videotestsrc → identity → fakesink`; byte-identical frames.
-- System: virtual camera enumerated and readable in Chrome, Firefox, OBS, Zoom, `cheese` on Arch + KDE Plasma.
-- System: **tray applet is visible in KDE Plasma system tray and clickable; menu responds to clicks**.
+- System: virtual camera enumerated and readable in Chrome, Firefox, OBS, Zoom, `cheese` on Arch + GNOME.
+- System: **`openeffects` GUI opens on Arch + GNOME, the effect list renders, and switches respond to clicks with `SetEnabled`/`EffectChanged` round-trip**.
 - Fallback: disable PipeWire virtual node support via env var; confirm v4l2loopback path activates.
 - Performance: pass-through latency < 20 ms; idle CPU < 1%.
 
@@ -772,8 +700,8 @@ Opt-in models ship in a separate `openeffects-models-extra` package (RPM/DEB) so
 - Background replacement effect: mask → composite over user image or solid color.
 - Automatic tier detection (T1–T4).
 - Auto-degradation watchdog.
-- Tray: blur toggle + strength submenu; background submenu + "Browse…".
-- GUI: Effects page with sliders; System page with EP/tier readout.
+- GUI: Effects page gains blur-strength slider and background picker.
+- GUI: Effects page with sliders; About page with EP/tier readout.
 - Model Library page with bundled models listed (no download UI yet).
 
 **Exit criteria:** On NVIDIA laptop: portrait blur at 1080p30 stable within frame budget on CUDA EP. On no-GPU laptop: INT8 CPU path at 720p30. Killing CUDA mid-session cleanly falls back to CPU within 2 s with no crash or pipeline restart visible to consumer.
@@ -797,7 +725,7 @@ Opt-in models ship in a separate `openeffects-models-extra` package (RPM/DEB) so
 - Center Stage effect: smoothed crop+zoom shader; aspect ratio preservation.
 - Studio Light: face mesh landmarks → region tone mapping on T1/T2; global tone curve on T3/T4.
 - ROCm and OpenVINO EPs validated and added to CI matrix.
-- Tray: center stage toggle + zoom submenu; studio light toggle.
+- GUI: Effects page gains Center Stage zoom control and Studio Light toggle.
 
 **Exit criteria:** Center Stage tracks a deliberate subject move within 400 ms on T2 hardware; jitter < 1.5 px stddev for a stationary subject. Enabled simultaneously with portrait blur within frame budget.
 
@@ -810,25 +738,25 @@ Opt-in models ship in a separate `openeffects-models-extra` package (RPM/DEB) so
 
 ---
 
-### Phase 4 — Reactions, opt-in models, full tray (weeks 17–22)
+### Phase 4 — Reactions, opt-in models, full GUI (weeks 17–22)
 
 **Scope:**
 - MediaPipe Hands model integrated; gesture classifier MLP head.
 - Overlay/sprite compositor system.
 - Opt-in model download: GUI "Model Library" download button, SHA256 verification, progress feedback.
-- Reaction tray toggle; debounce logic.
-- Complete tray menu (all effects + camera selection + "Running on" status line).
+- Reaction toggle (GUI Effects page); debounce logic.
+- GUI: Camera page with camera selection; About page shows "Running on" status line; full effect set on Effects page.
 - GUI: full preferences app including Background library manager, Model Library with download.
-- `openeffects-tray` systemd service unit and companion configuration.
+- `.desktop` launcher entry and icon for `openeffects`.
 
-**Exit criteria:** End-to-end: open tray, enable reactions, trigger thumbs-up gesture → burst overlay appears in Zoom video call. Download RVM from Model Library → portrait blur quality visibly improves.
+**Exit criteria:** End-to-end: open `openeffects`, enable reactions, trigger thumbs-up gesture → burst overlay appears in Zoom video call. Download RVM from Model Library → portrait blur quality visibly improves.
 
 **Testing:**
 - Unit: gesture debounce — same gesture within 3 s does not retrigger.
 - Quality: gesture classifier accuracy ≥ 95% on held-out test set; false positive rate < 1 per 10 min on "negative" footage (normal webcam, no intended gestures).
 - Integration: model download aborted halfway → partial file cleaned up; no broken model state.
 - Integration: SHA256 mismatch post-download → model rejected, error surfaced in GUI.
-- Tray: switching camera mid-session via tray menu completes within 2 s with no consumer app visible glitch.
+- GUI: switching camera mid-session via the Camera page completes within 2 s with no consumer app visible glitch.
 - GUI: window open < 500 ms; preview pane shows processed frames within 1 s.
 
 ---
@@ -844,7 +772,7 @@ Opt-in models ship in a separate `openeffects-models-extra` package (RPM/DEB) so
 - Localization scaffolding (gettext).
 - Public beta release.
 
-**Exit criteria:** Install via Flatpak on a clean Fedora 42 and Ubuntu 24.04 VM; no manual steps; all bundled-model effects work; opt-in model download completes; tray appears; GUI opens. All cells marked P in §17.3 pass.
+**Exit criteria:** Install via Flatpak on a clean Fedora 42 and Ubuntu 24.04 VM; no manual steps; all bundled-model effects work; opt-in model download completes; GUI opens. All cells marked P in §17.3 pass.
 
 ---
 
@@ -883,9 +811,9 @@ CI fails on any of the following regressions vs the previous release tag (10% th
 
 |                         | Fedora 42+ | Ubuntu 24.04+ | Arch (rolling) | Ubuntu 22.04 |
 | ----------------------- | ---------- | ------------- | -------------- | ------------ |
-| GNOME + NVIDIA discrete | P          | P             | S              | S            |
-| GNOME + Intel iGPU      | P          | P             | S              | S            |
-| KDE 6 + AMD discrete    | P          | P             | S              | T            |
+| GNOME + NVIDIA discrete | P          | P             | P              | S            |
+| GNOME + Intel iGPU      | P          | P             | P              | S            |
+| KDE 6 + AMD discrete    | S          | S             | S              | T            |
 | Hyprland + NVIDIA       | S          | S             | P              | T            |
 | Sway + Intel iGPU       | S          | P             | P              | T            |
 | XFCE + no GPU           | T          | T             | T              | T            |
@@ -925,21 +853,21 @@ Run at the end of each phase that changes the virtual camera or pipeline:
 
 ### 18.3 DE integration points
 
-| DE              | Integration in v1.0                                                                                                                           |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| GNOME           | XDG autostart `.desktop` for tray; GNOME AppIndicator extension required for tray visibility (surfaced as an in-app tip if extension absent). |
-| KDE Plasma      | SNI tray works natively; no additional integration needed.                                                                                    |
-| Hyprland / Sway | No DE integration; tray via `waybar` `tray` module; CLI for keybinds.                                                                         |
-| XFCE            | Generic AppIndicator tray.                                                                                                                    |
+| DE              | Integration in v1.0                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| GNOME           | Native target. `openeffects` launches from Activities/app grid; daemon autostarts via systemd regardless of GUI state. |
+| KDE Plasma      | `openeffects` runs via GTK4/Adwaita styling (Breeze icon theme honored); fully functional, non-native look.            |
+| Hyprland / Sway | No DE integration needed; GUI launches as a normal Wayland toplevel; CLI for keybinds.                                  |
+| XFCE            | GTK4/libadwaita runs natively (GTK-based DE).                                                                           |
 
-Post-v1 targets: GNOME Quick Settings tile; KDE Plasmoid.
+Post-v1 target: GNOME Shell Quick Settings extension for live effect toggles (complements the GTK4 app).
 
 ## 18.4 Wayland considerations
 
-- Qt 6 renders natively on Wayland.
+- GTK4 renders natively on Wayland (default GDK Wayland backend).
 - No XWayland dependency.
 - Vulkan/OpenGL rendering paths operate directly through Wayland-native surfaces.
-- GUI preview rendering uses Qt Multimedia + GStreamer integration.
+- `gst-plugin-gtk4`'s `gtk4paintablesink` renders the virtual camera feed into a `gtk::Picture`/`gtk::Paintable`.
 - No `DISPLAY` environment variable assumptions anywhere in the stack.
 - PipeWire integration is fully Wayland-native.
 ---
@@ -952,8 +880,8 @@ Post-v1 targets: GNOME Quick Settings tile; KDE Plasmoid.
 | ORT Vulkan EP immature → gaps in vendor-neutral GPU coverage                | High       | Medium | Vulkan EP marked experimental; CPU+XNNPACK is the universal floor.             |
 | Apps (especially Electron-based) cache device list and miss the virtual cam | Medium     | Medium | Recommend daemon auto-start at session login; documented workaround.           |
 | Flatpak sandbox prevents v4l2loopback                                       | Confirmed  | Medium | Flatpak variant is PipeWire-only; documented clearly.                          |
-| NVIDIA driver/CUDA version mismatch causes silent inference error           | Medium     | High   | Probe with test model at startup; expose EP status in tray tooltip.            |
-| GNOME tray support requires AppIndicator extension                          | High       | Medium | Detect missing SNI host at startup; surface guidance in GUI and documentation. |
+| NVIDIA driver/CUDA version mismatch causes silent inference error           | Medium     | High   | Probe with test model at startup; expose EP status in the GUI's About page.    |
+| GTK4/libadwaita looks non-native on KDE/other DEs                           | Low        | Low    | Document as known limitation.                                                  |
 | Opt-in model download from CDN blocked (corporate firewalls)                | Low        | Low    | Document manual install path; models are plain ONNX files.                     |
 | Battery drain from always-on daemon                                         | Medium     | Medium | Auto-pause pipeline when no consumer; unload models after 5 min idle.          |
 
@@ -971,9 +899,8 @@ Post-v1 targets: GNOME Quick Settings tile; KDE Plasmoid.
 | **DMA-BUF**         | Linux kernel mechanism for sharing GPU buffers between processes without CPU copy.     |
 | **PipeWire portal** | The `xdg-desktop-portal` Camera interface; used by sandboxed apps for camera access.   |
 | **v4l2loopback**    | Kernel module creating virtual `/dev/video*` devices fed from userspace.               |
-| **SNI**             | StatusNotifierItem — the D-Bus protocol used by tray applets on modern Linux desktops. |
 | **Tier 1–4**        | Hardware capability classes defined in §10.1.                                          |
 
 ---
 
-*End of document — OpenEffects PRD v0.4*
+*End of document — OpenEffects PRD v0.5*

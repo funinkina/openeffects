@@ -13,7 +13,7 @@ jobs:
       - name: Install system packages
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgtk-3-dev libayatana-appindicator3-dev dbus
+          sudo apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev dbus
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Test

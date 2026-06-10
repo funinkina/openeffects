@@ -15,9 +15,8 @@ OpenEffects is a Linux-native, GPU-accelerated webcam effects engine. It brings 
 OpenEffects is designed to be lightweight and modular, avoiding the need for an always-open GUI window:
 
 - **`openeffectsd` (Daemon):** Headless, GPU-accelerated GStreamer pipeline that handles capture, ML inference, compositing, and publishing via PipeWire or v4l2loopback.
-- **`openeffects-tray` (Tray Applet):** The primary control surface. Sits in your system tray for quick effect toggles and adjustments.
+- **`openeffects` (GUI):** A GTK4/libadwaita app and primary control surface — live effect toggles and adjustments, camera settings, opt-in model downloads, and background asset management.
 - **`openeffectsctl` (CLI):** First-class command-line interface for styling WMs (Hyprland, Sway), scripting, and keybinds.
-- **`openeffects` (GUI):** A GTK4/libadwaita preferences window for advanced device configuration, downloading opt-in models, and managing background assets.
 
 ## Hardware & ML Support
 
@@ -53,13 +52,11 @@ add-apt-repository ppa:<user>/openeffects
 apt install openeffects
 ```
 
-*Note: GNOME users may need the AppIndicator extension for the tray applet to be visible.*
-
 ## Usage
 
-Start the daemon and try applet (usually handled automatically by systemd user services):
+Start the daemon (usually handled automatically by the systemd user service):
 ```bash
-systemctl --user start openeffectsd openeffects-tray
+systemctl --user start openeffectsd
 ```
 
 ### CLI Examples
@@ -90,7 +87,7 @@ Use with Waybar:
 
 ## Development Platform
 
-- **Language:** Rust (Daemon, CLI, Tray, GUI)
+- **Language:** Rust (Daemon, CLI, GUI)
 - **UI:** GTK4 + libadwaita-rs
 - **Media Pipeline:** GStreamer 1.24+ + PipeWire 
 - **Display Protocol:** Wayland only (X11 is not supported)
