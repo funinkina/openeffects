@@ -78,8 +78,7 @@ pub fn build_window(
         .build();
 
     let header = adw::HeaderBar::builder().title_widget(&switcher).build();
-    // header.pack_start(&gtk::Label::new(Some("OpenEffects")));
-    header.pack_end(&menu_button);
+    header.pack_start(&menu_button);
 
     // Connection-trouble banner, sits just under the header.
     let banner = adw::Banner::builder().revealed(false).build();

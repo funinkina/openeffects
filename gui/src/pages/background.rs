@@ -17,9 +17,9 @@ use gtk::gdk::RGBA;
 use gtk::gio;
 use shared::dbus::{value_as_bool, value_as_string, value_as_u32, VariantMap};
 
-use crate::constants::{BG_BLUR, BG_MODES, BG_PRESETS, BG_REPLACE, BLUR_LEVELS};
+use crate::constants::{BG_BLUR, BG_MODES, BG_MODE_ICONS, BG_PRESETS, BG_REPLACE, BLUR_LEVELS};
 use crate::dbus_client::{CmdTx, GuiCommand};
-use crate::widgets::{pref_group, toggle_group, ToggleCtl};
+use crate::widgets::{pref_group, toggle_group, toggle_group_stacked, ToggleCtl};
 
 const CUSTOM_SWATCH_CLASS: &str = "oe-custom-swatch";
 
@@ -53,7 +53,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     let mode = {
         let cmd_tx = cmd_tx.clone();
         let applying = applying.clone();
-        toggle_group(BG_MODES, move |value| {
+        toggle_group_stacked(BG_MODES, BG_MODE_ICONS, move |value| {
             if applying.get() {
                 return;
             }

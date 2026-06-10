@@ -24,6 +24,9 @@ pub const BG_BLUR: &str = "blur";
 pub const BG_REPLACE: &str = "replace";
 pub const BG_MODES: &[(&str, &str)] = &[(BG_BLUR, "Blur"), (BG_REPLACE, "Replace")];
 
+/// Symbolic icons for [`BG_MODES`], same order.
+pub const BG_MODE_ICONS: &[&str] = &["view-conceal-symbolic", "image-x-generic-symbolic"];
+
 /// Blur strength buckets: toggle name (the stored `portrait_blur.strength`
 /// value as a string) and display label.
 pub const BLUR_LEVELS: &[(&str, &str)] = &[("33", "Low"), ("66", "Medium"), ("100", "High")];
