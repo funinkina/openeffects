@@ -1,9 +1,9 @@
-//! One module per sidebar page. Each `build()` returns an
-//! `adw::PreferencesPage` ready to be added to the content stack, registering
-//! its rows in the shared `Switches`/`Params` maps as it goes.
+//! One module per view-stack page. Each `build()` returns an
+//! `adw::PreferencesPage` ready to be added to the content stack. Effect pages
+//! also return a widget bundle the state-sync layer keeps in sync with the
+//! daemon.
 
-pub mod camera;
+pub mod background;
 pub mod center_stage;
-pub mod portrait_blur;
 pub mod reactions;
 pub mod studio_light;

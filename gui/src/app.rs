@@ -3,7 +3,7 @@
 //! the header (wide) and an `AdwViewSwitcherBar` at the bottom (narrow,
 //! revealed by a breakpoint). The primary menu (Preferences / About) lives on
 //! the right of the header bar; daemon connection trouble surfaces in an
-//! `AdwBanner`.
+//! `AdwBanner`. Camera selection lives in the Preferences dialog.
 
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -19,8 +19,7 @@ use shared::dbus::{
 use crate::about;
 use crate::constants::NAV_PAGES;
 use crate::dbus_client::{CameraInfo, CmdTx, UiUpdate};
-use crate::pages::camera::CameraWidgets;
-use crate::pages::{camera, center_stage, portrait_blur, reactions, studio_light};
+use crate::pages::{background, center_stage, reactions, studio_light};
 use crate::preferences;
 use crate::widgets::{ParamWidget, Params, SpinParam, Switches};
 
@@ -28,8 +27,8 @@ struct Widgets {
     banner: adw::Banner,
     switches: Switches,
     params: Params,
-    camera: CameraWidgets,
-    bg_current: adw::ActionRow,
+    center_stage: center_stage::Widgets,
+    background: background::Widgets,
     prefs: preferences::Widgets,
 }
 
@@ -44,18 +43,16 @@ pub fn build_window(
     let mut switches = HashMap::new();
     let mut params = HashMap::new();
 
-    let cs_page = center_stage::build(&cmd_tx, &mut switches, &mut params);
-    let (pb_page, bg_current) = portrait_blur::build(&cmd_tx, &mut switches, &mut params);
+    let (cs_page, cs_widgets) = center_stage::build(&cmd_tx);
+    let (bg_page, bg_widgets) = background::build(&cmd_tx);
     let sl_page = studio_light::build(&cmd_tx, &mut switches, &mut params);
     let rx_page = reactions::build(&cmd_tx, &mut switches);
-    let (cam_page, camera_widgets) = camera::build(&cmd_tx);
 
-    let page_widgets: [&gtk::Widget; 5] = [
+    let page_widgets: [&gtk::Widget; 4] = [
         cs_page.upcast_ref(),
-        pb_page.upcast_ref(),
+        bg_page.upcast_ref(),
         sl_page.upcast_ref(),
         rx_page.upcast_ref(),
-        cam_page.upcast_ref(),
     ];
     for ((name, title, icon), widget) in NAV_PAGES.iter().zip(page_widgets) {
         stack.add_titled_with_icon(widget, Some(name), title, icon);
@@ -69,8 +66,8 @@ pub fn build_window(
 
     let switcher_bar = adw::ViewSwitcherBar::builder().stack(&stack).build();
 
-    // ── Preferences dialog (engine info + model library) ─────────────────────
-    let (prefs_dialog, prefs_widgets) = preferences::build();
+    // ── Preferences dialog (camera, engine info, model library) ──────────────
+    let (prefs_dialog, prefs_widgets) = preferences::build(&cmd_tx);
 
     // ── Primary menu (Preferences / About), right side of the header ─────────
     let menu = gio::Menu::new();
@@ -130,8 +127,8 @@ pub fn build_window(
         banner,
         switches,
         params,
-        camera: camera_widgets,
-        bg_current,
+        center_stage: cs_widgets,
+        background: bg_widgets,
         prefs: prefs_widgets,
     });
 
@@ -151,28 +148,26 @@ fn apply_update(w: &Widgets, update: UiUpdate) {
         UiUpdate::AllState(state) => {
             for id in EFFECT_IDS {
                 let params = extract_effect_params(&state, id);
-                apply_enabled(w, id, &params);
-                apply_params(w, id, &params);
-                if id == "bg_replace" {
-                    if let Some(bg) = params.get("background").and_then(value_as_string) {
-                        w.bg_current.set_subtitle(&portrait_blur::bg_label(&bg));
-                    }
-                }
+                apply_effect(w, id, &params);
             }
         }
-        UiUpdate::EffectChanged { id, params } => {
-            apply_enabled(w, &id, &params);
-            apply_params(w, &id, &params);
-            if id == "bg_replace" {
-                if let Some(bg) = params.get("background").and_then(value_as_string) {
-                    w.bg_current.set_subtitle(&portrait_blur::bg_label(&bg));
-                }
-            }
-        }
+        UiUpdate::EffectChanged { id, params } => apply_effect(w, &id, &params),
         UiUpdate::Status(status) => apply_status_banner(w, &status),
         UiUpdate::Capabilities(caps) => apply_capabilities(w, &caps),
         UiUpdate::Cameras { cameras, active } => apply_cameras(w, &cameras, &active),
         UiUpdate::Disconnected => apply_status_banner(w, "disconnected"),
+    }
+}
+
+/// Route an effect's params to whichever page owns it.
+fn apply_effect(w: &Widgets, id: &str, params: &VariantMap) {
+    match id {
+        "center_stage" => w.center_stage.apply(params),
+        "portrait_blur" | "bg_replace" => w.background.apply(id, params),
+        _ => {
+            apply_enabled(w, id, params);
+            apply_params(w, id, params);
+        }
     }
 }
 
@@ -214,7 +209,7 @@ fn apply_capabilities(w: &Widgets, caps: &VariantMap) {
 
     w.prefs.tier.set_subtitle(&tier.to_uppercase());
     w.prefs.ep.set_subtitle(&ep.to_uppercase());
-    w.camera.virtual_cam_row.set_subtitle(&vcam);
+    w.prefs.virtual_cam_row.set_subtitle(&vcam);
 
     let pill_text = if ready { "Ready" } else { "Missing" };
     for row in w.prefs.model_rows.values() {
@@ -232,13 +227,13 @@ fn apply_cameras(w: &Widgets, cameras: &[CameraInfo], active: &str) {
         cameras.iter().map(|c| c.name.as_str()).collect()
     };
     let model = gtk::StringList::new(&labels);
-    *w.camera.ids.borrow_mut() = cameras.iter().map(|c| c.id.clone()).collect();
+    *w.prefs.camera_ids.borrow_mut() = cameras.iter().map(|c| c.id.clone()).collect();
 
     let active_idx = cameras.iter().position(|c| c.id == active).unwrap_or(0) as u32;
-    w.camera.combo.block_signal(&w.camera.handler);
-    w.camera.combo.set_model(Some(&model));
-    w.camera.combo.set_selected(active_idx);
-    w.camera.combo.unblock_signal(&w.camera.handler);
+    w.prefs.camera_combo.block_signal(&w.prefs.camera_handler);
+    w.prefs.camera_combo.set_model(Some(&model));
+    w.prefs.camera_combo.set_selected(active_idx);
+    w.prefs.camera_combo.unblock_signal(&w.prefs.camera_handler);
 }
 
 /// `GetAllState()` returns keys prefixed with `"{effect_id}."`; strip the prefix
@@ -274,15 +269,6 @@ fn apply_params(w: &Widgets, id: &str, params: &VariantMap) {
             continue;
         };
         match widget {
-            ParamWidget::Combo(combo) => {
-                if let Some(s) = value_as_string(value) {
-                    if let Some(idx) = combo.options.iter().position(|(v, _)| *v == s) {
-                        combo.row.block_signal(&combo.handler);
-                        combo.row.set_selected(idx as u32);
-                        combo.row.unblock_signal(&combo.handler);
-                    }
-                }
-            }
             ParamWidget::Spin(SpinParam::U32 { row, handler }) => {
                 if let Some(v) = value_as_u32(value) {
                     row.block_signal(handler);

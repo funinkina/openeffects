@@ -1,17 +1,33 @@
-//! Static lookup tables shared across pages: app id, dropdown option lists,
-//! built-in presets, and the sidebar page descriptors.
+//! Static lookup tables shared across pages: app id, toggle-group option
+//! lists, built-in presets, and the view-stack page descriptors.
 
 pub const APP_ID: &str = "org.openeffects.OpenEffects";
 
-/// (stored value, display label)
-pub const ZOOM_LEVELS: &[(&str, &str)] = &[
-    ("off", "Off"),
+/// Center Stage framing levels (stored value, display label). "Off" is the
+/// page's master switch, so it is not a framing choice here.
+pub const FRAMING_LEVELS: &[(&str, &str)] = &[
     ("subtle", "Subtle"),
     ("normal", "Normal"),
     ("tight", "Tight"),
 ];
 
+/// Center Stage tracking mode (stored value, display label).
 pub const FRAMING_MODES: &[(&str, &str)] = &[("single", "Single Face"), ("group", "Group Framing")];
+
+/// Symbolic icons for [`FRAMING_MODES`], same order.
+pub const FRAMING_MODE_ICONS: &[&str] = &["avatar-default-symbolic", "system-users-symbolic"];
+
+/// Background page modes (stored value, display label). These are virtual:
+/// they map onto the `portrait_blur` / `bg_replace` enable flags.
+pub const BG_OFF: &str = "off";
+pub const BG_BLUR: &str = "blur";
+pub const BG_REPLACE: &str = "replace";
+pub const BG_MODES: &[(&str, &str)] =
+    &[(BG_OFF, "Off"), (BG_BLUR, "Blur"), (BG_REPLACE, "Replace")];
+
+/// Blur strength buckets: toggle name (the stored `portrait_blur.strength`
+/// value as a string) and display label.
+pub const BLUR_LEVELS: &[(&str, &str)] = &[("33", "Low"), ("66", "Medium"), ("100", "High")];
 
 /// Built-in solid-color backgrounds (label, `#RRGGBB`).
 pub const BG_PRESETS: &[(&str, &str)] = &[
@@ -37,12 +53,11 @@ pub const BUNDLED_MODELS: &[(&str, &str, &str)] = &[
 /// (stack child name, title, symbolic icon name).
 pub const NAV_PAGES: &[(&str, &str, &str)] = &[
     ("center_stage", "Center Stage", "zoom-fit-best-symbolic"),
-    ("portrait_blur", "Portrait Blur", "view-conceal-symbolic"),
+    ("background", "Background", "view-conceal-symbolic"),
     (
         "studio_light",
         "Studio Light",
         "display-brightness-symbolic",
     ),
     ("reactions", "Reactions", "face-smile-symbolic"),
-    ("camera", "Camera", "camera-web-symbolic"),
 ];

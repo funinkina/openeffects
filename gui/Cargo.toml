@@ -1,5 +1,5 @@
 [package]
-name    = "openeffects"
+name = "openeffects"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,21 +10,21 @@ name = "openeffects"
 path = "src/main.rs"
 
 [dependencies]
-shared  = { path = "../shared" }
-anyhow.workspace            = true
-tracing.workspace            = true
+shared = { path = "../shared" }
+anyhow.workspace = true
+tracing.workspace = true
 tracing-subscriber.workspace = true
 tokio.workspace = true
-zbus.workspace     = true
+zbus.workspace = true
 zvariant.workspace = true
 futures-util.workspace = true
 
 async-channel = "2"
 
-gtk = { package = "gtk4", version = "0.11", features = ["v4_10"] }
-adw = { package = "libadwaita", version = "0.9", features = ["v1_6"] }
+gtk = { package = "gtk4", version = "0.11", features = ["v4_12"] }
+adw = { package = "libadwaita", version = "0.9", features = ["v1_7"] }
 
 [build-dependencies]
-zbus        = { version = "5", features = ["tokio"] }
+zbus = { version = "5", features = ["tokio"] }
 zbus_xmlgen = "5"
-zbus_xml    = "5"
+zbus_xml = "5"
