@@ -67,14 +67,29 @@ String constants for all three are in `shared/src/dbus.rs`. **When you modify a 
 - `src/state.rs` — `DaemonState` holds `AppState` (config) + runtime fields; `DaemonStatus` enum guards valid state transitions
 - `src/dbus_server.rs` — implements all three D-Bus interfaces; state mutations go through `Arc<RwLock<DaemonState>>`; pipeline commands go through `mpsc::Sender<PipelineCommand>`
 - `src/pipeline/` — the virtual camera is a **two-stream + userspace bridge** design (see the "On-Demand PipeWire Virtual Camera" model). The provide side is a **native libpipewire** node; the capture side is GStreamer (elements are not `Send`, so they stay on the worker thread):
-  - `provider.rs` — native `pw_stream` `Video/Source` node (`media.class=Video/Source`, `node.name=openeffects`), runs its own `pw_main_loop` on a dedicated thread. **The on-demand hinge**: its `state_changed` callback maps `STREAMING → CaptureCmd::Start` (open camera, LED on) and `PAUSED`/`UNCONNECTED` → `CaptureCmd::Stop` (tear capture, LED off). `process()` serves the latest frame from the bridge (black placeholder until the first frame); `param_changed` answers the `Buffers` param after format negotiation.
+  - `provider.rs` — native `pw_stream` `Video/Source` node (`media.class=Video/Source`, `node.name=openeffects`), runs its own `pw_main_loop` on a dedicated thread. **The on-demand hinge**: its `state_changed` callback maps `STREAMING → CaptureCmd::Start` (open camera, LED on) and `PAUSED`/`UNCONNECTED` → `CaptureCmd::Stop` (tear capture, LED off). `process()` serves the latest frame from the bridge (black placeholder until the first frame) and stamps the `SPA_META_Header` meta; `param_changed` answers the `Buffers` **and** `Meta(Header)` params after format negotiation.
   - `bridge.rs` — `Bridge`: a `Mutex<Option<Vec<u8>>>` latest-frame slot, `Arc`-shared between the appsink writer and the provider reader. Newest frame overwrites the previous; `clear()` on capture stop so no stale frame is served on reconnect.
   - `builder.rs` — builds the capture pipeline only: `source → decodebin → videoconvert → videoscale → capsfilter(I420 1280x720@30) → effects_bin → appsink`, where the appsink callback writes each processed frame into the bridge. Source falls back to `videotestsrc` if no camera is available.
   - `probe.rs` — now just holds `PIPEWIRE_NODE_NAME` (`"openeffects"`); there is no GStreamer output sink to probe anymore.
   - `effects.rs` — the effects bin: `queue → videobalance(oe_videobalance) → videocrop(oe_videocrop) → videoconvert → videoscale`. Phase 1 only; ML effects come in Phase 2.
   - Fixed format `I420 1280x720@30` (`WIDTH`/`HEIGHT`/`FPS`/`STRIDE`/`FRAME_SIZE` consts in `mod.rs`) is shared by the appsink and the provide node so frames are byte-compatible without per-frame conversion.
 
-On-demand lifecycle: `Start` arms the provide node (advertised, `PAUSED`, real camera untouched → status `Idle`). When a consumer links, `STREAMING` opens the capture pipeline (status `Running`). When the consumer leaves, the capture pipeline is torn to `NULL` **immediately** (disconnect strategy), releasing the real camera. There is no auto-pause polling — gating is event-driven from the native node's `state_changed`.
+On-demand lifecycle: `Start` arms the provide node (advertised, `PAUSED`, real camera untouched → status `Idle`). When a consumer links, `STREAMING` opens the capture pipeline (status `Running`). When the consumer leaves, the capture pipeline is torn to `NULL`, releasing the real camera. There is no auto-pause polling — gating is event-driven from the native node's `state_changed`.
+
+Four details make this work with real consumers:
+- **Driving**: a virtual camera has no hardware clock and camera consumers expect the *source* to drive the graph, so the provide node connects with `StreamFlags::DRIVER` and a loop timer calls `trigger_process()` at `FPS` (only while `is_driving()`, i.e. a consumer is streaming). Without this the graph never cycles and consumers see a black "no active stream". Requires the `pipewire` crate's `v0_3_34` feature.
+- **Sync scheduling** (`StreamFlags::RT_PROCESS`): without it the stream processes on its pw_main_loop and PipeWire ≥ 1.2 marks the node `node.async = true`. An async *driver* flips connecting consumers to async scheduling, which WebRTC consumers don't survive — Chromium's video-capture service dies in a connect/crash/retry loop and the page sees a black 2×2 track. `RT_PROCESS` keeps processing on the data loop, synchronous, like a real v4l2 camera node.
+- **Header meta** (`SPA_META_Header`): browsers' `video_capture_pipewire.cc` requests this meta and dereferences it **without a null check** (`h->flags`). The meta region is only allocated when the producer announces it too, so `param_changed` must answer with a `Meta(Header)` param alongside `Buffers`, and `process()` fills pts/seq. Omitting it segfaults the browser's capture process on the first frame.
+- **Release debounce** (`CAPTURE_RELEASE_GRACE`, 5 s in `mod.rs`): consumers reached via xdg-desktop-portal (browsers) probe the node with rapid connect/disconnect blips and retry if the first frames are the warmup placeholder. Releasing on every `PAUSED` would thrash the camera (open ≈250 ms) and never deliver a stable stream, so release is deferred by the grace window and cancelled if a consumer reconnects.
+
+Headless verification of the full browser path (auto-grants camera, picks the OpenEffects device, samples pixel luma — mean ≈ 0 means black, varying ≈ 110+ means live video):
+
+```bash
+google-chrome-stable --headless=new --use-fake-ui-for-media-stream \
+  --enable-features=WebRtcPipeWireCamera --enable-logging=stderr \
+  "file://$PWD/scripts/camtest.html" 2>&1 | grep CONSOLE
+# scripts/camtest.html: getUserMedia → canvas → console.log luma samples
+```
 
 ### Tray (`tray/`)
 

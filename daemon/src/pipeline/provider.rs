@@ -37,6 +37,8 @@ struct UserData {
     capture_tx: StdSender<CaptureCmd>,
     events: mpsc::Sender<PipelineEvent>,
     bridge: Arc<Bridge>,
+    /// Monotonic frame counter for the buffer header meta (`seq`/`pts`).
+    frame_count: u64,
 }
 
 /// Run the provide node until a unit message is received on `quit_rx`.
@@ -78,6 +80,7 @@ fn run_inner(
         capture_tx,
         events,
         bridge,
+        frame_count: 0,
     };
 
     let stream = pw::stream::StreamRc::new(
@@ -128,47 +131,77 @@ fn run_inner(
         .param_changed(|stream, _ud, id, param| {
             // When the format is fixated, answer with our buffer requirements so
             // the consumer/server allocates buffers big enough for one I420 frame.
+            //
+            // The Meta(Header) param is not optional: WebRTC consumers (Chromium,
+            // Firefox) request SPA_META_Header and then dereference it without a
+            // null check (video_capture_pipewire.cc, `h->flags`). The meta region
+            // is only allocated when *both* ports announce it, so omitting it
+            // here segfaults the browser's video-capture process on the first
+            // delivered frame.
             if param.is_none() || id != pw::spa::param::ParamType::Format.as_raw() {
                 return;
             }
             let buffers = build_buffers_pod();
-            let Some(pod) = Pod::from_bytes(&buffers) else {
+            let meta_header = build_meta_header_pod();
+            let (Some(buffers_pod), Some(meta_pod)) =
+                (Pod::from_bytes(&buffers), Pod::from_bytes(&meta_header))
+            else {
                 return;
             };
-            let mut params = [pod];
+            let mut params = [buffers_pod, meta_pod];
             if let Err(err) = stream.update_params(&mut params) {
-                warn!(%err, "update_params(Buffers) failed");
+                warn!(%err, "update_params(Buffers, Meta) failed");
             }
         })
         .process(|stream, ud| {
             let Some(mut buffer) = stream.dequeue_buffer() else {
                 return;
             };
-            let datas = buffer.datas_mut();
-            if datas.is_empty() {
-                return;
-            }
-            let data = &mut datas[0];
-
-            let written = if let Some(slice) = data.data() {
-                match ud.bridge.copy_latest(slice) {
-                    Some(n) => n,
-                    None => {
-                        // No processed frame yet -> emit black so a freshly
-                        // connected consumer sees a valid signal immediately.
-                        let n = FRAME_SIZE.min(slice.len());
-                        fill_black_i420(&mut slice[..n]);
-                        n
-                    }
+            {
+                let datas = buffer.datas_mut();
+                if datas.is_empty() {
+                    return;
                 }
-            } else {
-                0
-            };
+                let data = &mut datas[0];
 
-            let chunk = data.chunk_mut();
-            *chunk.offset_mut() = 0;
-            *chunk.stride_mut() = STRIDE as i32;
-            *chunk.size_mut() = written as u32;
+                let written = if let Some(slice) = data.data() {
+                    match ud.bridge.copy_latest(slice) {
+                        Some(n) => n,
+                        None => {
+                            // No processed frame yet -> emit black so a freshly
+                            // connected consumer sees a valid signal immediately.
+                            let n = FRAME_SIZE.min(slice.len());
+                            fill_black_i420(&mut slice[..n]);
+                            n
+                        }
+                    }
+                } else {
+                    0
+                };
+
+                let chunk = data.chunk_mut();
+                *chunk.offset_mut() = 0;
+                *chunk.stride_mut() = STRIDE as i32;
+                *chunk.size_mut() = written as u32;
+            }
+
+            // Stamp the header meta consumers negotiated (see param_changed).
+            // pipewire-rs only exposes metas read-only, but the meta region
+            // lives in the buffer's shared memory which the producer owns
+            // during this cycle, so writing through the pointer is sound.
+            if let Some(header) = buffer.find_meta::<spa::buffer::meta::MetaHeader>() {
+                let frame_duration_ns = 1_000_000_000u64 / FPS as u64;
+                let h = header as *const spa::buffer::meta::MetaHeader
+                    as *mut pw::spa::sys::spa_meta_header;
+                unsafe {
+                    (*h).flags = 0;
+                    (*h).offset = 0;
+                    (*h).pts = (ud.frame_count * frame_duration_ns) as i64;
+                    (*h).dts_offset = 0;
+                    (*h).seq = ud.frame_count;
+                }
+                ud.frame_count += 1;
+            }
         })
         .register()?;
 
@@ -184,10 +217,20 @@ fn run_inner(
     // drive the graph — so we clock our own output cadence (see the timer below).
     // Without this the graph never cycles, process() never fires, and consumers
     // see a black "no active stream".
+    //
+    // RT_PROCESS is required, not an optimisation: without it the stream
+    // processes on the main loop and PipeWire (>= 1.2) schedules the node
+    // *asynchronously* (`node.async = true`). An async driver flips connecting
+    // consumers to async scheduling too, which crashes Chromium's video-capture
+    // service in a connect/crash/retry loop and leaves browsers on a black
+    // frame. Synchronous data-loop processing keeps consumers on the normal
+    // sync path, like a real v4l2 camera node.
     stream.connect(
         spa::utils::Direction::Output,
         None,
-        pw::stream::StreamFlags::DRIVER | pw::stream::StreamFlags::MAP_BUFFERS,
+        pw::stream::StreamFlags::DRIVER
+            | pw::stream::StreamFlags::MAP_BUFFERS
+            | pw::stream::StreamFlags::RT_PROCESS,
         &mut params,
     )?;
 
@@ -300,6 +343,34 @@ fn build_buffers_pod() -> Vec<u8> {
                         flags: vec![mem_ptr],
                     },
                 ))),
+            ),
+        ],
+    };
+    pw::spa::pod::serialize::PodSerializer::serialize(Cursor::new(Vec::new()), &Value::Object(obj))
+        .unwrap()
+        .0
+        .into_inner()
+}
+
+/// Announce support for the buffer header meta (`SPA_META_Header`). WebRTC
+/// consumers request it and crash if the negotiated buffers don't carry it; the
+/// region is only allocated when the producer side lists it too.
+fn build_meta_header_pod() -> Vec<u8> {
+    use pw::spa::pod::{Object, Property, Value};
+    use pw::spa::sys;
+    use pw::spa::utils::Id;
+
+    let obj = Object {
+        type_: sys::SPA_TYPE_OBJECT_ParamMeta,
+        id: sys::SPA_PARAM_Meta,
+        properties: vec![
+            Property::new(
+                sys::SPA_PARAM_META_type,
+                Value::Id(Id(sys::SPA_META_Header)),
+            ),
+            Property::new(
+                sys::SPA_PARAM_META_size,
+                Value::Int(std::mem::size_of::<sys::spa_meta_header>() as i32),
             ),
         ],
     };

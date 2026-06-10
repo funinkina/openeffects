@@ -7,7 +7,7 @@ pub mod provider;
 
 use std::sync::mpsc as std_mpsc;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use pipewire as pw;
 use shared::config::AppState;
@@ -28,6 +28,15 @@ pub const FPS: i32 = 30;
 pub const STRIDE: u32 = WIDTH;
 /// I420 frame size = W*H (Y) + 2 * (W/2 * H/2) (U,V) = W*H*3/2.
 pub const FRAME_SIZE: usize = (WIDTH as usize * HEIGHT as usize * 3) / 2;
+
+/// Grace period before releasing the real camera once the provide node leaves
+/// STREAMING. Consumers that go through xdg-desktop-portal (browsers) probe the
+/// node with rapid connect/disconnect blips and retry if the first frames are
+/// the warmup placeholder; tearing the capture pipeline on every blip would
+/// thrash the camera (open takes ~250 ms) and never deliver a stable stream.
+/// Holding briefly keeps the camera warm across blips while still releasing it
+/// promptly — and the LED off — when the consumer is really gone.
+const CAPTURE_RELEASE_GRACE: Duration = Duration::from_millis(5000);
 
 #[derive(Debug)]
 pub enum PipelineCommand {
@@ -102,6 +111,9 @@ fn worker_loop(
     let mut capture: Option<builder::BuiltCapture> = None;
     // Whether a consumer is currently pulling (provide node STREAMING).
     let mut consumer_streaming = false;
+    // When set, the capture pipeline is released once this instant passes and no
+    // consumer has reconnected (debounce against portal probe/retry blips).
+    let mut stop_deadline: Option<Instant> = None;
 
     loop {
         match commands.try_recv() {
@@ -112,6 +124,7 @@ fn worker_loop(
                     c.stop();
                 }
                 bridge.clear();
+                stop_deadline = None;
 
                 // Arm the provide node if not already advertised. The node sits
                 // in PAUSED with the real camera untouched until a consumer links.
@@ -136,6 +149,7 @@ fn worker_loop(
                 }
                 bridge.clear();
                 consumer_streaming = false;
+                stop_deadline = None;
                 if let Some(p) = provider.take() {
                     p.stop();
                 }
@@ -174,6 +188,9 @@ fn worker_loop(
         match capture_rx.try_recv() {
             Ok(CaptureCmd::Start) => {
                 consumer_streaming = true;
+                // A consumer is back -> cancel any pending release and ensure the
+                // camera is running (it may still be warm from a recent blip).
+                stop_deadline = None;
                 if capture.is_none() {
                     if let Some(app) = stored_app.clone() {
                         start_capture(&app, &bridge, &events, &mut capture);
@@ -182,6 +199,19 @@ fn worker_loop(
             }
             Ok(CaptureCmd::Stop) => {
                 consumer_streaming = false;
+                // Debounce: don't release the camera yet — a portal probe/retry
+                // may reconnect within the grace window. Arm a deadline instead.
+                if capture.is_some() && stop_deadline.is_none() {
+                    stop_deadline = Some(Instant::now() + CAPTURE_RELEASE_GRACE);
+                }
+            }
+            Err(std_mpsc::TryRecvError::Empty) => {}
+            Err(std_mpsc::TryRecvError::Disconnected) => {}
+        }
+
+        // Release the camera once the grace window elapses with no consumer.
+        if let Some(deadline) = stop_deadline {
+            if !consumer_streaming && Instant::now() >= deadline {
                 if let Some(c) = capture.take() {
                     c.stop();
                     bridge.clear();
@@ -189,8 +219,9 @@ fn worker_loop(
                     let _ = events.blocking_send(PipelineEvent::Idle);
                 }
             }
-            Err(std_mpsc::TryRecvError::Empty) => {}
-            Err(std_mpsc::TryRecvError::Disconnected) => {}
+            if consumer_streaming || Instant::now() >= deadline {
+                stop_deadline = None;
+            }
         }
 
         std::thread::sleep(Duration::from_millis(50));

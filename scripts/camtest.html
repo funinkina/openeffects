@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<body>
+<video id="v" autoplay playsinline></video>
+<canvas id="c" width="1280" height="720"></canvas>
+<script>
+async function main() {
+  try {
+    // Prime permissions so enumerateDevices returns labels.
+    const tmp = await navigator.mediaDevices.getUserMedia({ video: true });
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    console.log("DEVICES: " + devs.filter(d => d.kind === "videoinput").map(d => d.label).join(" | "));
+    tmp.getTracks().forEach(t => t.stop());
+
+    const oe = devs.find(d => d.kind === "videoinput" && /openeffects/i.test(d.label));
+    if (!oe) { console.log("RESULT: openeffects device NOT FOUND"); return; }
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { deviceId: { exact: oe.deviceId } }
+    });
+    const v = document.getElementById("v");
+    v.srcObject = stream;
+    await v.play();
+    console.log("PLAYING: " + v.videoWidth + "x" + v.videoHeight + " label=" + stream.getVideoTracks()[0].label);
+
+    const c = document.getElementById("c");
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    let n = 0;
+    const iv = setInterval(() => {
+      n++;
+      ctx.drawImage(v, 0, 0, c.width, c.height);
+      const px = ctx.getImageData(0, 0, c.width, c.height).data;
+      let sum = 0, min = 255, max = 0;
+      for (let i = 0; i < px.length; i += 400) {
+        const l = (px[i] + px[i + 1] + px[i + 2]) / 3;
+        sum += l; if (l < min) min = l; if (l > max) max = l;
+      }
+      const mean = (sum / (px.length / 400)).toFixed(1);
+      console.log(`SAMPLE ${n}: mean=${mean} min=${min.toFixed(0)} max=${max.toFixed(0)} time=${v.currentTime.toFixed(2)}`);
+      if (n >= 14) { clearInterval(iv); console.log("DONE"); }
+    }, 1000);
+  } catch (e) {
+    console.log("ERROR: " + e.name + " " + e.message);
+  }
+}
+main();
+</script>
+</body>
+</html>
