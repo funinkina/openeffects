@@ -14,7 +14,7 @@ OpenEffects is a Linux-native, GPU-accelerated webcam effects engine. It brings 
 
 OpenEffects is designed to be lightweight and modular, avoiding the need for an always-open GUI window:
 
-- **`openeffectsd` (Daemon):** Headless, GPU-accelerated GStreamer pipeline that handles capture, ML inference, compositing, and publishing via PipeWire or v4l2loopback.
+- **`openeffectsd` (Daemon):** Headless, GPU-accelerated GStreamer pipeline that handles capture, ML inference, compositing, and publishing via PipeWire.
 - **`openeffects` (GUI):** A GTK4/libadwaita app and primary control surface — live effect toggles and adjustments, camera settings, opt-in model downloads, and background asset management.
 - **`openeffectsctl` (CLI):** First-class command-line interface for styling WMs (Hyprland, Sway), scripting, and keybinds.
 

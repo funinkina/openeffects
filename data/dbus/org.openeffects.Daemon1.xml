@@ -7,9 +7,11 @@
     <method name="Start"/>
     <method name="Stop"/>
 
-    <!-- "running" | "idle" | "error" | "stopped" -->
+    <!-- "running" | "idle" | "error" | "stopped". Changes are announced via the
+         StatusChanged signal below, not org.freedesktop.DBus.Properties.PropertiesChanged
+         (avoids a receive_status_changed naming collision in generated proxies). -->
     <property name="Status" type="s" access="read">
-      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="true"/>
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
     </property>
 
     <!-- tier, ep, pipewire_version, virtual_cam_path -->

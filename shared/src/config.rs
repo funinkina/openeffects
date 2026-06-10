@@ -43,6 +43,8 @@ pub struct CenterStageState {
     pub zoom: String,
     /// "single" | "group"
     pub mode: String,
+    #[serde(default = "phase1_default_crop")]
+    pub crop: CropConfig,
 }
 impl Default for CenterStageState {
     fn default() -> Self {
@@ -50,6 +52,7 @@ impl Default for CenterStageState {
             enabled: false,
             zoom: "normal".into(),
             mode: "single".into(),
+            crop: phase1_default_crop(),
         }
     }
 }
@@ -123,6 +126,15 @@ pub struct CropConfig {
     pub right: u32,
 }
 
+fn phase1_default_crop() -> CropConfig {
+    CropConfig {
+        top: 12,
+        bottom: 12,
+        left: 12,
+        right: 12,
+    }
+}
+
 // ── I/O helpers ───────────────────────────────────────────────────────────────
 
 impl AppState {
@@ -181,6 +193,7 @@ mod tests {
 enabled = true
 zoom = "tight"
 mode = "group"
+crop = { top = 12, bottom = 12, left = 12, right = 12 }
 
 [effects.portrait_blur]
 enabled = false
@@ -211,6 +224,7 @@ tier_override = ""
         let state: AppState = toml::from_str(SAMPLE_TOML).expect("parse failed");
         assert!(state.effects.center_stage.enabled);
         assert_eq!(state.effects.center_stage.zoom, "tight");
+        assert_eq!(state.effects.center_stage.crop.left, 12);
         assert_eq!(state.effects.portrait_blur.strength, 75);
 
         let serialized = toml::to_string_pretty(&state).expect("serialize failed");
@@ -228,6 +242,7 @@ tier_override = ""
         assert!(!state.effects.reactions.enabled);
         assert_eq!(state.effects.portrait_blur.strength, 50);
         assert_eq!(state.effects.center_stage.zoom, "normal");
+        assert_eq!(state.effects.center_stage.crop.top, 12);
     }
 
     #[test]

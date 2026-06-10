@@ -6,12 +6,12 @@
 
 ## 1. Document control
 
-| Field        | Value                                                              |
-| ------------ | ------------------------------------------------------------------ |
-| Version      | 0.5 (implementation-ready)                                         |
-| Status       | Ready for development                                              |
-| Owner        | Aryan                                                              |
-| Last updated | 2026-06-10                                                         |
+| Field        | Value                                                                                                              |
+| ------------ | ------------------------------------------------------------------------------------------------------------------ |
+| Version      | 0.5 (implementation-ready)                                                                                         |
+| Status       | Ready for development                                                                                              |
+| Owner        | Aryan                                                                                                              |
+| Last updated | 2026-06-10                                                                                                         |
 | Prev version | 0.4 — Qt6/tray-primary architecture for KDE; superseded by GTK4/libadwaita GUI-primary architecture for Arch+GNOME |
 
 ---
@@ -55,12 +55,12 @@ Wayland is the only supported display protocol. X11 sessions are not a target.
 
 ## 4. Target users and personas
 
-| Persona                    | DE / setup                  | Primary surface                                              | Notes                                                           |
-| -------------------------- | --------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------- |
+| Persona                    | DE / setup                      | Primary surface                                                             | Notes                                                           |
+| -------------------------- | ------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------- |
 | **Mira** — design lead     | Arch/Fedora + GNOME, Intel iGPU | `openeffects` GUI: Effects page for quick toggles, Camera page for settings | Wants toggle-on-join; fine-tunes blur strength once, leaves it. |
-| **Rohit** — KDE user       | KDE 6 on AMD discrete GPU   | `openeffects` GUI (GTK4/libadwaita, runs via Adwaita styling) | Secondary target; functional but non-native look on Plasma.    |
-| **Aryan** — tiling WM user | Arch + Hyprland, NVIDIA     | `openeffectsctl` bound to keybinds; waybar module for status | Never opens a GUI window; drives everything from keybinds.      |
-| **Sam** — older laptop     | Ubuntu LTS, no discrete GPU | `openeffects` GUI toggle                                     | Cares that *something* works; happy with CPU-path blur.         |
+| **Rohit** — KDE user       | KDE 6 on AMD discrete GPU       | `openeffects` GUI (GTK4/libadwaita, runs via Adwaita styling)               | Secondary target; functional but non-native look on Plasma.     |
+| **Aryan** — tiling WM user | Arch + Hyprland, NVIDIA         | `openeffectsctl` bound to keybinds; waybar module for status                | Never opens a GUI window; drives everything from keybinds.      |
+| **Sam** — older laptop     | Ubuntu LTS, no discrete GPU     | `openeffects` GUI toggle                                                    | Cares that *something* works; happy with CPU-path blur.         |
 
 ---
 
@@ -177,19 +177,19 @@ The hot path is designed for **zero CPU copies** of full frames on Tier 1/2 hard
 
 ---
 
-| Layer                  | Choice                                            | Rationale                                                                                                                                                     |
-| ---------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Language (daemon, CLI) | **Rust**                                          | Memory safety in a long-running media daemon; strong ecosystem for PipeWire, GStreamer, Vulkan, and D-Bus.                                                    |
-| Language (GUI)         | **Rust + `gtk4-rs` + `libadwaita`**               | Native GNOME integration, single-language workspace, memory-safe, Wayland-native rendering.                                                                   |
-| Media pipeline         | **GStreamer 1.24+** via `gstreamer-rs`            | Mature; first-class PipeWire, Vulkan, VAAPI, GL integration.                                                                                                  |
-| Camera capture         | **PipeWire** via `pipewiresrc` (or `v4l2src`)     | `pipewiresrc` preferred for shared camera access; `v4l2src` for `/dev/videoN` paths.                                                                         |
-| Virtual camera output  | **Native PipeWire provide node** via the `pipewire` crate | `pw_stream` `Video/Source` node (`media.class=Video/Source`); on-demand, no kernel module required.                                                  |
-| GPU compute            | **Vulkan** compute shaders + GLSL via `gst-gl`    | Vendor-neutral; `gst-gl` is well-exercised; Vulkan compute for custom kernels.                                                                                |
-| ML inference           | **ONNX Runtime** via `ort` crate                  | Single API; broadest EP coverage.                                                                                                                             |
-| IPC                    | **D-Bus (session bus)** via `zbus`                | Universal Linux IPC; works under Flatpak.                                                                                                                     |
-| Config                 | **TOML** via `serde`                              | Human-readable; power users can edit directly.                                                                                                                |
-| Build                  | `cargo` + `meson` + `flatpak-builder`             | Single Rust/cargo build for all binaries; `meson`/`flatpak-builder` for packaging only.                                                                       |
-| Display protocol       | **Wayland only**                                  | X11 is deprecated on all major DEs targeted; simplifies GPU context management.                                                                               |
+| Layer                  | Choice                                                    | Rationale                                                                                                  |
+| ---------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Language (daemon, CLI) | **Rust**                                                  | Memory safety in a long-running media daemon; strong ecosystem for PipeWire, GStreamer, Vulkan, and D-Bus. |
+| Language (GUI)         | **Rust + `gtk4-rs` + `libadwaita`**                       | Native GNOME integration, single-language workspace, memory-safe, Wayland-native rendering.                |
+| Media pipeline         | **GStreamer 1.24+** via `gstreamer-rs`                    | Mature; first-class PipeWire, Vulkan, VAAPI, GL integration.                                               |
+| Camera capture         | **PipeWire** via `pipewiresrc` (or `v4l2src`)             | `pipewiresrc` preferred for shared camera access; `v4l2src` for `/dev/videoN` paths.                       |
+| Virtual camera output  | **Native PipeWire provide node** via the `pipewire` crate | `pw_stream` `Video/Source` node (`media.class=Video/Source`); on-demand, no kernel module required.        |
+| GPU compute            | **Vulkan** compute shaders + GLSL via `gst-gl`            | Vendor-neutral; `gst-gl` is well-exercised; Vulkan compute for custom kernels.                             |
+| ML inference           | **ONNX Runtime** via `ort` crate                          | Single API; broadest EP coverage.                                                                          |
+| IPC                    | **D-Bus (session bus)** via `zbus`                        | Universal Linux IPC; works under Flatpak.                                                                  |
+| Config                 | **TOML** via `serde`                                      | Human-readable; power users can edit directly.                                                             |
+| Build                  | `cargo` + `meson` + `flatpak-builder`                     | Single Rust/cargo build for all binaries; `meson`/`flatpak-builder` for packaging only.                    |
+| Display protocol       | **Wayland only**                                          | X11 is deprecated on all major DEs targeted; simplifies GPU context management.                            |
 ---
 
 ## 7.1 Frontend architecture
@@ -620,12 +620,12 @@ Waybar module example (in `~/.config/waybar/config`):
 
 ### 14.3 DE integration points
 
-| DE              | Integration in v1.0                                                                 |
-| --------------- | ----------------------------------------------------------------------------------- |
+| DE              | Integration in v1.0                                                                                                    |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | GNOME           | Native target. `openeffects` launches from Activities/app grid; daemon autostarts via systemd regardless of GUI state. |
-| KDE Plasma      | `openeffects` runs via GTK4/Adwaita styling (Breeze icon theme honored); fully functional, non-native look. |
-| Hyprland / Sway | No DE integration needed; GUI launches as a normal Wayland toplevel; CLI for keybinds. |
-| XFCE            | GTK4/libadwaita runs natively (GTK-based DE).                                       |
+| KDE Plasma      | `openeffects` runs via GTK4/Adwaita styling (Breeze icon theme honored); fully functional, non-native look.            |
+| Hyprland / Sway | No DE integration needed; GUI launches as a normal Wayland toplevel; CLI for keybinds.                                 |
+| XFCE            | GTK4/libadwaita runs natively (GTK-based DE).                                                                          |
 
 GTK4 provides consistent Wayland-native behavior across all supported environments.
 ---
@@ -664,7 +664,6 @@ Opt-in models ship in a separate `openeffects-models-extra` package (RPM/DEB) so
 
 **Scope:**
 - GStreamer pass-through pipeline: `pipewiresrc → identity → pipewiresink` (virtual node).
-- Fallback: detect missing PipeWire virtual node; switch to `v4l2sink` via v4l2loopback.
 - GPU effects scaffolding (currently identity).
 - Basic non-ML effects: brightness/contrast, manual rectangular crop.
 - **GUI MVP is the core deliverable of this phase.** A GTK4/libadwaita `AdwApplicationWindow` listing the five effects with `AdwSwitchRow` toggles, tested and working on **Arch Linux + GNOME**. Toggling a row round-trips `SetEnabled` → `EffectChanged`.
@@ -853,12 +852,12 @@ Run at the end of each phase that changes the virtual camera or pipeline:
 
 ### 18.3 DE integration points
 
-| DE              | Integration in v1.0                                                                                                     |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| DE              | Integration in v1.0                                                                                                    |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | GNOME           | Native target. `openeffects` launches from Activities/app grid; daemon autostarts via systemd regardless of GUI state. |
 | KDE Plasma      | `openeffects` runs via GTK4/Adwaita styling (Breeze icon theme honored); fully functional, non-native look.            |
-| Hyprland / Sway | No DE integration needed; GUI launches as a normal Wayland toplevel; CLI for keybinds.                                  |
-| XFCE            | GTK4/libadwaita runs natively (GTK-based DE).                                                                           |
+| Hyprland / Sway | No DE integration needed; GUI launches as a normal Wayland toplevel; CLI for keybinds.                                 |
+| XFCE            | GTK4/libadwaita runs natively (GTK-based DE).                                                                          |
 
 Post-v1 target: GNOME Shell Quick Settings extension for live effect toggles (complements the GTK4 app).
 
@@ -874,32 +873,32 @@ Post-v1 target: GNOME Shell Quick Settings extension for live effect toggles (co
 
 ## 19. Risks and mitigations
 
-| Risk                                                                        | Likelihood | Impact | Mitigation                                                                     |
-| --------------------------------------------------------------------------- | ---------- | ------ | ------------------------------------------------------------------------------ |
-| PipeWire virtual node API instability across distro versions                | Medium     | High   | v4l2loopback fallback; pin to feature-tested PW versions.                      |
-| ORT Vulkan EP immature → gaps in vendor-neutral GPU coverage                | High       | Medium | Vulkan EP marked experimental; CPU+XNNPACK is the universal floor.             |
-| Apps (especially Electron-based) cache device list and miss the virtual cam | Medium     | Medium | Recommend daemon auto-start at session login; documented workaround.           |
-| Flatpak sandbox prevents v4l2loopback                                       | Confirmed  | Medium | Flatpak variant is PipeWire-only; documented clearly.                          |
-| NVIDIA driver/CUDA version mismatch causes silent inference error           | Medium     | High   | Probe with test model at startup; expose EP status in the GUI's About page.    |
-| GTK4/libadwaita looks non-native on KDE/other DEs                           | Low        | Low    | Document as known limitation.                                                  |
-| Opt-in model download from CDN blocked (corporate firewalls)                | Low        | Low    | Document manual install path; models are plain ONNX files.                     |
-| Battery drain from always-on daemon                                         | Medium     | Medium | Auto-pause pipeline when no consumer; unload models after 5 min idle.          |
+| Risk                                                                        | Likelihood | Impact | Mitigation                                                                  |
+| --------------------------------------------------------------------------- | ---------- | ------ | --------------------------------------------------------------------------- |
+| PipeWire virtual node API instability across distro versions                | Medium     | High   | v4l2loopback fallback; pin to feature-tested PW versions.                   |
+| ORT Vulkan EP immature → gaps in vendor-neutral GPU coverage                | High       | Medium | Vulkan EP marked experimental; CPU+XNNPACK is the universal floor.          |
+| Apps (especially Electron-based) cache device list and miss the virtual cam | Medium     | Medium | Recommend daemon auto-start at session login; documented workaround.        |
+| Flatpak sandbox prevents v4l2loopback                                       | Confirmed  | Medium | Flatpak variant is PipeWire-only; documented clearly.                       |
+| NVIDIA driver/CUDA version mismatch causes silent inference error           | Medium     | High   | Probe with test model at startup; expose EP status in the GUI's About page. |
+| GTK4/libadwaita looks non-native on KDE/other DEs                           | Low        | Low    | Document as known limitation.                                               |
+| Opt-in model download from CDN blocked (corporate firewalls)                | Low        | Low    | Document manual install path; models are plain ONNX files.                  |
+| Battery drain from always-on daemon                                         | Medium     | Medium | Auto-pause pipeline when no consumer; unload models after 5 min idle.       |
 
 ---
 
 ## 20. Appendix — glossary
 
-| Term                | Definition                                                                             |
-| ------------------- | -------------------------------------------------------------------------------------- |
-| **EP**              | Execution Provider — ONNX Runtime's backend for a specific hardware target.            |
-| **ORT**             | ONNX Runtime.                                                                          |
-| **RVM**             | Robust Video Matting — high-quality temporally stable segmentation model.              |
-| **YuNet**           | Small, fast face detection model from OpenCV's model zoo.                              |
-| **TensorRT**        | NVIDIA's optimizing inference runtime; typically 2–4× faster than CUDA EP.             |
-| **DMA-BUF**         | Linux kernel mechanism for sharing GPU buffers between processes without CPU copy.     |
-| **PipeWire portal** | The `xdg-desktop-portal` Camera interface; used by sandboxed apps for camera access.   |
-| **v4l2loopback**    | Kernel module creating virtual `/dev/video*` devices fed from userspace.               |
-| **Tier 1–4**        | Hardware capability classes defined in §10.1.                                          |
+| Term                | Definition                                                                           |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| **EP**              | Execution Provider — ONNX Runtime's backend for a specific hardware target.          |
+| **ORT**             | ONNX Runtime.                                                                        |
+| **RVM**             | Robust Video Matting — high-quality temporally stable segmentation model.            |
+| **YuNet**           | Small, fast face detection model from OpenCV's model zoo.                            |
+| **TensorRT**        | NVIDIA's optimizing inference runtime; typically 2–4× faster than CUDA EP.           |
+| **DMA-BUF**         | Linux kernel mechanism for sharing GPU buffers between processes without CPU copy.   |
+| **PipeWire portal** | The `xdg-desktop-portal` Camera interface; used by sandboxed apps for camera access. |
+| **v4l2loopback**    | Kernel module creating virtual `/dev/video*` devices fed from userspace.             |
+| **Tier 1–4**        | Hardware capability classes defined in §10.1.                                        |
 
 ---
 

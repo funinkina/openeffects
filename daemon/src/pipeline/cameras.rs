@@ -37,7 +37,61 @@ pub fn enumerate() -> Vec<CameraInfo> {
 }
 
 pub fn autodetect() -> Option<CameraInfo> {
-    enumerate().into_iter().next()
+    pick_default_camera(enumerate())
+}
+
+fn pick_default_camera(cameras: Vec<CameraInfo>) -> Option<CameraInfo> {
+    if cameras.is_empty() {
+        return None;
+    }
+
+    let mut best: Option<(usize, bool, usize, u32)> = None;
+    for (idx, camera) in cameras.iter().enumerate() {
+        let matched = heuristic_match(camera);
+        let video_num = video_device_number(&camera.path)
+            .or_else(|| video_device_number(&camera.id))
+            .unwrap_or(u32::MAX);
+        let key = (
+            matched.unwrap_or(0),
+            matched.is_some(),
+            usize::MAX - idx,
+            u32::MAX - video_num,
+        );
+        if best.map_or(true, |current| key > current) {
+            best = Some(key);
+        }
+    }
+
+    let best_key = best?;
+    cameras
+        .into_iter()
+        .enumerate()
+        .find(|(idx, camera)| {
+            let matched = heuristic_match(camera);
+            let video_num = video_device_number(&camera.path)
+                .or_else(|| video_device_number(&camera.id))
+                .unwrap_or(u32::MAX);
+            (
+                matched.unwrap_or(0),
+                matched.is_some(),
+                usize::MAX - *idx,
+                u32::MAX - video_num,
+            ) == best_key
+        })
+        .map(|(_, camera)| camera)
+}
+
+fn heuristic_match(camera: &CameraInfo) -> Option<usize> {
+    const NEEDLES: [&str; 4] = ["front", "integrated", "built-in", "camera"];
+    let haystack = format!("{} {} {}", camera.name, camera.id, camera.path).to_lowercase();
+    NEEDLES
+        .iter()
+        .any(|needle| haystack.contains(needle))
+        .then_some(camera.name.len())
+}
+
+fn video_device_number(path: &str) -> Option<u32> {
+    path.strip_prefix("/dev/video")?.parse().ok()
 }
 
 /// Probe the camera's supported modes (DeviceMonitor caps — no device open, no
@@ -252,4 +306,51 @@ fn dedup(mut cams: Vec<CameraInfo>) -> Vec<CameraInfo> {
         true
     });
     cams
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cam(id: &str, name: &str, path: &str) -> CameraInfo {
+        CameraInfo {
+            id: id.into(),
+            name: name.into(),
+            path: path.into(),
+            api: "v4l2".into(),
+        }
+    }
+
+    #[test]
+    fn default_camera_prefers_integrated_camera_names() {
+        let picked = pick_default_camera(vec![
+            cam("/dev/video8", "HDMI Capture", "/dev/video8"),
+            cam("/dev/video2", "Integrated Camera", "/dev/video2"),
+        ])
+        .unwrap();
+
+        assert_eq!(picked.path, "/dev/video2");
+    }
+
+    #[test]
+    fn default_camera_tie_breaks_by_lowest_video_number() {
+        let picked = pick_default_camera(vec![
+            cam("/dev/video4", "USB Camera", "/dev/video4"),
+            cam("/dev/video1", "Front Camera", "/dev/video1"),
+        ])
+        .unwrap();
+
+        assert_eq!(picked.path, "/dev/video1");
+    }
+
+    #[test]
+    fn default_camera_falls_back_to_enumeration_order() {
+        let picked = pick_default_camera(vec![
+            cam("/dev/video4", "Capture Card", "/dev/video4"),
+            cam("/dev/video1", "DeckLink Input", "/dev/video1"),
+        ])
+        .unwrap();
+
+        assert_eq!(picked.path, "/dev/video4");
+    }
 }

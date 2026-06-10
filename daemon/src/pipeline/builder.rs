@@ -6,7 +6,6 @@ use gstreamer as gst;
 use gstreamer_app as gst_app;
 use shared::config::AppState;
 use tracing::{info, warn};
-use zvariant::OwnedValue;
 
 use super::bridge::Bridge;
 use super::{cameras, effects, PipelineFormat};
@@ -53,36 +52,12 @@ impl BuiltCapture {
         let _ = self.pipeline.set_state(gst::State::Null);
     }
 
-    pub fn set_enabled(&self, id: &str, on: bool) {
-        if id == "center_stage" {
-            if let Some(crop) = self.pipeline.by_name("oe_videocrop") {
-                let crop_px = if on { 12i32 } else { 0i32 };
-                crop.set_property("top", crop_px);
-                crop.set_property("bottom", crop_px);
-                crop.set_property("left", crop_px);
-                crop.set_property("right", crop_px);
-            }
-        }
-    }
-
-    pub fn set_param(&self, id: &str, key: &str, value: &OwnedValue) {
-        if id != "studio_light" {
-            return;
-        }
-        if let Some(balance) = self.pipeline.by_name("oe_videobalance") {
-            match key {
-                "brightness" => {
-                    if let Some(v) = shared::dbus::value_as_i32(value) {
-                        balance.set_property("brightness", (v as f64 / 100.0).clamp(-1.0, 1.0));
-                    }
-                }
-                "contrast" => {
-                    if let Some(v) = shared::dbus::value_as_u32(value) {
-                        balance.set_property("contrast", (v as f64 / 50.0).clamp(0.0, 2.0));
-                    }
-                }
-                _ => {}
-            }
+    pub fn apply_app_state(&self, app: &AppState) {
+        if let (Some(balance), Some(crop)) = (
+            self.pipeline.by_name("oe_videobalance"),
+            self.pipeline.by_name("oe_videocrop"),
+        ) {
+            effects::apply_app_state_to_elements(&balance, &crop, app);
         }
     }
 }

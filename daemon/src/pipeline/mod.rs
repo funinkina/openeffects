@@ -83,6 +83,7 @@ pub enum PipelineCommand {
 
 #[derive(Debug, Clone)]
 pub enum PipelineEvent {
+    Advertised { sink: String },
     Started { sink: String },
     Idle,
     Stopped,
@@ -174,7 +175,7 @@ fn worker_loop(
                 // in PAUSED with the real camera untouched until a consumer links.
                 if provider.is_none() {
                     provider = Some(spawn_provider(&bridge, current_fmt, &capture_tx, &events));
-                    let _ = events.blocking_send(PipelineEvent::Started {
+                    let _ = events.blocking_send(PipelineEvent::Advertised {
                         sink: format!("pipewire:{PIPEWIRE_NODE_NAME}"),
                     });
                 }
@@ -202,17 +203,17 @@ fn worker_loop(
             Ok(PipelineCommand::SetEnabled { id, on }) => {
                 if let Some(app) = stored_app.as_mut() {
                     apply_enabled(app, &id, on);
-                }
-                if let Some(c) = capture.as_ref() {
-                    c.set_enabled(&id, on);
+                    if let Some(c) = capture.as_ref() {
+                        c.apply_app_state(app);
+                    }
                 }
             }
             Ok(PipelineCommand::SetParam { id, key, value }) => {
                 if let Some(app) = stored_app.as_mut() {
                     apply_param(app, &id, &key, &value);
-                }
-                if let Some(c) = capture.as_ref() {
-                    c.set_param(&id, &key, &value);
+                    if let Some(c) = capture.as_ref() {
+                        c.apply_app_state(app);
+                    }
                 }
             }
             Ok(PipelineCommand::Shutdown) => {
@@ -318,8 +319,7 @@ fn start_capture(
 }
 
 /// Mirror an effect toggle into the stored config so a later capture rebuild
-/// (consumer reconnect, camera switch) reflects the current state. Only the
-/// effects the Phase-1 pipeline actually renders are tracked here.
+/// (consumer reconnect, camera switch) reflects the current state.
 fn apply_enabled(app: &mut AppState, id: &str, on: bool) {
     match id {
         "center_stage" => app.effects.center_stage.enabled = on,
@@ -332,19 +332,42 @@ fn apply_enabled(app: &mut AppState, id: &str, on: bool) {
 }
 
 fn apply_param(app: &mut AppState, id: &str, key: &str, value: &OwnedValue) {
-    if id == "studio_light" {
-        match key {
-            "brightness" => {
-                if let Some(v) = shared::dbus::value_as_i32(value) {
-                    app.effects.studio_light.brightness = v.clamp(-100, 100) as i8;
-                }
+    match (id, key) {
+        ("center_stage", "crop_top") => {
+            if let Some(v) = shared::dbus::value_as_u32(value) {
+                app.effects.center_stage.crop.top = v.min(512);
             }
-            "contrast" => {
-                if let Some(v) = shared::dbus::value_as_u32(value) {
-                    app.effects.studio_light.contrast = v.min(100) as u8;
-                }
-            }
-            _ => {}
         }
+        ("center_stage", "crop_bottom") => {
+            if let Some(v) = shared::dbus::value_as_u32(value) {
+                app.effects.center_stage.crop.bottom = v.min(512);
+            }
+        }
+        ("center_stage", "crop_left") => {
+            if let Some(v) = shared::dbus::value_as_u32(value) {
+                app.effects.center_stage.crop.left = v.min(512);
+            }
+        }
+        ("center_stage", "crop_right") => {
+            if let Some(v) = shared::dbus::value_as_u32(value) {
+                app.effects.center_stage.crop.right = v.min(512);
+            }
+        }
+        ("studio_light", "intensity") => {
+            if let Some(v) = shared::dbus::value_as_u32(value) {
+                app.effects.studio_light.intensity = v.min(100) as u8;
+            }
+        }
+        ("studio_light", "brightness") => {
+            if let Some(v) = shared::dbus::value_as_i32(value) {
+                app.effects.studio_light.brightness = v.clamp(-100, 100) as i8;
+            }
+        }
+        ("studio_light", "contrast") => {
+            if let Some(v) = shared::dbus::value_as_u32(value) {
+                app.effects.studio_light.contrast = v.min(100) as u8;
+            }
+        }
+        _ => {}
     }
 }

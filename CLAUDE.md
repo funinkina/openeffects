@@ -52,11 +52,11 @@ The daemon is the only process that touches GStreamer, PipeWire, or cameras. All
 
 Three interfaces live at the same object path, all defined in `data/dbus/*.xml`:
 
-| Interface | Purpose |
-|---|---|
-| `org.openeffects.Daemon1` | Pipeline lifecycle (`Start`, `Stop`), `Status` property, `StatusChanged` signal |
+| Interface                  | Purpose                                                                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------- |
+| `org.openeffects.Daemon1`  | Pipeline lifecycle (`Start`, `Stop`), `Status` property, `StatusChanged` signal             |
 | `org.openeffects.Effects1` | Effect toggles and params (`SetEnabled`, `SetParam`, `GetAllState`), `EffectChanged` signal |
-| `org.openeffects.Devices1` | Camera enumeration and selection, `VirtualCameraInfo` property |
+| `org.openeffects.Devices1` | Camera enumeration and selection, `VirtualCameraInfo` property                              |
 
 String constants for all three are in `shared/src/dbus.rs`. **When you modify a `.xml` file, `build.rs` in `daemon`, `cli`, and `gui` automatically regenerates proxy code into `$OUT_DIR/proxies.rs`** via `zbus_xmlgen`. You do not need to hand-edit generated code.
 
@@ -112,7 +112,7 @@ google-chrome-stable --headless=new --use-fake-ui-for-media-stream \
 
 - A running **PipeWire** session (≥ 1.0) and **WirePlumber** (≥ 0.5). The provide node is published via native libpipewire (the `pipewire` crate), so `libpipewire-0.3` + `libspa-0.2` dev headers (pkg-config) and `clang`/`libclang` (bindgen) are needed at **build** time.
 - `gst-plugin-pipewire` / `gst-plugin-good` for the camera **source** (`pipewiresrc` / `v4l2src`); without a camera the daemon falls back to `videotestsrc`.
-- Output is **PipeWire-only** (`media.class=Video/Source`). Consumer reach is limited to PipeWire-camera-aware apps: Firefox (`media.webrtc.camera.allow-pipewire=true`), flagged Chromium (`--enable-features=WebRtcPipeWireCamera`), OBS. Legacy V4L2-only apps are not supported (no v4l2loopback bridge).
+- Output is **PipeWire-only** (`media.class=Video/Source`). Consumer reach is limited to PipeWire-camera-aware apps: Firefox (`media.webrtc.camera.allow-pipewire=true`), flagged Chromium (`--enable-features=WebRtcPipeWireCamera`), OBS.
 - The `gui` crate needs `gtk4` and `libadwaita` dev headers (pkg-config) at **build** time.
 - The daemon registers `Type=dbus` in its systemd unit so D-Bus clients (`openeffects`, `openeffectsctl`) can rely on the bus name being available once the unit is active.
 

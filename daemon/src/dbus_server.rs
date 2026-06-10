@@ -77,7 +77,7 @@ impl Daemon1Iface {
 
     #[zbus(signal)]
     #[zbus(name = "StatusChanged")]
-    async fn daemon_status_changed(
+    pub async fn daemon_status_changed(
         emitter: &SignalEmitter<'_>,
         new_status: &str,
     ) -> zbus::Result<()>;

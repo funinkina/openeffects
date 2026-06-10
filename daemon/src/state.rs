@@ -111,6 +111,22 @@ impl DaemonState {
                     "mode".into(),
                     str_value(&self.app.effects.center_stage.mode),
                 );
+                values.insert(
+                    "crop_top".into(),
+                    u32_value(self.app.effects.center_stage.crop.top),
+                );
+                values.insert(
+                    "crop_bottom".into(),
+                    u32_value(self.app.effects.center_stage.crop.bottom),
+                );
+                values.insert(
+                    "crop_left".into(),
+                    u32_value(self.app.effects.center_stage.crop.left),
+                );
+                values.insert(
+                    "crop_right".into(),
+                    u32_value(self.app.effects.center_stage.crop.right),
+                );
             }
             "portrait_blur" => {
                 values.insert(
@@ -199,6 +215,30 @@ impl DaemonState {
                     return true;
                 }
             }
+            ("center_stage", "crop_top") => {
+                if let Some(v) = shared::dbus::value_as_u32(value) {
+                    self.app.effects.center_stage.crop.top = v.min(512);
+                    return true;
+                }
+            }
+            ("center_stage", "crop_bottom") => {
+                if let Some(v) = shared::dbus::value_as_u32(value) {
+                    self.app.effects.center_stage.crop.bottom = v.min(512);
+                    return true;
+                }
+            }
+            ("center_stage", "crop_left") => {
+                if let Some(v) = shared::dbus::value_as_u32(value) {
+                    self.app.effects.center_stage.crop.left = v.min(512);
+                    return true;
+                }
+            }
+            ("center_stage", "crop_right") => {
+                if let Some(v) = shared::dbus::value_as_u32(value) {
+                    self.app.effects.center_stage.crop.right = v.min(512);
+                    return true;
+                }
+            }
             ("portrait_blur", "strength") => {
                 if let Some(v) = shared::dbus::value_as_u32(value) {
                     self.app.effects.portrait_blur.strength = v.min(100) as u8;
@@ -237,7 +277,9 @@ impl DaemonState {
 
 #[cfg(test)]
 mod tests {
-    use super::DaemonStatus;
+    use shared::dbus::{value_as_bool, value_as_u32};
+
+    use super::{DaemonState, DaemonStatus};
 
     #[test]
     fn state_transition_guards_match_prd() {
@@ -249,5 +291,17 @@ mod tests {
         assert!(DaemonStatus::Running.can_stop());
         assert!(DaemonStatus::Idle.can_stop());
         assert!(!DaemonStatus::Stopped.can_stop());
+    }
+
+    #[test]
+    fn center_stage_params_include_phase1_crop_controls() {
+        let mut state = DaemonState::new(shared::config::AppState::default());
+        assert!(state.set_enabled("center_stage", true));
+        assert!(state.set_param("center_stage", "crop_left", &shared::dbus::u32_value(44)));
+
+        let params = state.effect_params("center_stage").unwrap();
+        assert_eq!(params.get("enabled").and_then(value_as_bool), Some(true));
+        assert_eq!(params.get("crop_left").and_then(value_as_u32), Some(44));
+        assert_eq!(params.get("crop_top").and_then(value_as_u32), Some(12));
     }
 }

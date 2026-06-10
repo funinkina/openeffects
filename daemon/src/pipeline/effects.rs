@@ -41,17 +41,30 @@ pub fn build_effects_bin(app: &AppState) -> Result<gst::Bin> {
 }
 
 pub fn apply_app_state_to_elements(balance: &gst::Element, crop: &gst::Element, app: &AppState) {
-    let brightness = app.effects.studio_light.brightness as f64 / 100.0;
-    let contrast = app.effects.studio_light.contrast as f64 / 50.0;
+    let studio = &app.effects.studio_light;
+    let intensity = if studio.enabled {
+        studio.intensity as f64 / 100.0
+    } else {
+        0.0
+    };
+    let brightness = (studio.brightness as f64 / 100.0) * intensity;
+    let contrast_delta = (studio.contrast as f64 - 50.0) / 50.0;
+    let contrast = 1.0 + contrast_delta * intensity;
     balance.set_property("brightness", brightness.clamp(-1.0, 1.0));
     balance.set_property("contrast", contrast.clamp(0.0, 2.0));
 
-    let enabled = app.effects.center_stage.enabled;
-    let crop_px = if enabled { 12i32 } else { 0i32 };
-    crop.set_property("top", crop_px);
-    crop.set_property("bottom", crop_px);
-    crop.set_property("left", crop_px);
-    crop.set_property("right", crop_px);
+    let center = &app.effects.center_stage;
+    let crop_value = |value: u32| -> i32 {
+        if center.enabled {
+            value.min(512) as i32
+        } else {
+            0
+        }
+    };
+    crop.set_property("top", crop_value(center.crop.top));
+    crop.set_property("bottom", crop_value(center.crop.bottom));
+    crop.set_property("left", crop_value(center.crop.left));
+    crop.set_property("right", crop_value(center.crop.right));
 }
 
 #[cfg(test)]
@@ -64,5 +77,30 @@ mod tests {
         let bin = build_effects_bin(&AppState::default()).unwrap();
         assert!(bin.static_pad("sink").is_some());
         assert!(bin.static_pad("src").is_some());
+    }
+
+    #[test]
+    fn phase1_effects_map_state_to_gstreamer_elements() {
+        gst::init().unwrap();
+        let balance = gst::ElementFactory::make("videobalance").build().unwrap();
+        let crop = gst::ElementFactory::make("videocrop").build().unwrap();
+        let mut app = AppState::default();
+
+        apply_app_state_to_elements(&balance, &crop, &app);
+        assert_eq!(balance.property::<f64>("brightness"), 0.0);
+        assert_eq!(balance.property::<f64>("contrast"), 1.0);
+        assert_eq!(crop.property::<i32>("left"), 0);
+
+        app.effects.studio_light.enabled = true;
+        app.effects.studio_light.intensity = 50;
+        app.effects.studio_light.brightness = 80;
+        app.effects.studio_light.contrast = 100;
+        app.effects.center_stage.enabled = true;
+        app.effects.center_stage.crop.left = 24;
+
+        apply_app_state_to_elements(&balance, &crop, &app);
+        assert_eq!(balance.property::<f64>("brightness"), 0.4);
+        assert_eq!(balance.property::<f64>("contrast"), 1.5);
+        assert_eq!(crop.property::<i32>("left"), 24);
     }
 }

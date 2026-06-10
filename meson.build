@@ -9,7 +9,7 @@ cargo_target_dir = meson.project_source_root() / 'target' / cargo_profile
 bindir = get_option('bindir')
 datadir = get_option('datadir')
 
-foreach bin : ['openeffectsd', 'openeffectsctl', 'openeffects-tray', 'openeffects']
+foreach bin : ['openeffectsd', 'openeffectsctl', 'openeffects']
   install_data(cargo_target_dir / bin, install_dir: bindir, install_mode: 'rwxr-xr-x')
 endforeach
 
@@ -29,9 +29,12 @@ configure_file(
   install_dir: datadir / 'dbus-1/services',
 )
 
-install_data(
-  'data/systemd/openeffectsd.service',
-  'data/systemd/openeffects-tray.service',
+systemd_service_conf = configuration_data()
+systemd_service_conf.set('bindir', get_option('prefix') / bindir)
+configure_file(
+  input: 'data/systemd/openeffectsd.service.in',
+  output: 'openeffectsd.service',
+  configuration: systemd_service_conf,
   install_dir: datadir / 'systemd/user',
 )
 

@@ -6,7 +6,7 @@ Requires=pipewire.service
 [Service]
 Type=dbus
 BusName=org.openeffects.Daemon
-ExecStart=%h/.local/bin/openeffectsd --start
+ExecStart=@bindir@/openeffectsd --start
 Restart=on-failure
 
 [Install]
