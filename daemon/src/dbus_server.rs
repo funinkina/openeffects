@@ -107,7 +107,7 @@ impl Effects1Iface {
         on: bool,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) -> fdo::Result<()> {
-        let params = {
+        let (params, app) = {
             let mut state = self.state.write().await;
             if !state.set_enabled(id, on) {
                 return Err(fdo::Error::InvalidArgs(format!("unknown effect '{id}'")));
@@ -116,12 +116,15 @@ impl Effects1Iface {
                 .app
                 .save()
                 .map_err(|err| fdo::Error::Failed(err.to_string()))?;
-            state.effect_params(id).unwrap_or_default()
+            (
+                state.effect_params(id).unwrap_or_default(),
+                state.app.clone(),
+            )
         };
 
         let _ = self
             .pipeline_tx
-            .send(PipelineCommand::SetEnabled { id: id.into(), on })
+            .send(PipelineCommand::ApplyEffects(app))
             .await;
         Self::effect_changed(&emitter, id, params)
             .await
@@ -136,7 +139,7 @@ impl Effects1Iface {
         value: OwnedValue,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) -> fdo::Result<()> {
-        let params = {
+        let (params, app) = {
             let mut state = self.state.write().await;
             if !state.set_param(id, key, &value) {
                 return Err(fdo::Error::InvalidArgs(format!(
@@ -147,16 +150,15 @@ impl Effects1Iface {
                 .app
                 .save()
                 .map_err(|err| fdo::Error::Failed(err.to_string()))?;
-            state.effect_params(id).unwrap_or_default()
+            (
+                state.effect_params(id).unwrap_or_default(),
+                state.app.clone(),
+            )
         };
 
         let _ = self
             .pipeline_tx
-            .send(PipelineCommand::SetParam {
-                id: id.into(),
-                key: key.into(),
-                value,
-            })
+            .send(PipelineCommand::ApplyEffects(app))
             .await;
         Self::effect_changed(&emitter, id, params)
             .await

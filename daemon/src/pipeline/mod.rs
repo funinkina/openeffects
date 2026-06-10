@@ -15,7 +15,6 @@ use shared::config::AppState;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::error::TryRecvError;
 use tracing::{error, info};
-use zvariant::OwnedValue;
 
 use crate::pipeline::bridge::Bridge;
 use crate::pipeline::probe::PIPEWIRE_NODE_NAME;
@@ -70,15 +69,12 @@ const CAPTURE_RELEASE_GRACE: Duration = Duration::from_millis(700);
 pub enum PipelineCommand {
     Start(AppState),
     Stop,
-    SetEnabled {
-        id: String,
-        on: bool,
-    },
-    SetParam {
-        id: String,
-        key: String,
-        value: OwnedValue,
-    },
+    /// Replace the worker's stored config and push it onto the live capture
+    /// elements. Sent after any effect toggle or param change, carrying the
+    /// daemon's canonical `AppState` so the worker never re-parses per-key
+    /// values (a duplicated mapping here once let param changes go stale until
+    /// a restart).
+    ApplyEffects(AppState),
     Shutdown,
 }
 
@@ -205,21 +201,11 @@ fn worker_loop(
                 }
                 let _ = events.blocking_send(PipelineEvent::Stopped);
             }
-            Ok(PipelineCommand::SetEnabled { id, on }) => {
-                if let Some(app) = stored_app.as_mut() {
-                    apply_enabled(app, &id, on);
-                    if let Some(c) = capture.as_ref() {
-                        c.apply_app_state(app);
-                    }
+            Ok(PipelineCommand::ApplyEffects(app)) => {
+                if let Some(c) = capture.as_ref() {
+                    c.apply_app_state(&app);
                 }
-            }
-            Ok(PipelineCommand::SetParam { id, key, value }) => {
-                if let Some(app) = stored_app.as_mut() {
-                    apply_param(app, &id, &key, &value);
-                    if let Some(c) = capture.as_ref() {
-                        c.apply_app_state(app);
-                    }
-                }
+                stored_app = Some(app);
             }
             Ok(PipelineCommand::Shutdown) => {
                 if let Some(c) = capture.take() {
@@ -320,59 +306,5 @@ fn start_capture(
             error!(%err, "capture start failed");
             let _ = events.blocking_send(PipelineEvent::Error(err.to_string()));
         }
-    }
-}
-
-/// Mirror an effect toggle into the stored config so a later capture rebuild
-/// (consumer reconnect, camera switch) reflects the current state.
-fn apply_enabled(app: &mut AppState, id: &str, on: bool) {
-    match id {
-        "center_stage" => app.effects.center_stage.enabled = on,
-        "portrait_blur" => app.effects.portrait_blur.enabled = on,
-        "bg_replace" => app.effects.bg_replace.enabled = on,
-        "studio_light" => app.effects.studio_light.enabled = on,
-        "reactions" => app.effects.reactions.enabled = on,
-        _ => {}
-    }
-}
-
-fn apply_param(app: &mut AppState, id: &str, key: &str, value: &OwnedValue) {
-    match (id, key) {
-        ("center_stage", "crop_top") => {
-            if let Some(v) = shared::dbus::value_as_u32(value) {
-                app.effects.center_stage.crop.top = v.min(512);
-            }
-        }
-        ("center_stage", "crop_bottom") => {
-            if let Some(v) = shared::dbus::value_as_u32(value) {
-                app.effects.center_stage.crop.bottom = v.min(512);
-            }
-        }
-        ("center_stage", "crop_left") => {
-            if let Some(v) = shared::dbus::value_as_u32(value) {
-                app.effects.center_stage.crop.left = v.min(512);
-            }
-        }
-        ("center_stage", "crop_right") => {
-            if let Some(v) = shared::dbus::value_as_u32(value) {
-                app.effects.center_stage.crop.right = v.min(512);
-            }
-        }
-        ("studio_light", "intensity") => {
-            if let Some(v) = shared::dbus::value_as_u32(value) {
-                app.effects.studio_light.intensity = v.min(100) as u8;
-            }
-        }
-        ("studio_light", "brightness") => {
-            if let Some(v) = shared::dbus::value_as_i32(value) {
-                app.effects.studio_light.brightness = v.clamp(-100, 100) as i8;
-            }
-        }
-        ("studio_light", "contrast") => {
-            if let Some(v) = shared::dbus::value_as_u32(value) {
-                app.effects.studio_light.contrast = v.min(100) as u8;
-            }
-        }
-        _ => {}
     }
 }

@@ -47,6 +47,9 @@ mod imp {
     const FACE_SCORE_THRESH: f32 = 0.6;
     /// EMA smoothing factor for the center-stage crop (≈12 frames to 90%).
     const CS_ALPHA: f32 = 0.18;
+    /// Tightest allowed crop (fraction of each axis); caps zoom at 4× so a
+    /// small/distant face doesn't blow up into an unusably pixelated frame.
+    const CS_MIN_CROP: f32 = 0.25;
 
     #[derive(Debug, Clone)]
     struct Settings {
@@ -400,8 +403,7 @@ mod imp {
                 }
                 let subject =
                     subject_box(&state.faces, state.mask.as_ref(), &state.settings.cs_mode);
-                let base_zf = zoom_scale(&state.settings.cs_zoom);
-                let target = crop_target(subject, base_zf);
+                let target = crop_target(subject, &state.settings.cs_zoom);
                 let crop = &mut state.crop;
                 crop.zf += (target.zf - crop.zf) * CS_ALPHA;
                 crop.cx += (target.cx - crop.cx) * CS_ALPHA;
@@ -578,58 +580,68 @@ mod imp {
         Ok(out)
     }
 
-    /// Normalized subject box (cx, cy, w, h) to frame on, from YuNet faces when
-    /// available (expanded head→torso), else the mask's foreground extent.
+    /// Normalized subject to frame on: `(cx, cy, span, is_face)` where `span`
+    /// is the subject's largest normalized extent. From YuNet faces when
+    /// available (face box, or the union of all faces in group mode), else the
+    /// mask's foreground extent.
     fn subject_box(
         faces: &[Face],
         mask: Option<&Mask>,
         mode: &str,
-    ) -> Option<(f32, f32, f32, f32)> {
+    ) -> Option<(f32, f32, f32, bool)> {
         if !faces.is_empty() {
-            let person = |f: &Face| {
-                let cx = f.cx;
-                let cy = (f.cy + f.h * 0.9).min(1.0);
-                let pw = (f.w * 2.2).min(1.0);
-                let ph = (f.h * 3.2).min(1.0);
-                (cx, cy, pw, ph)
-            };
             if mode == "group" {
                 let (mut x0, mut y0, mut x1, mut y1) = (1.0f32, 1.0f32, 0.0f32, 0.0f32);
                 for f in faces {
-                    let (cx, cy, pw, ph) = person(f);
-                    x0 = x0.min(cx - pw / 2.0);
-                    y0 = y0.min(cy - ph / 2.0);
-                    x1 = x1.max(cx + pw / 2.0);
-                    y1 = y1.max(cy + ph / 2.0);
+                    x0 = x0.min(f.cx - f.w / 2.0);
+                    y0 = y0.min(f.cy - f.h / 2.0);
+                    x1 = x1.max(f.cx + f.w / 2.0);
+                    y1 = y1.max(f.cy + f.h / 2.0);
                 }
-                return Some(((x0 + x1) / 2.0, (y0 + y1) / 2.0, x1 - x0, y1 - y0));
+                return Some((
+                    (x0 + x1) / 2.0,
+                    (y0 + y1) / 2.0,
+                    (x1 - x0).max(y1 - y0),
+                    true,
+                ));
             }
             let best = faces.iter().max_by(|a, b| a.score.total_cmp(&b.score))?;
-            return Some(person(best));
+            return Some((best.cx, best.cy, best.w.max(best.h), true));
         }
         let (x0, y0, x1, y1) = mask?.bounding_box(MASK_FG_THRESH)?;
-        Some(((x0 + x1) / 2.0, (y0 + y1) / 2.0, x1 - x0, y1 - y0))
+        Some((
+            (x0 + x1) / 2.0,
+            (y0 + y1) / 2.0,
+            (x1 - x0).max(y1 - y0),
+            false,
+        ))
     }
 
-    /// Map a zoom level to the base crop fraction (smaller = tighter zoom).
-    fn zoom_scale(zoom: &str) -> f32 {
+    /// Spacing multipliers per zoom level: the crop span is `subject span ×
+    /// margin`, so a tighter setting leaves less room around the subject. The
+    /// first factor pads a YuNet face box, the second pads the mask's
+    /// full-body extent (already much larger than a face, so far less padding).
+    fn zoom_margins(zoom: &str) -> (f32, f32) {
         match zoom {
-            "subtle" => 0.9,
-            "normal" => 0.8,
-            "tight" => 0.65,
-            _ => 0.8,
+            "subtle" => (4.2, 1.5),
+            "normal" => (3.2, 1.25),
+            "tight" => (2.4, 1.05),
+            _ => (3.2, 1.25),
         }
     }
 
-    /// Target crop for a subject box and base zoom: zoom in to `base_zf`, but
-    /// widen if needed so the (margin-padded) subject still fits. No subject →
-    /// relax back to the full frame so the zoom resets smoothly.
-    fn crop_target(subject: Option<(f32, f32, f32, f32)>, base_zf: f32) -> CropState {
-        let Some((cx, cy, sw, sh)) = subject else {
+    /// Target crop: centered on the subject (clamped so the crop stays inside
+    /// the frame) and sized relative to the subject, so the face is recentered
+    /// wherever it moves and the zoom level only changes the spacing around
+    /// it. No subject → relax back to the full frame so the zoom resets
+    /// smoothly.
+    fn crop_target(subject: Option<(f32, f32, f32, bool)>, zoom: &str) -> CropState {
+        let Some((cx, cy, span, is_face)) = subject else {
             return CropState::default();
         };
-        let fit = (sw.max(sh) * 1.3).clamp(0.05, 1.0);
-        let zf = base_zf.max(fit).min(1.0);
+        let (face_margin, mask_margin) = zoom_margins(zoom);
+        let margin = if is_face { face_margin } else { mask_margin };
+        let zf = (span * margin).clamp(CS_MIN_CROP, 1.0);
         let half = zf / 2.0;
         CropState {
             cx: cx.clamp(half, 1.0 - half),
