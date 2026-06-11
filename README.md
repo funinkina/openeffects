@@ -61,11 +61,13 @@ systemctl --user start openeffectsd
 
 ### CLI Examples
 
-Toggle effects via `openeffectsctl`:
+Control effects via `openeffectsctl` (see the full [CLI reference](docs/cli.md)):
 ```bash
-openeffectsctl check status
-openeffectsctl enable portrait_blur
-openeffectsctl set center_stage.zoom tight
+openeffectsctl status
+openeffectsctl portrait-blur --on --strength 70
+openeffectsctl center-stage --zoom tight
+openeffectsctl background ~/Pictures/office.jpg
+openeffectsctl react thumbs-up
 openeffectsctl toggle reactions
 ```
 
@@ -74,7 +76,7 @@ Use with Waybar:
 "custom/openeffects": {
     "exec": "openeffectsctl status --short",
     "interval": 5,
-    "on-click": "openeffectsctl toggle portrait_blur"
+    "on-click": "openeffectsctl toggle portrait-blur"
 }
 ```
 
