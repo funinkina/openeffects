@@ -463,7 +463,7 @@ mod imp {
                     "OpenEffects ML Effects",
                     "Filter/Effect/Video",
                     "Portrait blur, background replace, and center stage via ONNX inference",
-                    "Aryan <aryankushwaha3101@gmail.com>",
+                    "Aryan <hello@funinkina.co.in>",
                 )
             });
             Some(&*META)

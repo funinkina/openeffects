@@ -1,0 +1,98 @@
+# nfpm config — builds .deb, .rpm and Arch .pkg.tar.zst from prebuilt cargo
+# release binaries. Driven by scripts/build-packages.sh, which exports VERSION
+# (from Cargo.toml) and ARCH, renders the @bindir@ service templates into dist/,
+# and stages the sha256-verified ONNX models into dist/models/.
+#
+# Run manually:
+#   VERSION=0.1.0 ARCH=amd64 nfpm pkg -f packaging/nfpm.yaml -p deb -t dist/
+
+name: openeffects
+arch: ${ARCH}
+version: ${VERSION}
+maintainer: Aryan <hello@funinkina.co.in>
+description: |
+  Real-time webcam effects for Linux (PipeWire virtual camera).
+  Background blur/replace, studio light, portrait blur and center stage,
+  with a GTK4/libadwaita GUI and a D-Bus controlled daemon.
+homepage: https://github.com/funinkina/openeffects
+license: GPL-3.0-or-later
+section: video
+priority: optional
+
+contents:
+  # Binaries
+  - src: target/release/openeffectsd
+    dst: /usr/bin/openeffectsd
+  - src: target/release/openeffectsctl
+    dst: /usr/bin/openeffectsctl
+  - src: target/release/openeffects
+    dst: /usr/bin/openeffects
+
+  # D-Bus interface introspection XML
+  - src: data/dbus/org.openeffects.Daemon1.xml
+    dst: /usr/share/dbus-1/interfaces/org.openeffects.Daemon1.xml
+  - src: data/dbus/org.openeffects.Effects1.xml
+    dst: /usr/share/dbus-1/interfaces/org.openeffects.Effects1.xml
+  - src: data/dbus/org.openeffects.Devices1.xml
+    dst: /usr/share/dbus-1/interfaces/org.openeffects.Devices1.xml
+
+  # D-Bus session service activation (rendered with @bindir@ -> /usr/bin)
+  - src: dist/org.openeffects.Daemon.service
+    dst: /usr/share/dbus-1/services/org.openeffects.Daemon.service
+
+  # systemd user unit (rendered with @bindir@ -> /usr/bin)
+  - src: dist/openeffectsd.service
+    dst: /usr/lib/systemd/user/openeffectsd.service
+
+  # App icon + desktop entry
+  - src: data/icons/openeffects.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/openeffects.svg
+  - src: data/applications/openeffects.desktop
+    dst: /usr/share/applications/openeffects.desktop
+
+  # Bundled, sha256-verified ML models (staged by build-packages.sh).
+  # Daemon's registry::search_dirs() resolves /usr/share/openeffects/models.
+  # type: tree copies the <id>/ subdirs recursively, preserving structure.
+  - src: dist/models
+    dst: /usr/share/openeffects/models
+    type: tree
+
+overrides:
+  deb:
+    depends:
+      - pipewire
+      - wireplumber
+      - gstreamer1.0-plugins-base
+      - gstreamer1.0-plugins-good
+      - gstreamer1.0-pipewire
+      - libgtk-4-1
+      - libadwaita-1-0
+      - dbus
+    scripts:
+      postinstall: packaging/postinstall.sh
+      postremove: packaging/postremove.sh
+  rpm:
+    depends:
+      - pipewire
+      - wireplumber
+      - gstreamer1-plugins-base
+      - gstreamer1-plugins-good
+      - pipewire-gstreamer
+      - gtk4
+      - libadwaita
+      - dbus
+    scripts:
+      postinstall: packaging/postinstall.sh
+      postremove: packaging/postremove.sh
+  archlinux:
+    depends:
+      - pipewire
+      - wireplumber
+      - gstreamer
+      - gst-plugins-base
+      - gst-plugins-good
+      - gst-plugin-pipewire
+      - gtk4
+      - libadwaita
+      - dbus
+    # Arch updates the icon cache / desktop database via pacman hooks.

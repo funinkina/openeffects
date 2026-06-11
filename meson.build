@@ -39,10 +39,17 @@ configure_file(
 )
 
 install_data(
-  'data/icons/openeffects-active.svg',
-  'data/icons/openeffects-idle.svg',
-  'data/icons/openeffects-error.svg',
-  install_dir: datadir / 'icons/hicolor/scalable/status',
+  'data/icons/openeffects.svg',
+  install_dir: datadir / 'icons/hicolor/scalable/apps',
 )
+
+install_data(
+  'data/applications/openeffects.desktop',
+  install_dir: datadir / 'applications',
+)
+
+# Models are not in the source tree (downloaded + sha256-verified at runtime),
+# so a meson install ships none. Source/dev installs populate the per-user model
+# dir via scripts/fetch-models.sh; distro packages bundle them (packaging/nfpm.yaml).
 
 meson.add_install_script('meson_post_install.sh')

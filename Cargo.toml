@@ -6,7 +6,7 @@ members = ["shared", "daemon", "cli", "gui", "tests/integration"]
 version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
-authors = ["Aryan <aryankushwaha3101@gmail.com>"]
+authors = ["Aryan <hello@funinkina.co.in>"]
 rust-version = "1.88"
 
 [workspace.dependencies]
@@ -36,7 +36,10 @@ ort = { version = "2.0.0-rc.12", default-features = false, features = [
     "std",
 ] }
 sha2 = "0.11"
-image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+image = { version = "0.25", default-features = false, features = [
+    "jpeg",
+    "png",
+] }
 
 tracing = "0.1"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }

@@ -9,7 +9,7 @@ pub fn present(parent: &impl IsA<gtk::Widget>) {
         .version(env!("CARGO_PKG_VERSION"))
         .comments("Linux-native webcam effects engine")
         .developer_name("Aryan Kushwaha")
-        .developers(["Aryan Kushwaha <aryankushwaha3101@gmail.com>"])
+        .developers(["Aryan Kushwaha <hello@funinkina.co.in>"])
         .copyright("© 2026 Aryan Kushwaha")
         .license_type(gtk::License::Gpl30)
         .website("https://github.com/funinkina/openeffects")

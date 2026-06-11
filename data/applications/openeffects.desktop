@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=OpenEffects
+GenericName=Webcam Effects
+Comment=Apply real-time effects to your webcam
+Exec=openeffects
+Icon=openeffects
+Terminal=false
+Categories=AudioVideo;Video;
+Keywords=webcam;camera;effects;background;blur;portrait;virtual camera;
+StartupNotify=true
