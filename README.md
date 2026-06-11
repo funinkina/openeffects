@@ -32,25 +32,33 @@ OpenEffects automatically detects your hardware capabilities (Tier 1 to Tier 4) 
 
 ## Installation
 
-### Flatpak (Recommended)
-Available on Flathub (PipeWire virtual camera support only; `v4l2loopback` is unavailable inside the sandbox).
+Download the packages for your distro from the [latest GitHub release](https://github.com/funinkina/openeffects/releases/latest).
+
+OpenEffects ships as three packages — `openeffectsd` (daemon, bundles the ML models), `openeffectsctl` (CLI), and `openeffects` (GUI). The clients depend on the daemon, so install `openeffectsd` alongside whichever client you want; pass both files on the same command line so the dependency resolves.
 
 ### Arch Linux
 ```bash
-yay -S openeffects
+sudo pacman -U openeffectsd-*-x86_64.pkg.tar.zst openeffects-*-x86_64.pkg.tar.zst
 ```
 
-### Fedora
+### Fedora / RHEL
 ```bash
-dnf copr enable <user>/openeffects
-dnf install openeffects
+sudo dnf install ./openeffectsd-*.x86_64.rpm ./openeffects-*.x86_64.rpm
 ```
 
 ### Ubuntu / Debian
 ```bash
-add-apt-repository ppa:<user>/openeffects
-apt install openeffects
+sudo apt install ./openeffectsd_*_amd64.deb ./openeffects_*_amd64.deb
 ```
+
+For a headless / CLI-only setup, install `openeffectsd` plus `openeffectsctl` instead. x86_64 only for now.
+
+### Remote repositories (coming soon)
+
+- **Flatpak (Flathub)** — _coming soon_ (PipeWire virtual camera only; `v4l2loopback` is unavailable inside the sandbox).
+- **Arch Linux (AUR)** — _coming soon_: `yay -S openeffects`
+- **Fedora (COPR)** — _coming soon_: `dnf copr enable <user>/openeffects && dnf install openeffects`
+- **Ubuntu / Debian (PPA)** — _coming soon_: `add-apt-repository ppa:<user>/openeffects && apt install openeffects`
 
 ## Usage
 
