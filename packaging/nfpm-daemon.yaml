@@ -44,10 +44,21 @@ contents:
 
   # Bundled, sha256-verified ML models (staged by build-packages.sh).
   # Daemon's registry::search_dirs() resolves /usr/share/openeffects/models.
-  # type: tree copies the <id>/ subdirs recursively, preserving structure.
-  - src: dist/models
-    dst: /usr/share/openeffects/models
-    type: tree
+  #
+  # One glob entry per model id rather than a single `type: tree`: nfpm's tree
+  # walker writes the dirs' mode as the raw Go FileMode (mode=20000000755, with
+  # the ModeDir bit) instead of the masked 0755, which pacman 7.x flags as a
+  # permissions mismatch on every dir. Globbed files create their parent dir
+  # implicitly, and implicit dirs get a clean 0755 (no warning). Add a line here
+  # when a new model id is bundled.
+  - src: dist/models/hand_landmark/*
+    dst: /usr/share/openeffects/models/hand_landmark/
+  - src: dist/models/palm_detection/*
+    dst: /usr/share/openeffects/models/palm_detection/
+  - src: dist/models/selfie_segmentation/*
+    dst: /usr/share/openeffects/models/selfie_segmentation/
+  - src: dist/models/yunet/*
+    dst: /usr/share/openeffects/models/yunet/
 
 overrides:
   deb:
