@@ -1,4 +1,4 @@
-# OpenEffects (WIP)
+# OpenEffects (Beta)
 
 OpenEffects is a Linux-native, GPU-accelerated webcam effects engine. It brings advanced camera features like Center Stage, Portrait blur, Background Replacement, and gesture-triggered Reactions to any Wayland Linux desktop. It works transparently with any app that consumes a PipeWire camera node or `/dev/video*` device (Zoom, OBS, WebRTC, etc.).
 
