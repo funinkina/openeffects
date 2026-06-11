@@ -1,5 +1,6 @@
 //! Studio Light page: a master switch plus brightness/contrast/intensity
-//! sliders (`videobalance`). Turning the switch off disables the sliders.
+//! sliders. The lift is applied to the person only (masked in `oe_effects`).
+//! Turning the switch off disables the sliders.
 
 use adw::glib;
 use adw::prelude::*;

@@ -84,9 +84,9 @@ pub struct StudioLightState {
     pub enabled: bool,
     /// 0–100
     pub intensity: u8,
-    /// -1.0..1.0 mapped to videobalance brightness
+    /// -1.0..1.0 mapped to the masked brightness lift in `oe_effects`
     pub brightness: i8,
-    /// 0–100 mapped to videobalance contrast
+    /// 0–100 mapped to the masked contrast in `oe_effects`
     pub contrast: u8,
 }
 impl Default for StudioLightState {

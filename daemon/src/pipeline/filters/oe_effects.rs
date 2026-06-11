@@ -1,25 +1,31 @@
 //! `oe_effects` — the single CPU video filter that hosts every ML-driven
 //! effect. It receives RGBA frames in system memory and applies:
 //!
-//! 1. **Portrait blur** / **Background replace** — `out = fg·mask + bg·(1-mask)`
+//! 1. **Studio Light** — a `videobalance`-style brightness/contrast lift
+//!    blended by the person mask, so only the subject is lit (the background
+//!    keeps its original exposure).
+//! 2. **Portrait blur** / **Background replace** — `out = fg·mask + bg·(1-mask)`
 //!    where `bg` is either a box-blurred copy of the frame or a user image/color.
-//! 2. **Center Stage** — a YuNet face box drives an EMA-smoothed, deadzoned
+//! 3. **Center Stage** — a YuNet face box drives an EMA-smoothed, deadzoned
 //!    crop+zoom that keeps the face centered without distorting the aspect ratio.
+//!
+//! Studio Light, Portrait blur and Background replace all need the selfie
+//! segmentation mask; it is segmented **once per frame** and shared by all
+//! three, so enabling several together costs no extra ONNX work.
 //!
 //! Two paths, chosen per frame:
 //!
 //! - **Center stage on**: framing is computed on the full frame, then the crop
-//!   ROI is extracted and blur/bg-replace run on *just that ROI* (the only
+//!   ROI is extracted and the masked effects run on *just that ROI* (the only
 //!   pixels the zoom keeps) before it's upscaled to the output. Compositing the
 //!   discarded border would be wasted work, so center stage is the source of
-//!   truth for the blur canvas.
-//! - **Center stage off**: blur/bg-replace run over the full frame.
+//!   truth for the mask canvas.
+//! - **Center stage off**: the masked effects run over the full frame.
 //!
 //! Energy: selfie segmentation (the per-frame ONNX cost) runs on a cadence
 //! (`SEG_INTERVAL`) with the mask reused in between, and YuNet detection on a
 //! coarser one (`FACE_INTERVAL`) — the reframe deadzone absorbs the staleness.
 //!
-//! Studio Light stays in the upstream `videobalance` element (no ML needed);
 //! Reactions arrive in Phase 4.
 
 use gst::glib;
@@ -93,6 +99,11 @@ mod imp {
         cs_enabled: bool,
         cs_zoom: String,
         cs_mode: String,
+        studio_enabled: bool,
+        /// Additive brightness, -1.0..1.0 (videobalance semantics).
+        studio_brightness: f32,
+        /// Contrast multiplier around mid-gray, 0.0..2.0.
+        studio_contrast: f32,
     }
 
     impl Default for Settings {
@@ -105,6 +116,9 @@ mod imp {
                 cs_enabled: false,
                 cs_zoom: DEFAULT_ZOOM.into(),
                 cs_mode: DEFAULT_MODE.into(),
+                studio_enabled: false,
+                studio_brightness: 0.0,
+                studio_contrast: 1.0,
             }
         }
     }
@@ -113,12 +127,21 @@ mod imp {
         /// Whether any effect in this element does real work (otherwise the
         /// element runs in passthrough).
         fn active(&self) -> bool {
-            self.blur_enabled || self.bg_enabled || (self.cs_enabled && self.cs_zoom != "off")
+            self.blur_enabled
+                || self.bg_enabled
+                || self.studio_enabled
+                || (self.cs_enabled && self.cs_zoom != "off")
         }
 
         /// Whether the blur/bg-replace composite step should run.
         fn needs_composite(&self) -> bool {
             self.blur_enabled || self.bg_enabled
+        }
+
+        /// Whether any effect needs the selfie segmentation mask (studio light,
+        /// portrait blur, bg replace). Drives the single shared segmentation.
+        fn needs_mask(&self) -> bool {
+            self.studio_enabled || self.blur_enabled || self.bg_enabled
         }
     }
 
@@ -245,6 +268,17 @@ mod imp {
                     glib::ParamSpecString::builder("center-stage-mode")
                         .default_value(Some(DEFAULT_MODE))
                         .build(),
+                    glib::ParamSpecBoolean::builder("studio-light-enabled").build(),
+                    glib::ParamSpecFloat::builder("studio-light-brightness")
+                        .minimum(-1.0)
+                        .maximum(1.0)
+                        .default_value(0.0)
+                        .build(),
+                    glib::ParamSpecFloat::builder("studio-light-contrast")
+                        .minimum(0.0)
+                        .maximum(2.0)
+                        .default_value(1.0)
+                        .build(),
                 ]
             });
             PROPERTIES.as_ref()
@@ -274,6 +308,9 @@ mod imp {
                         .unwrap()
                         .unwrap_or_else(|| DEFAULT_MODE.into());
                 }
+                "studio-light-enabled" => state.settings.studio_enabled = value.get().unwrap(),
+                "studio-light-brightness" => state.settings.studio_brightness = value.get().unwrap(),
+                "studio-light-contrast" => state.settings.studio_contrast = value.get().unwrap(),
                 _ => unimplemented!(),
             }
             let active = state.settings.active();
@@ -292,6 +329,9 @@ mod imp {
                 "center-stage-enabled" => s.cs_enabled.to_value(),
                 "center-stage-zoom" => s.cs_zoom.to_value(),
                 "center-stage-mode" => s.cs_mode.to_value(),
+                "studio-light-enabled" => s.studio_enabled.to_value(),
+                "studio-light-brightness" => s.studio_brightness.to_value(),
+                "studio-light-contrast" => s.studio_contrast.to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -395,13 +435,13 @@ mod imp {
             let cs_active = state.settings.cs_enabled && state.settings.cs_zoom != "off";
             if cs_active {
                 // Center stage owns the canvas: framing is decided on the full
-                // frame, but blur/bg-replace then run only on the cropped ROI —
-                // the only pixels that survive the zoom — instead of segmenting
+                // frame, but the masked effects then run only on the cropped ROI
+                // — the only pixels that survive the zoom — instead of segmenting
                 // and compositing the whole frame and discarding the border.
                 center_stage(&mut state, &mut img, w, h);
-            } else if state.settings.needs_composite() {
-                // No crop: blur / bg-replace over the full frame.
-                full_frame_composite(&mut state, &mut img, w, h);
+            } else if state.settings.needs_mask() {
+                // No crop: studio light / blur / bg-replace over the full frame.
+                masked_effects(&mut state, &mut img, w, h, false);
             }
 
             unpack(&img, plane, w, h, stride);
@@ -409,26 +449,42 @@ mod imp {
         }
     }
 
-    /// Full-frame portrait blur / background replace (center stage off).
-    fn full_frame_composite(state: &mut State, img: &mut [u8], w: usize, h: usize) {
-        ensure_mask(state, img, w, h, w * 4, false);
+    /// Run every mask-gated effect over a tight RGBA buffer: segment **once**,
+    /// then (in order) studio-light the person, and blur / bg-replace the
+    /// background. `is_roi` selects the mask coordinate space (full vs crop ROI).
+    fn masked_effects(state: &mut State, img: &mut [u8], w: usize, h: usize, is_roi: bool) {
+        ensure_mask(state, img, w, h, w * 4, is_roi);
         if state.settings.bg_enabled {
             ensure_bg(state, w, h);
         }
         // Borrow split: take mask out so we can also touch state.bg.
         if let Some(mask) = state.mask.take() {
-            let bg_buf = if state.settings.bg_enabled {
-                background_buffer(state, w, h)
-            } else {
-                Some(box_blur(
+            // Studio light first, so the lit subject is what blur/bg-replace
+            // then composites over the (untouched-exposure) background.
+            if state.settings.studio_enabled {
+                apply_studio(
                     img,
+                    &mask,
                     w,
                     h,
-                    blur_radius(state.settings.blur_strength),
-                ))
-            };
-            if let Some(bg) = bg_buf {
-                composite(img, &bg, &mask, w, h);
+                    state.settings.studio_brightness,
+                    state.settings.studio_contrast,
+                );
+            }
+            if state.settings.needs_composite() {
+                let bg_buf = if state.settings.bg_enabled {
+                    background_buffer(state, w, h)
+                } else {
+                    Some(box_blur(
+                        img,
+                        w,
+                        h,
+                        blur_radius(state.settings.blur_strength),
+                    ))
+                };
+                if let Some(bg) = bg_buf {
+                    composite(img, &bg, &mask, w, h);
+                }
             }
             state.mask = Some(mask);
         }
@@ -465,40 +521,21 @@ mod imp {
         crop.cy += (t.cy - crop.cy) * CS_ALPHA;
         let crop = *crop;
 
-        if !state.settings.needs_composite() {
+        if !state.settings.needs_mask() {
             // Crop + zoom only: a single full-frame resample.
             resample_crop(img, w, h, crop);
             return;
         }
 
-        // Extract the ROI, composite on it (smaller area than the full frame),
-        // then upscale it back to the output resolution.
+        // Extract the ROI, run the masked effects on it (smaller area than the
+        // full frame), then upscale it back to the output resolution.
         let (mut roi, rw, rh) = extract_roi(img, w, h, crop);
         if rw == w && rh == h {
-            // No zoom (full-frame ROI): composite in place, no upscale needed.
-            full_frame_composite(state, img, w, h);
+            // No zoom (full-frame ROI): work in place, no upscale needed.
+            masked_effects(state, img, w, h, false);
             return;
         }
-        ensure_mask(state, &roi, rw, rh, rw * 4, true);
-        if state.settings.bg_enabled {
-            ensure_bg(state, rw, rh);
-        }
-        if let Some(mask) = state.mask.take() {
-            let bg_buf = if state.settings.bg_enabled {
-                background_buffer(state, rw, rh)
-            } else {
-                Some(box_blur(
-                    &roi,
-                    rw,
-                    rh,
-                    blur_radius(state.settings.blur_strength),
-                ))
-            };
-            if let Some(bg) = bg_buf {
-                composite(&mut roi, &bg, &mask, rw, rh);
-            }
-            state.mask = Some(mask);
-        }
+        masked_effects(state, &mut roi, rw, rh, true);
         upscale_roi(img, w, h, &roi, rw, rh);
     }
 
@@ -655,6 +692,31 @@ mod imp {
         let row = w * 4;
         for y in 0..h {
             plane[y * stride..y * stride + row].copy_from_slice(&img[y * row..y * row + row]);
+        }
+    }
+
+    /// Studio Light: a `videobalance`-style brightness/contrast lift applied
+    /// only to the person, blended by the mask so the background keeps its
+    /// original exposure. Per channel, on normalized values:
+    /// `adjusted = (p − 0.5)·contrast + 0.5 + brightness`, then
+    /// `out = lerp(p, adjusted, mask)`.
+    fn apply_studio(img: &mut [u8], mask: &Mask, w: usize, h: usize, brightness: f32, contrast: f32) {
+        for y in 0..h {
+            let v = (y as f32 + 0.5) / h as f32;
+            for x in 0..w {
+                let u = (x as f32 + 0.5) / w as f32;
+                let m = mask.sample(u, v).clamp(0.0, 1.0);
+                if m <= 0.0 {
+                    continue;
+                }
+                let i = (y * w + x) * 4;
+                for c in 0..3 {
+                    let p = img[i + c] as f32 / 255.0;
+                    let adj = ((p - 0.5) * contrast + 0.5 + brightness).clamp(0.0, 1.0);
+                    img[i + c] = ((p + (adj - p) * m) * 255.0).round() as u8;
+                }
+                // leave alpha as-is
+            }
         }
     }
 

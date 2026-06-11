@@ -6,15 +6,16 @@ use shared::config::AppState;
 
 /// Build the effects bin:
 ///
-/// `queue → videobalance(studio light) → videoconvert → RGBA caps → oe_effects
-///  → videoconvert → videoscale`
+/// `queue → videoconvert → RGBA caps → oe_effects → videoconvert → videoscale`
 ///
-/// Studio Light is a cheap brightness/contrast lift handled by the stock
-/// `videobalance`. The ML effects (portrait blur, background replace, center
-/// stage) all live in the single `oe_effects` CPU filter, which runs on RGBA
-/// system memory — hence the `videoconvert` + RGBA capsfilter wrapping it. The
-/// trailing `videoconvert`/`videoscale` convert back toward the I420 output the
-/// appsink and provide node expect.
+/// All effects (studio light, portrait blur, background replace, center stage)
+/// live in the single `oe_effects` CPU filter, which runs on RGBA system memory
+/// — hence the `videoconvert` + RGBA capsfilter wrapping it. Studio Light used
+/// to be a stock `videobalance`, but it now runs inside `oe_effects` so the
+/// brightness/contrast lift can be masked to the person via selfie segmentation
+/// (sharing the same mask as portrait blur / bg replace). The trailing
+/// `videoconvert`/`videoscale` convert back toward the I420 output the appsink
+/// and provide node expect.
 pub fn build_effects_bin(app: &AppState) -> Result<gst::Bin> {
     let bin = gst::Bin::new();
 
@@ -23,10 +24,6 @@ pub fn build_effects_bin(app: &AppState) -> Result<gst::Bin> {
         .property_from_str("leaky", "downstream")
         .build()
         .context("create queue")?;
-    let balance = gst::ElementFactory::make("videobalance")
-        .name("oe_videobalance")
-        .build()
-        .context("create videobalance")?;
     let convert_in = gst::ElementFactory::make("videoconvert")
         .build()
         .context("create videoconvert (to RGBA)")?;
@@ -50,11 +47,10 @@ pub fn build_effects_bin(app: &AppState) -> Result<gst::Bin> {
         .build()
         .context("create videoscale")?;
 
-    apply_app_state_to_elements(&balance, &effects, app);
+    apply_app_state_to_elements(&effects, app);
 
     bin.add_many([
         &queue,
-        &balance,
         &convert_in,
         &rgba_caps,
         &effects,
@@ -63,7 +59,6 @@ pub fn build_effects_bin(app: &AppState) -> Result<gst::Bin> {
     ])?;
     gst::Element::link_many([
         &queue,
-        &balance,
         &convert_in,
         &rgba_caps,
         &effects,
@@ -79,9 +74,11 @@ pub fn build_effects_bin(app: &AppState) -> Result<gst::Bin> {
     Ok(bin)
 }
 
-/// Push the current config into the live pipeline elements: Studio Light onto
-/// `videobalance`, and the three ML effects onto `oe_effects`.
-pub fn apply_app_state_to_elements(balance: &gst::Element, effects: &gst::Element, app: &AppState) {
+/// Push the current config into the live `oe_effects` element. Studio Light's
+/// brightness/contrast are computed here (the same mapping the old
+/// `videobalance` used) and pushed as `oe_effects` properties, where the lift
+/// is masked to the person.
+pub fn apply_app_state_to_elements(effects: &gst::Element, app: &AppState) {
     let studio = &app.effects.studio_light;
     let intensity = if studio.enabled {
         studio.intensity as f64 / 100.0
@@ -91,8 +88,9 @@ pub fn apply_app_state_to_elements(balance: &gst::Element, effects: &gst::Elemen
     let brightness = (studio.brightness as f64 / 100.0) * intensity;
     let contrast_delta = (studio.contrast as f64 - 50.0) / 50.0;
     let contrast = 1.0 + contrast_delta * intensity;
-    balance.set_property("brightness", brightness.clamp(-1.0, 1.0));
-    balance.set_property("contrast", contrast.clamp(0.0, 2.0));
+    effects.set_property("studio-light-enabled", studio.enabled);
+    effects.set_property("studio-light-brightness", brightness.clamp(-1.0, 1.0) as f32);
+    effects.set_property("studio-light-contrast", contrast.clamp(0.0, 2.0) as f32);
 
     let blur = &app.effects.portrait_blur;
     effects.set_property("portrait-blur-enabled", blur.enabled);
@@ -147,13 +145,13 @@ mod tests {
     fn app_state_maps_to_elements() {
         gst::init().unwrap();
         super::super::filters::register().unwrap();
-        let balance = gst::ElementFactory::make("videobalance").build().unwrap();
         let effects = gst::ElementFactory::make("oe_effects").build().unwrap();
         let mut app = AppState::default();
 
-        apply_app_state_to_elements(&balance, &effects, &app);
-        assert_eq!(balance.property::<f64>("brightness"), 0.0);
-        assert_eq!(balance.property::<f64>("contrast"), 1.0);
+        apply_app_state_to_elements(&effects, &app);
+        assert!(!effects.property::<bool>("studio-light-enabled"));
+        assert_eq!(effects.property::<f32>("studio-light-brightness"), 0.0);
+        assert_eq!(effects.property::<f32>("studio-light-contrast"), 1.0);
         assert!(!effects.property::<bool>("portrait-blur-enabled"));
         assert!(!effects.property::<bool>("center-stage-enabled"));
 
@@ -168,9 +166,10 @@ mod tests {
         app.effects.bg_replace.enabled = true;
         app.effects.bg_replace.background = "#102030".into();
 
-        apply_app_state_to_elements(&balance, &effects, &app);
-        assert_eq!(balance.property::<f64>("brightness"), 0.4);
-        assert_eq!(balance.property::<f64>("contrast"), 1.5);
+        apply_app_state_to_elements(&effects, &app);
+        assert!(effects.property::<bool>("studio-light-enabled"));
+        assert_eq!(effects.property::<f32>("studio-light-brightness"), 0.4);
+        assert_eq!(effects.property::<f32>("studio-light-contrast"), 1.5);
         assert!(effects.property::<bool>("center-stage-enabled"));
         assert_eq!(effects.property::<String>("center-stage-zoom"), "tight");
         assert!(effects.property::<bool>("portrait-blur-enabled"));
