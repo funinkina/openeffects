@@ -118,8 +118,8 @@ dist/openeffectsd-<ver>-1-x86_64.pkg.tar.zst  ...ctl...  ...openeffects...
 | Path | Source |
 | --- | --- |
 | `/usr/bin/openeffects` | `target/release/openeffects` |
-| `/usr/share/icons/hicolor/scalable/apps/openeffects.svg` | `data/icons/openeffects.svg` |
-| `/usr/share/applications/openeffects.desktop` | `data/applications/openeffects.desktop` |
+| `/usr/share/icons/hicolor/scalable/apps/org.openeffects.OpenEffects.svg` | `data/icons/org.openeffects.OpenEffects.svg` |
+| `/usr/share/applications/org.openeffects.OpenEffects.desktop` | `data/applications/org.openeffects.OpenEffects.desktop` |
 
 The GUI package's deb/rpm run `packaging/postinstall.sh` / `postremove.sh` (icon cache +
 `update-desktop-database`). Arch handles those via pacman hooks — no scriptlet.

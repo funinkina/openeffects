@@ -39,12 +39,12 @@ configure_file(
 )
 
 install_data(
-  'data/icons/openeffects.svg',
+  'data/icons/org.openeffects.OpenEffects.svg',
   install_dir: datadir / 'icons/hicolor/scalable/apps',
 )
 
 install_data(
-  'data/applications/openeffects.desktop',
+  'data/applications/org.openeffects.OpenEffects.desktop',
   install_dir: datadir / 'applications',
 )
 

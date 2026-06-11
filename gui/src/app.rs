@@ -5,7 +5,7 @@
 //! the right of the header bar; daemon connection trouble surfaces in an
 //! `AdwBanner`. Camera selection lives in the Preferences dialog.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -144,39 +144,36 @@ pub fn build_window(
 
     // ── Window close → optionally stop the daemon ────────────────────────────
     // Default behaviour (boot-autostart off, keep-running off): closing the
-    // window quits the daemon so the camera is released. We hold the app (the
-    // guard keeps the process alive past the last window) and defer the actual
-    // close until the Quit call has been delivered, signalled back as
-    // `UiUpdate::DaemonQuit`; dropping the guard then lets the app exit.
-    let hold_guard: Rc<RefCell<Option<gio::ApplicationHoldGuard>>> = Rc::new(RefCell::new(None));
+    // window quits the daemon so the camera is released. We keep the window
+    // (and therefore the app) alive via Propagation::Stop until the client
+    // confirms the Quit call landed (`UiUpdate::DaemonQuit`), then quit the app.
+    // Returning here without waiting would let the app exit and kill the client
+    // thread before the Quit was delivered.
+    let quitting = Rc::new(Cell::new(false));
     {
-        let app = app.clone();
         let cmd_tx = cmd_tx.clone();
         let gui_config = Rc::clone(&gui_config);
-        let hold_guard = Rc::clone(&hold_guard);
+        let quitting = Rc::clone(&quitting);
         window.connect_close_request(move |_| {
-            // Already quitting (guard held): allow the deferred close.
-            if hold_guard.borrow().is_some() {
+            // Second close while the Quit is in flight: just let it close.
+            if quitting.get() {
                 return glib::Propagation::Proceed;
             }
             let keep_running = gui_config.borrow().keep_running_in_background;
             if keep_running || shared::systemd::is_enabled() {
                 return glib::Propagation::Proceed;
             }
-            *hold_guard.borrow_mut() = Some(app.hold());
+            quitting.set(true);
             let _ = cmd_tx.send(GuiCommand::QuitDaemon);
             glib::Propagation::Stop
         });
     }
 
-    let loop_window = window.clone();
-    let loop_hold_guard = Rc::clone(&hold_guard);
+    let loop_app = app.clone();
     glib::MainContext::default().spawn_local(async move {
         while let Ok(update) = update_rx.recv().await {
             if matches!(update, UiUpdate::DaemonQuit) {
-                loop_window.destroy();
-                // Drop the hold guard → app exits once the window is gone.
-                loop_hold_guard.borrow_mut().take();
+                loop_app.quit();
                 continue;
             }
             apply_update(&widgets, update);

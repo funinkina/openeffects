@@ -84,14 +84,22 @@ async fn run(
     update_tx: async_channel::Sender<UiUpdate>,
 ) {
     loop {
-        if let Err(err) = run_once(&mut cmd_rx, &update_tx).await {
-            tracing::warn!(%err, "lost connection to openeffectsd, retrying");
-            let _ = update_tx.send(UiUpdate::Disconnected).await;
-            tokio::time::sleep(Duration::from_secs(2)).await;
+        match run_once(&mut cmd_rx, &update_tx).await {
+            // Quit requested (or the GUI dropped the command channel): stop the
+            // client without reconnecting. Reconnecting here would re-activate
+            // the daemon we just asked to quit (D-Bus / systemd activation).
+            Ok(()) => break,
+            Err(err) => {
+                tracing::warn!(%err, "lost connection to openeffectsd, retrying");
+                let _ = update_tx.send(UiUpdate::Disconnected).await;
+                tokio::time::sleep(Duration::from_secs(2)).await;
+            }
         }
     }
 }
 
+/// Returns `Ok(())` when the client should stop for good (quit requested);
+/// returns `Err` on a lost connection so the caller can reconnect.
 async fn run_once(
     cmd_rx: &mut mpsc::UnboundedReceiver<GuiCommand>,
     update_tx: &async_channel::Sender<UiUpdate>,
@@ -152,6 +160,9 @@ async fn run_once(
                             tracing::warn!(%err, "Quit failed (daemon may already be gone)");
                         }
                         update_tx.send(UiUpdate::DaemonQuit).await.ok();
+                        // Stop the client so the reconnect loop doesn't bring the
+                        // daemon back via D-Bus activation.
+                        return Ok(());
                     }
                     None => return Ok(()),
                 }
