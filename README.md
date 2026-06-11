@@ -2,6 +2,13 @@
 
 # OpenEffects (Beta)
 
+[![Latest Release](https://img.shields.io/github/v/release/funinkina/openeffects?style=flat-square)](https://github.com/funinkina/openeffects/releases/latest)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
+[![Language](https://img.shields.io/badge/language-Rust-orange?style=flat-square)](https://www.rust-lang.org/)
+[![Platform](https://img.shields.io/badge/platform-Linux-important?style=flat-square)](https://www.linux.org/)
+[![GitHub Stars](https://img.shields.io/github/stars/funinkina/openeffects?style=flat-square)](https://github.com/funinkina/openeffects/stargazers)
+[![GitHub Issues](https://img.shields.io/github/issues/funinkina/openeffects?style=flat-square)](https://github.com/funinkina/openeffects/issues)
+
 OpenEffects is a Linux-native, GPU-accelerated webcam effects engine. It brings advanced camera features like Center Stage, Portrait blur, Background Replacement, and gesture-triggered Reactions to any Wayland Linux desktop. It works transparently with any app that consumes a PipeWire camera node or `/dev/video*` device (Zoom, OBS, WebRTC, etc.).
 
 ## Features
