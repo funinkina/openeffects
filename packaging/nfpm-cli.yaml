@@ -1,0 +1,35 @@
+# openeffectsctl — the command-line client. Stateless D-Bus consumer; requires
+# the daemon (openeffectsd) to do anything. The openeffectsd dependency resolves
+# automatically whether installing from local files (pass both) or a repo.
+#
+#   VERSION=0.1.0 ARCH=amd64 nfpm pkg -f packaging/nfpm-cli.yaml -p deb -t dist/
+
+name: openeffectsctl
+arch: ${ARCH}
+version: ${VERSION}
+maintainer: Aryan <hello@funinkina.co.in>
+description: |
+  Command-line control client for the OpenEffects daemon (openeffectsd):
+  start/stop the virtual camera, toggle effects, select the camera.
+homepage: https://github.com/funinkina/openeffects
+license: GPL-3.0-or-later
+section: video
+priority: optional
+
+contents:
+  - src: target/release/openeffectsctl
+    dst: /usr/bin/openeffectsctl
+
+overrides:
+  deb:
+    depends:
+      - openeffectsd
+      - dbus
+  rpm:
+    depends:
+      - openeffectsd
+      - dbus
+  archlinux:
+    depends:
+      - openeffectsd
+      - dbus

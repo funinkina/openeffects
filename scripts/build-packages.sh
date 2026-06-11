@@ -48,7 +48,7 @@ cargo build --release --workspace
 # package would be incomplete — fail loudly so we can add the .so to contents.
 if ldd target/release/openeffectsd 2>/dev/null | grep -qi 'onnxruntime'; then
     echo "error: openeffectsd dynamically links libonnxruntime.so." >&2
-    echo "       Bundle it into packaging/nfpm.yaml contents before shipping." >&2
+    echo "       Bundle it into packaging/nfpm-daemon.yaml contents before shipping." >&2
     ldd target/release/openeffectsd | grep -i onnxruntime >&2
     exit 1
 fi
@@ -65,12 +65,17 @@ sed "s|@bindir@|$bindir|g" data/systemd/openeffectsd.service.in \
 echo "==> Staging models into dist/models (sha256-verified)"
 OE_MODELS_DEST="$dist/models" ./scripts/fetch-models.sh
 
-for fmt in "${formats[@]}"; do
-    echo "==> nfpm pkg -p $fmt"
-    VERSION="$VERSION" ARCH="$ARCH" nfpm pkg \
-        --config packaging/nfpm.yaml \
-        --packager "$fmt" \
-        --target "$dist/"
+# Three independent packages: the daemon, plus the CLI and GUI clients that
+# both depend on it. Pack each config for each requested format.
+configs=(daemon cli gui)
+for cfg in "${configs[@]}"; do
+    for fmt in "${formats[@]}"; do
+        echo "==> nfpm pkg ($cfg) -p $fmt"
+        VERSION="$VERSION" ARCH="$ARCH" nfpm pkg \
+            --config "packaging/nfpm-$cfg.yaml" \
+            --packager "$fmt" \
+            --target "$dist/"
+    done
 done
 
 echo

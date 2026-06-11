@@ -4,6 +4,24 @@ How OpenEffects is built into native packages (`.deb`, `.rpm`, Arch `.pkg.tar.zs
 how ML models and background images become available after install, and how to cut
 a release.
 
+## Package layout
+
+OpenEffects ships as **three** packages so users install only what they need:
+
+| Package | Contents | Depends on |
+| --- | --- | --- |
+| `openeffectsd` | daemon binary, D-Bus service + systemd user unit, bundled ML models | pipewire/gstreamer stack, dbus |
+| `openeffectsctl` | CLI binary | **`openeffectsd`**, dbus |
+| `openeffects` | GTK4/libadwaita GUI binary, `.desktop` + icon | **`openeffectsd`**, gtk4, libadwaita |
+
+The daemon is the only process that touches the pipeline, so both clients declare a
+hard dependency on it. The dependency is unversioned (`Depends: openeffectsd`) and is
+resolved automatically whether installing from local package files (pass them on the
+same command line) or from a configured repository — see [Install](#install-the-built-packages).
+
+Each package is built from its own nfpm config: `packaging/nfpm-daemon.yaml`,
+`nfpm-cli.yaml`, `nfpm-gui.yaml`.
+
 ## How runtime data resolves after install
 
 You do **not** package these by hand — they resolve automatically:
@@ -42,7 +60,8 @@ linked** — the resulting binaries carry no `libonnxruntime.so` runtime depende
 dynamically the build fails loudly so the `.so` can be added to `nfpm.yaml` contents.
 
 Distro **runtime** deps (what users need installed) are declared per-packager in
-`packaging/nfpm.yaml` under `overrides:` (different package names per distro).
+the three `packaging/nfpm-*.yaml` configs under `overrides:` (different package names
+per distro).
 
 ## Install nfpm
 
@@ -68,43 +87,74 @@ What it does:
    into `dist/` with `@bindir@ → /usr/bin`.
 5. Stage models: `OE_MODELS_DEST=dist/models ./scripts/fetch-models.sh`
    (downloads + sha256-verifies into the package staging tree).
-6. `nfpm pkg` for each format → `dist/`.
+6. `nfpm pkg` for each of the 3 configs × each format → `dist/`.
 
-Output:
+Output (3 packages × N formats):
 
 ```
-dist/openeffects_<ver>_amd64.deb
-dist/openeffects-<ver>-1.x86_64.rpm
-dist/openeffects-<ver>-1-x86_64.pkg.tar.zst
+dist/openeffectsd_<ver>_amd64.deb     openeffectsctl_<ver>_amd64.deb     openeffects_<ver>_amd64.deb
+dist/openeffectsd-<ver>-1.x86_64.rpm  openeffectsctl-<ver>-1.x86_64.rpm  openeffects-<ver>-1.x86_64.rpm
+dist/openeffectsd-<ver>-1-x86_64.pkg.tar.zst  ...ctl...  ...openeffects...
 ```
 
 `dist/` is gitignored.
 
-### What lands in the package
+### What lands in each package
 
-| Path                                                        | Source                                  |
-| ----------------------------------------------------------- | --------------------------------------- |
-| `/usr/bin/{openeffectsd,openeffectsctl,openeffects}`        | `target/release/*`                      |
-| `/usr/share/dbus-1/interfaces/org.openeffects.*.xml`        | `data/dbus/*.xml`                       |
-| `/usr/share/dbus-1/services/org.openeffects.Daemon.service` | rendered template                       |
-| `/usr/lib/systemd/user/openeffectsd.service`                | rendered template                       |
-| `/usr/share/icons/hicolor/scalable/apps/openeffects.svg`    | `data/icons/openeffects.svg`            |
-| `/usr/share/applications/openeffects.desktop`               | `data/applications/openeffects.desktop` |
-| `/usr/share/openeffects/models/<id>/`                       | `dist/models/` (downloaded + verified)  |
+**`openeffectsd`** (daemon + everything the pipeline needs):
 
-deb/rpm run `packaging/postinstall.sh` / `postremove.sh` (icon cache +
+| Path | Source |
+| --- | --- |
+| `/usr/bin/openeffectsd` | `target/release/openeffectsd` |
+| `/usr/share/dbus-1/interfaces/org.openeffects.*.xml` | `data/dbus/*.xml` |
+| `/usr/share/dbus-1/services/org.openeffects.Daemon.service` | rendered template |
+| `/usr/lib/systemd/user/openeffectsd.service` | rendered template |
+| `/usr/share/openeffects/models/<id>/` | `dist/models/` (downloaded + verified) |
+
+**`openeffectsctl`** (CLI): `/usr/bin/openeffectsctl`.
+
+**`openeffects`** (GUI):
+
+| Path | Source |
+| --- | --- |
+| `/usr/bin/openeffects` | `target/release/openeffects` |
+| `/usr/share/icons/hicolor/scalable/apps/openeffects.svg` | `data/icons/openeffects.svg` |
+| `/usr/share/applications/openeffects.desktop` | `data/applications/openeffects.desktop` |
+
+The GUI package's deb/rpm run `packaging/postinstall.sh` / `postremove.sh` (icon cache +
 `update-desktop-database`). Arch handles those via pacman hooks — no scriptlet.
 
 ## Install the built packages
 
+The CLI and GUI packages declare `Depends: openeffectsd`. There are two ways the
+dependency is satisfied:
+
+**From a repository** — the daemon is in a configured repo, so installing only a
+client pulls it in automatically:
+
 ```bash
-# Debian/Ubuntu
-sudo apt install ./dist/openeffects_<ver>_amd64.deb
-# Fedora/RHEL
-sudo dnf install ./dist/openeffects-<ver>-1.x86_64.rpm
-# Arch
-sudo pacman -U dist/openeffects-<ver>-1-x86_64.pkg.tar.zst
+sudo apt install openeffects          # Debian/Ubuntu — pulls openeffectsd
+sudo dnf install openeffects          # Fedora/RHEL
+sudo pacman -S openeffects            # Arch
 ```
+
+**From local package files** — pass the daemon file on the same command line so the
+resolver sees it. The package managers' file-install mode resolves inter-file deps:
+
+```bash
+# Debian/Ubuntu (use apt, not `dpkg -i` — dpkg does NOT resolve deps)
+sudo apt install ./dist/openeffectsd_<ver>_amd64.deb ./dist/openeffects_<ver>_amd64.deb
+
+# Fedora/RHEL
+sudo dnf install ./dist/openeffectsd-<ver>-1.x86_64.rpm ./dist/openeffects-<ver>-1.x86_64.rpm
+
+# Arch (pacman -U resolves deps among the files given, or from the sync db)
+sudo pacman -U dist/openeffectsd-<ver>-1-x86_64.pkg.tar.zst dist/openeffects-<ver>-1-x86_64.pkg.tar.zst
+```
+
+Install just `openeffectsd` for a headless/CLI-only setup, or add `openeffectsctl`
+the same way. Installing a client without the daemon (e.g. `dpkg -i openeffects.deb`
+alone) fails the dependency check — that's the resolver doing its job.
 
 Then enable the daemon (D-Bus-activated; the user unit auto-starts it on demand):
 
@@ -151,13 +201,13 @@ meson setup build && meson install -C build   # binaries + dbus/systemd/desktop/
 ## Verifying a package without installing
 
 ```bash
-# Arch / zst
-tar tf dist/*.pkg.tar.zst | grep usr/
-tar xOf dist/*.pkg.tar.zst .PKGINFO | grep depend
+# Arch / zst — inspect one package (e.g. the GUI, to confirm it depends on openeffectsd)
+tar tf dist/openeffects-*.pkg.tar.zst | grep usr/
+tar xOf dist/openeffects-*.pkg.tar.zst .PKGINFO | grep depend
 
 # deb
-ar p dist/*.deb data.tar.gz | bsdtar tf -                 # file list
-ar p dist/*.deb control.tar.gz | bsdtar xOf - ./control   # deps + metadata
+ar p dist/openeffects_*.deb data.tar.gz | bsdtar tf -                 # file list
+ar p dist/openeffects_*.deb control.tar.gz | bsdtar xOf - ./control   # deps + metadata
 ```
 
 ## Adding architectures

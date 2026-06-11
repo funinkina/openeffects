@@ -1,0 +1,51 @@
+# openeffects — the GTK4/libadwaita GUI client. Stateless D-Bus consumer;
+# requires the daemon (openeffectsd). The openeffectsd dependency resolves
+# automatically whether installing from local files (pass both) or a repo.
+#
+#   VERSION=0.1.0 ARCH=amd64 nfpm pkg -f packaging/nfpm-gui.yaml -p deb -t dist/
+
+name: openeffects
+arch: ${ARCH}
+version: ${VERSION}
+maintainer: Aryan <hello@funinkina.co.in>
+description: |
+  GTK4/libadwaita control surface for the OpenEffects daemon (openeffectsd):
+  manage webcam effects, backgrounds, camera selection and the ML model library.
+homepage: https://github.com/funinkina/openeffects
+license: GPL-3.0-or-later
+section: video
+priority: optional
+
+contents:
+  - src: target/release/openeffects
+    dst: /usr/bin/openeffects
+
+  # App icon + desktop entry
+  - src: data/icons/openeffects.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/openeffects.svg
+  - src: data/applications/openeffects.desktop
+    dst: /usr/share/applications/openeffects.desktop
+
+overrides:
+  deb:
+    depends:
+      - openeffectsd
+      - libgtk-4-1
+      - libadwaita-1-0
+    scripts:
+      postinstall: packaging/postinstall.sh
+      postremove: packaging/postremove.sh
+  rpm:
+    depends:
+      - openeffectsd
+      - gtk4
+      - libadwaita
+    scripts:
+      postinstall: packaging/postinstall.sh
+      postremove: packaging/postremove.sh
+  archlinux:
+    depends:
+      - openeffectsd
+      - gtk4
+      - libadwaita
+    # Arch updates the icon cache / desktop database via pacman hooks.
