@@ -5,10 +5,12 @@
 //!
 //! The mode is *virtual*: `bg_replace.enabled` means Replace, otherwise
 //! Blur, and changing it just toggles those two effects' `enabled` flags
-//! (mutually exclusive). Replace mode offers an image picker plus a row of
-//! solid-color swatches with a custom-color button.
+//! (mutually exclusive). Replace mode offers a row of built-in image
+//! presets (plus a "choose your own" button) and a row of solid-color
+//! swatches with a custom-color button.
 
 use std::cell::Cell;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 use adw::glib;
@@ -17,11 +19,19 @@ use gtk::gdk::RGBA;
 use gtk::gio;
 use shared::dbus::{value_as_bool, value_as_string, value_as_u32, VariantMap};
 
-use crate::constants::{BG_BLUR, BG_MODES, BG_MODE_ICONS, BG_PRESETS, BG_REPLACE, BLUR_LEVELS};
+use crate::constants::{
+    BG_BLUR, BG_IMAGE_PRESETS, BG_MODES, BG_MODE_ICONS, BG_PRESETS, BG_REPLACE, BLUR_LEVELS,
+};
 use crate::dbus_client::{CmdTx, GuiCommand};
 use crate::widgets::{pref_group, toggle_group, toggle_group_stacked, ToggleCtl};
 
 const CUSTOM_SWATCH_CLASS: &str = "oe-custom-swatch";
+const CUSTOM_IMAGE_CLASS: &str = "oe-custom-image";
+
+/// Size of the background-image preset thumbnails (bigger than the 32px
+/// color swatches).
+const IMAGE_THUMB_WIDTH: i32 = 84;
+const IMAGE_THUMB_HEIGHT: i32 = 52;
 
 /// Widgets the state-sync layer keeps in sync with the daemon.
 pub struct Widgets {
@@ -34,6 +44,8 @@ pub struct Widgets {
     /// Groups shown only in Replace mode (image picker + color swatches).
     replace_groups: Vec<adw::PreferencesGroup>,
     image_row: adw::ActionRow,
+    /// Built-in image backgrounds: on-disk path + their toggle button.
+    image_presets: Vec<(PathBuf, gtk::ToggleButton)>,
     swatches: Vec<gtk::ToggleButton>,
     custom_provider: gtk::CssProvider,
     /// Guards programmatic widget updates so they don't echo to the daemon.
@@ -118,19 +130,57 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     blur_group.add(&blur_strength.group);
     page.add(&blur_group);
 
-    // ── Replace: image picker ────────────────────────────────────────────────
-    let image_group = pref_group("Image", "Use any image file as your background");
-    let browse_row = adw::ActionRow::builder()
-        .title("Choose Image…")
-        .subtitle("Pick a JPEG or PNG file")
-        .activatable(true)
+    // Image presets and color swatches share one radio group, so picking
+    // either kind of background visually deselects the other.
+    let mut group_leader: Option<gtk::ToggleButton> = None;
+
+    // ── Replace: image presets ───────────────────────────────────────────────
+    let image_group = pref_group("Image", "Use a built-in image or pick your own");
+    let image_box = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(8)
+        .halign(gtk::Align::Center)
+        .margin_top(6)
+        .margin_bottom(6)
         .build();
-    browse_row.add_suffix(&gtk::Image::from_icon_name("document-open-symbolic"));
+
+    let mut image_presets = Vec::new();
+    for (label, path) in ensure_preset_images() {
+        let button = image_preset_button(label, &path);
+        match &group_leader {
+            Some(leader) => button.set_group(Some(leader)),
+            None => group_leader = Some(button.clone()),
+        }
+        {
+            let cmd_tx = cmd_tx.clone();
+            let applying = applying.clone();
+            let path_str = path.to_string_lossy().into_owned();
+            button.connect_toggled(move |b| {
+                if applying.get() || !b.is_active() {
+                    return;
+                }
+                set_background(&cmd_tx, &path_str);
+            });
+        }
+        image_box.append(&button);
+        image_presets.push((path, button));
+    }
+
+    // "Add your own" button (not part of the radio group): always opens a
+    // file picker.
+    let browse = gtk::Button::builder()
+        .tooltip_text("Choose Image…")
+        .css_classes(["oe-swatch-btn", "flat"])
+        .build();
+    let browse_child = image_box_child(CUSTOM_IMAGE_CLASS);
+    browse_child.append(&plus_icon());
+    browse.set_child(Some(&browse_child));
     {
         let cmd_tx = cmd_tx.clone();
-        browse_row.connect_activated(move |row| open_image_dialog(row, &cmd_tx));
+        browse.connect_clicked(move |b| open_image_dialog(b, &cmd_tx));
     }
-    image_group.add(&browse_row);
+    image_box.append(&browse);
+    image_group.add(&image_box);
 
     let image_row = adw::ActionRow::builder()
         .title("No image selected")
@@ -151,7 +201,6 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
         .build();
 
     let mut swatches = Vec::new();
-    let mut group_leader: Option<gtk::ToggleButton> = None;
     for (i, (label, hex)) in BG_PRESETS.iter().enumerate() {
         let button = swatch_button(&format!("oe-swatch-{i}"), label);
         match &group_leader {
@@ -181,7 +230,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
         .css_classes(["oe-swatch-btn", "flat"])
         .build();
     let custom_child = swatch_box_child(CUSTOM_SWATCH_CLASS);
-    custom_child.append(&gtk::Image::from_icon_name("list-add-symbolic"));
+    custom_child.append(&plus_icon());
     custom.set_child(Some(&custom_child));
     {
         let cmd_tx = cmd_tx.clone();
@@ -201,6 +250,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
         blur_strength,
         replace_groups: vec![image_group, color_group],
         image_row,
+        image_presets,
         swatches,
         custom_provider,
         applying,
@@ -278,6 +328,9 @@ impl Widgets {
         for button in &self.swatches {
             button.set_active(false);
         }
+        for (_, button) in &self.image_presets {
+            button.set_active(false);
+        }
         if bg.starts_with('#') {
             self.image_row.set_visible(false);
             if let Some(idx) = BG_PRESETS.iter().position(|(_, h)| *h == bg) {
@@ -286,14 +339,23 @@ impl Widgets {
                 set_custom_color(&self.custom_provider, bg);
             }
         } else if !bg.is_empty() {
-            let path = std::path::Path::new(bg);
-            let name = path
-                .file_name()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_else(|| bg.to_string());
-            self.image_row.set_title(&name);
-            self.image_row.set_subtitle(bg);
-            self.image_row.set_visible(true);
+            if let Some((_, button)) = self
+                .image_presets
+                .iter()
+                .find(|(path, _)| path.to_str() == Some(bg))
+            {
+                button.set_active(true);
+                self.image_row.set_visible(false);
+            } else {
+                let path = std::path::Path::new(bg);
+                let name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| bg.to_string());
+                self.image_row.set_title(&name);
+                self.image_row.set_subtitle(bg);
+                self.image_row.set_visible(true);
+            }
         } else {
             self.image_row.set_visible(false);
         }
@@ -322,7 +384,7 @@ fn set_background(cmd_tx: &CmdTx, value: &str) {
     set_mode(cmd_tx, true);
 }
 
-fn open_image_dialog(row: &adw::ActionRow, cmd_tx: &CmdTx) {
+fn open_image_dialog(widget: &impl IsA<gtk::Widget>, cmd_tx: &CmdTx) {
     let dialog = gtk::FileDialog::builder()
         .title("Choose Background Image")
         .build();
@@ -334,7 +396,7 @@ fn open_image_dialog(row: &adw::ActionRow, cmd_tx: &CmdTx) {
     filters.append(&filter);
     dialog.set_filters(Some(&filters));
     let cmd_tx = cmd_tx.clone();
-    let parent = row.root().and_downcast::<gtk::Window>();
+    let parent = widget.root().and_downcast::<gtk::Window>();
     dialog.open(parent.as_ref(), gio::Cancellable::NONE, move |res| {
         if let Ok(file) = res {
             if let Some(path) = file.path() {
@@ -402,6 +464,67 @@ fn swatch_box_child(class: &str) -> gtk::Box {
         .build()
 }
 
+/// A "+"-style icon that fills and centers itself in its parent box,
+/// regardless of the box's own size. Used by the custom-color and
+/// custom-image buttons.
+fn plus_icon() -> gtk::Image {
+    let icon = gtk::Image::from_icon_name("list-add-symbolic");
+    icon.set_halign(gtk::Align::Center);
+    icon.set_valign(gtk::Align::Center);
+    icon.set_hexpand(true);
+    icon.set_vexpand(true);
+    icon
+}
+
+/// A toggle button showing a built-in background-image thumbnail.
+fn image_preset_button(label: &str, path: &std::path::Path) -> gtk::ToggleButton {
+    let button = gtk::ToggleButton::builder()
+        .tooltip_text(label)
+        .css_classes(["oe-swatch-btn", "flat"])
+        .build();
+    let picture = gtk::Picture::for_filename(path);
+    picture.set_content_fit(gtk::ContentFit::Cover);
+    picture.set_can_shrink(true);
+    picture.set_width_request(IMAGE_THUMB_WIDTH);
+    picture.set_height_request(IMAGE_THUMB_HEIGHT);
+    picture.add_css_class("oe-bg-thumb");
+    button.set_child(Some(&picture));
+    button
+}
+
+/// Thumbnail-sized box for the "add your own image" button.
+fn image_box_child(class: &str) -> gtk::Box {
+    gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .halign(gtk::Align::Center)
+        .valign(gtk::Align::Center)
+        .width_request(IMAGE_THUMB_WIDTH)
+        .height_request(IMAGE_THUMB_HEIGHT)
+        .css_classes(["oe-bg-thumb", class])
+        .build()
+}
+
+/// Write the bundled preset background images to the user's data dir (if not
+/// already present) and return their on-disk paths. The daemon loads
+/// `bg_replace.background` as a filesystem path, so the presets need to live
+/// somewhere stable on disk rather than just in memory.
+fn ensure_preset_images() -> Vec<(&'static str, PathBuf)> {
+    let dir = dirs::data_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("openeffects/backgrounds");
+    let _ = std::fs::create_dir_all(&dir);
+    BG_IMAGE_PRESETS
+        .iter()
+        .map(|(label, filename, bytes)| {
+            let path = dir.join(filename);
+            if !path.exists() {
+                let _ = std::fs::write(&path, bytes);
+            }
+            (*label, path)
+        })
+        .collect()
+}
+
 fn set_custom_color(provider: &gtk::CssProvider, hex: &str) {
     provider.load_from_string(&format!(
         ".{CUSTOM_SWATCH_CLASS} {{ background-color: {hex}; }}"
@@ -412,7 +535,10 @@ fn set_custom_color(provider: &gtk::CssProvider, hex: &str) {
 fn install_swatch_css() {
     let mut css = String::from(
         ".oe-swatch { border-radius: 8px; border: 1px solid alpha(currentColor, 0.2); } \
-         .oe-swatch-btn { padding: 4px; min-width: 0; min-height: 0; }",
+         .oe-swatch-btn { padding: 4px; min-width: 0; min-height: 0; } \
+         .oe-bg-thumb { border-radius: 10px; border: 1px solid alpha(currentColor, 0.2); \
+         overflow: hidden; } \
+         .oe-custom-image { background-color: alpha(currentColor, 0.08); }",
     );
     for (i, (_, hex)) in BG_PRESETS.iter().enumerate() {
         css.push_str(&format!(" .oe-swatch-{i} {{ background-color: {hex}; }}"));

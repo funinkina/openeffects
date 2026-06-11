@@ -109,7 +109,7 @@ pub fn build_window(
         breakpoint.add_setter(&switcher, "visible", Some(&false.to_value()));
         breakpoint.add_setter(&switcher_bar, "reveal", Some(&true.to_value()));
         // Narrow: overlay the preview pane instead of squeezing the page.
-        breakpoint.add_setter(&preview.split, "collapsed", Some(&true.to_value()));
+        // breakpoint.add_setter(&preview.split, "collapsed", Some(&true.to_value()));
         window.add_breakpoint(breakpoint);
     }
 

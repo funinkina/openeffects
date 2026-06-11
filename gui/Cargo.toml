@@ -12,6 +12,7 @@ path = "src/main.rs"
 [dependencies]
 shared = { path = "../shared" }
 anyhow.workspace = true
+dirs.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tokio.workspace = true

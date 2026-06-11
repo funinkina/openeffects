@@ -63,7 +63,7 @@ impl PipelineFormat {
 /// thrash the camera (open takes ~250 ms) and never deliver a stable stream.
 /// Holding briefly keeps the camera warm across blips while still releasing it
 /// promptly — and the LED off — when the consumer is really gone.
-const CAPTURE_RELEASE_GRACE: Duration = Duration::from_millis(700);
+const CAPTURE_RELEASE_GRACE: Duration = Duration::from_millis(300);
 
 #[derive(Debug)]
 pub enum PipelineCommand {

@@ -46,6 +46,33 @@ pub const BG_PRESETS: &[(&str, &str)] = &[
     ("Warm Gray", "#3a3a3a"),
 ];
 
+/// Built-in image backgrounds (label, cache filename, embedded PNG bytes).
+/// `bg_replace.background` stores a filesystem path for image backgrounds, so
+/// these are written to the user's data dir on first use (see
+/// `pages::background::ensure_preset_images`).
+pub const BG_IMAGE_PRESETS: &[(&str, &str, &[u8])] = &[
+    (
+        "Modern Living Room",
+        "modern-living-room.jpg",
+        include_bytes!("../data/backgrounds/modern-living-room.jpg"),
+    ),
+    (
+        "Serene Nature",
+        "serene-nature.jpg",
+        include_bytes!("../data/backgrounds/serene-nature.jpg"),
+    ),
+    (
+        "Sunset Room",
+        "sunset-room.jpg",
+        include_bytes!("../data/backgrounds/sunset-room.jpg"),
+    ),
+    (
+        "Wall of Books",
+        "wall-of-books.jpg",
+        include_bytes!("../data/backgrounds/wall-of-books.jpg"),
+    ),
+];
+
 /// Emoji reaction buttons shown on the Reactions page (reaction id, glyph,
 /// tooltip), in the same order as `shared::dbus::REACTION_IDS`. Clicking one
 /// fires a one-shot reverse-rain burst, independent of the gesture toggle.
