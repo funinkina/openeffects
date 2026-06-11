@@ -5,6 +5,7 @@
 //! the right of the header bar; daemon connection trouble surfaces in an
 //! `AdwBanner`. Camera selection lives in the Preferences dialog.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
@@ -15,8 +16,9 @@ use gtk::gio;
 use shared::dbus::{value_as_bool, value_as_string, VariantMap, EFFECT_IDS};
 
 use crate::about;
+use crate::config::GuiConfig;
 use crate::constants::NAV_PAGES;
-use crate::dbus_client::{CameraInfo, CmdTx, UiUpdate};
+use crate::dbus_client::{CameraInfo, CmdTx, GuiCommand, UiUpdate};
 use crate::pages::{background, center_stage, reactions, studio_light};
 use crate::preferences;
 use crate::preview;
@@ -35,7 +37,10 @@ pub fn build_window(
     app: &adw::Application,
     cmd_tx: CmdTx,
     update_rx: async_channel::Receiver<UiUpdate>,
+    config: GuiConfig,
 ) {
+    let gui_config = Rc::new(RefCell::new(config));
+
     // ── Pages (each an AdwPreferencesPage) added to the view stack ───────────
     let stack = adw::ViewStack::new();
 
@@ -64,8 +69,8 @@ pub fn build_window(
 
     let switcher_bar = adw::ViewSwitcherBar::builder().stack(&stack).build();
 
-    // ── Preferences dialog (camera, engine info, model library) ──────────────
-    let (prefs_dialog, prefs_widgets) = preferences::build(&cmd_tx);
+    // ── Preferences dialog (camera, engine info, model library, startup) ─────
+    let (prefs_dialog, prefs_widgets) = preferences::build(&cmd_tx, Rc::clone(&gui_config));
 
     // ── Primary menu (Preferences / About), right side of the header ─────────
     let menu = gio::Menu::new();
@@ -137,8 +142,43 @@ pub fn build_window(
         prefs: prefs_widgets,
     });
 
+    // ── Window close → optionally stop the daemon ────────────────────────────
+    // Default behaviour (boot-autostart off, keep-running off): closing the
+    // window quits the daemon so the camera is released. We hold the app (the
+    // guard keeps the process alive past the last window) and defer the actual
+    // close until the Quit call has been delivered, signalled back as
+    // `UiUpdate::DaemonQuit`; dropping the guard then lets the app exit.
+    let hold_guard: Rc<RefCell<Option<gio::ApplicationHoldGuard>>> = Rc::new(RefCell::new(None));
+    {
+        let app = app.clone();
+        let cmd_tx = cmd_tx.clone();
+        let gui_config = Rc::clone(&gui_config);
+        let hold_guard = Rc::clone(&hold_guard);
+        window.connect_close_request(move |_| {
+            // Already quitting (guard held): allow the deferred close.
+            if hold_guard.borrow().is_some() {
+                return glib::Propagation::Proceed;
+            }
+            let keep_running = gui_config.borrow().keep_running_in_background;
+            if keep_running || shared::systemd::is_enabled() {
+                return glib::Propagation::Proceed;
+            }
+            *hold_guard.borrow_mut() = Some(app.hold());
+            let _ = cmd_tx.send(GuiCommand::QuitDaemon);
+            glib::Propagation::Stop
+        });
+    }
+
+    let loop_window = window.clone();
+    let loop_hold_guard = Rc::clone(&hold_guard);
     glib::MainContext::default().spawn_local(async move {
         while let Ok(update) = update_rx.recv().await {
+            if matches!(update, UiUpdate::DaemonQuit) {
+                loop_window.destroy();
+                // Drop the hold guard → app exits once the window is gone.
+                loop_hold_guard.borrow_mut().take();
+                continue;
+            }
             apply_update(&widgets, update);
         }
     });
@@ -161,6 +201,8 @@ fn apply_update(w: &Widgets, update: UiUpdate) {
         UiUpdate::Capabilities(caps) => apply_capabilities(w, &caps),
         UiUpdate::Cameras { cameras, active } => apply_cameras(w, &cameras, &active),
         UiUpdate::Disconnected => apply_status_banner(w, "disconnected"),
+        // Intercepted by the state-sync loop before reaching here.
+        UiUpdate::DaemonQuit => {}
     }
 }
 

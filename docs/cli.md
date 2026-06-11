@@ -37,6 +37,20 @@ openeffectsctl status
 | `openeffectsctl status --json`  | Machine-readable status.                                                                            |
 | `openeffectsctl watch`          | Stream `EffectChanged` signals until interrupted (Ctrl-C).                                          |
 
+Any command that talks to the daemon starts it first if it isn't already running
+(via the systemd user unit, falling back to D-Bus activation).
+
+## Autostart
+
+Control whether the daemon starts automatically with your desktop session
+(`systemctl --user enable/disable openeffectsd.service`).
+
+| Command                        | Description                                                       |
+| ------------------------------ | ---------------------------------------------------------------- |
+| `openeffectsctl autostart enable`  | Start the daemon automatically when the graphical session begins. |
+| `openeffectsctl autostart disable` | Stop starting it automatically.                                   |
+| `openeffectsctl autostart status`  | Show whether autostart is enabled and whether the daemon is running. |
+
 ## Effects overview
 
 | Command         | Effect id       | What it does                                   |

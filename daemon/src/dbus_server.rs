@@ -16,11 +16,20 @@ pub type SharedDaemonState = Arc<RwLock<DaemonState>>;
 pub struct Daemon1Iface {
     state: SharedDaemonState,
     pipeline_tx: mpsc::Sender<PipelineCommand>,
+    shutdown_tx: mpsc::Sender<()>,
 }
 
 impl Daemon1Iface {
-    pub fn new(state: SharedDaemonState, pipeline_tx: mpsc::Sender<PipelineCommand>) -> Self {
-        Self { state, pipeline_tx }
+    pub fn new(
+        state: SharedDaemonState,
+        pipeline_tx: mpsc::Sender<PipelineCommand>,
+        shutdown_tx: mpsc::Sender<()>,
+    ) -> Self {
+        Self {
+            state,
+            pipeline_tx,
+            shutdown_tx,
+        }
     }
 }
 
@@ -62,6 +71,13 @@ impl Daemon1Iface {
         Self::daemon_status_changed(&emitter, DaemonStatus::Stopped.as_str())
             .await
             .map_err(to_fdo_error)?;
+        Ok(())
+    }
+
+    /// Tear down the pipeline and exit the process. Best-effort: the main loop
+    /// performs the actual shutdown + clean exit when it receives the signal.
+    async fn quit(&self) -> fdo::Result<()> {
+        let _ = self.shutdown_tx.send(()).await;
         Ok(())
     }
 

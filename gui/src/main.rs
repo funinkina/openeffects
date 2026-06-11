@@ -1,5 +1,6 @@
 mod about;
 mod app;
+mod config;
 mod constants;
 mod dbus_client;
 mod pages;
@@ -29,6 +30,13 @@ fn main() -> glib::ExitCode {
     dbus_client::spawn(cmd_rx, update_tx);
 
     let app = adw::Application::builder().application_id(APP_ID).build();
-    app.connect_activate(move |app| app::build_window(app, cmd_tx.clone(), update_rx.clone()));
+    app.connect_activate(move |app| {
+        app::build_window(
+            app,
+            cmd_tx.clone(),
+            update_rx.clone(),
+            config::GuiConfig::load_or_default(),
+        )
+    });
     app.run()
 }

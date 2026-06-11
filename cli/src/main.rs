@@ -139,6 +139,12 @@ enum Command {
         command: CameraCommand,
     },
 
+    /// Manage starting the daemon automatically with the desktop session.
+    Autostart {
+        #[command(subcommand)]
+        command: AutostartCommand,
+    },
+
     /// Stream EffectChanged signals until interrupted.
     Watch,
 }
@@ -252,6 +258,16 @@ enum CameraCommand {
     Info,
 }
 
+#[derive(Debug, Subcommand)]
+enum AutostartCommand {
+    /// Start the daemon automatically with the graphical session.
+    Enable,
+    /// Stop starting the daemon automatically.
+    Disable,
+    /// Show whether autostart is enabled and the daemon is running.
+    Status,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
@@ -260,7 +276,16 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
+
+    // `autostart` manages the systemd unit and never needs the daemon running,
+    // so handle it before connecting / auto-starting.
+    if let Command::Autostart { command } = &cli.command {
+        return autostart(command);
+    }
+
     let conn = Connection::session().await?;
+    // Every other command talks to the daemon; bring it up if it isn't running.
+    ensure_daemon(&conn).await;
 
     match cli.command {
         Command::Status { json, short } => status(&conn, json, short).await?,
@@ -396,10 +421,66 @@ async fn main() -> anyhow::Result<()> {
 
         Command::Set { assignment, value } => set_param(&conn, &assignment, &value).await?,
         Command::Camera { command } => camera(&conn, command).await?,
+        // Handled before the daemon connection above.
+        Command::Autostart { .. } => unreachable!(),
         Command::Watch => watch(&conn).await?,
     }
 
     Ok(())
+}
+
+/// Enable/disable/report the daemon's systemd user unit.
+fn autostart(command: &AutostartCommand) -> anyhow::Result<()> {
+    match command {
+        AutostartCommand::Enable => {
+            shared::systemd::set_enabled(true).map_err(|e| anyhow::anyhow!(e))?;
+            println!(
+                "autostart enabled: {} will start with the graphical session",
+                shared::systemd::UNIT
+            );
+        }
+        AutostartCommand::Disable => {
+            shared::systemd::set_enabled(false).map_err(|e| anyhow::anyhow!(e))?;
+            println!("autostart disabled");
+        }
+        AutostartCommand::Status => {
+            println!(
+                "autostart: {}",
+                if shared::systemd::is_enabled() {
+                    "enabled"
+                } else {
+                    "disabled"
+                }
+            );
+            println!(
+                "daemon:    {}",
+                if shared::systemd::is_active() {
+                    "running"
+                } else {
+                    "stopped"
+                }
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Start the daemon if its bus name has no owner. Prefers the systemd unit;
+/// if that fails (e.g. unit not installed in a dev tree), proceeds and lets the
+/// subsequent D-Bus method call auto-activate it.
+async fn ensure_daemon(conn: &Connection) {
+    let Ok(dbus) = zbus::fdo::DBusProxy::new(conn).await else {
+        return;
+    };
+    let Ok(name) = SERVICE_NAME.try_into() else {
+        return;
+    };
+    if dbus.name_has_owner(name).await.unwrap_or(false) {
+        return;
+    }
+    if let Err(err) = shared::systemd::start() {
+        tracing::warn!(%err, "systemctl start failed; relying on D-Bus activation");
+    }
 }
 
 async fn status(conn: &Connection, json: bool, short: bool) -> anyhow::Result<()> {

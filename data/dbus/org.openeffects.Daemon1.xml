@@ -7,6 +7,11 @@
     <method name="Start"/>
     <method name="Stop"/>
 
+    <!-- Terminate the daemon process (tears down the pipeline, then exits
+         cleanly). Clients use this to release the camera when no client wants
+         the daemon kept alive. Stop only halts the pipeline; the process lives. -->
+    <method name="Quit"/>
+
     <!-- "running" | "idle" | "error" | "stopped". Changes are announced via the
          StatusChanged signal below, not org.freedesktop.DBus.Properties.PropertiesChanged
          (avoids a receive_status_changed naming collision in generated proxies). -->

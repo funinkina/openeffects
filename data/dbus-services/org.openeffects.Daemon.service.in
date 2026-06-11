@@ -1,3 +1,4 @@
 [D-BUS Service]
 Name=org.openeffects.Daemon
 Exec=@bindir@/openeffectsd
+SystemdService=openeffectsd.service

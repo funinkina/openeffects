@@ -38,6 +38,9 @@ pub enum GuiCommand {
     TriggerReaction {
         id: String,
     },
+    /// Terminate the daemon process, then acknowledge with `UiUpdate::DaemonQuit`
+    /// so the GUI can finish closing only after the call has been delivered.
+    QuitDaemon,
 }
 
 /// A physical camera as shown in the Camera page picker.
@@ -61,6 +64,8 @@ pub enum UiUpdate {
         active: String,
     },
     Disconnected,
+    /// The daemon `Quit` call has been made (success or not); the GUI may now close.
+    DaemonQuit,
 }
 
 /// Spawn the D-Bus client on its own thread with its own tokio runtime.
@@ -141,6 +146,12 @@ async fn run_once(
                         if let Err(err) = effects.trigger_reaction(&id).await {
                             tracing::warn!(%err, id, "TriggerReaction failed");
                         }
+                    }
+                    Some(GuiCommand::QuitDaemon) => {
+                        if let Err(err) = daemon.quit().await {
+                            tracing::warn!(%err, "Quit failed (daemon may already be gone)");
+                        }
+                        update_tx.send(UiUpdate::DaemonQuit).await.ok();
                     }
                     None => return Ok(()),
                 }

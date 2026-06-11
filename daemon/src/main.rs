@@ -59,12 +59,14 @@ async fn main() -> anyhow::Result<()> {
     let state = Arc::new(RwLock::new(DaemonState::new(app, ep, tier, models_ready)));
     let (pipeline_tx, pipeline_rx) = mpsc::channel(32);
     let (event_tx, mut event_rx) = mpsc::channel(32);
+    // A `Quit` D-Bus call sends on this channel to drive a clean process exit.
+    let (shutdown_tx, mut shutdown_rx) = mpsc::channel::<()>(1);
     let worker = pipeline::spawn_worker(pipeline_rx, event_tx);
 
     let conn = zbus::connection::Builder::session()?
         .serve_at(
             OBJECT_PATH,
-            Daemon1Iface::new(Arc::clone(&state), pipeline_tx.clone()),
+            Daemon1Iface::new(Arc::clone(&state), pipeline_tx.clone(), shutdown_tx),
         )?
         .serve_at(
             OBJECT_PATH,
@@ -139,7 +141,15 @@ async fn main() -> anyhow::Result<()> {
     }
 
     info!("openeffectsd is running on the session bus");
-    tokio::signal::ctrl_c().await?;
+    tokio::select! {
+        result = tokio::signal::ctrl_c() => {
+            result?;
+            info!("received ctrl-c, shutting down");
+        }
+        _ = shutdown_rx.recv() => {
+            info!("received Quit, shutting down");
+        }
+    }
     let _ = pipeline_tx.send(PipelineCommand::Shutdown).await;
     let _ = worker.join();
     Ok(())
