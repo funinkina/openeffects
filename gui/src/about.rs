@@ -5,7 +5,7 @@ use adw::prelude::*;
 pub fn present(parent: &impl IsA<gtk::Widget>) {
     let about = adw::AboutDialog::builder()
         .application_name("OpenEffects")
-        .application_icon("camera-web-symbolic")
+        .application_icon("openeffects")
         .version(env!("CARGO_PKG_VERSION"))
         .comments("Linux-native webcam effects engine")
         .developer_name("Aryan Kushwaha")
