@@ -1,4 +1,4 @@
-<img src="data/icons/openeffects.svg" align="left" width="80" alt="OpenEffects icon">
+<img src="data/icons/org.openeffects.OpenEffects.svg" align="left" width="80" alt="OpenEffects icon">
 
 # OpenEffects (Beta)
 
