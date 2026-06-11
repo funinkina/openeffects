@@ -1556,7 +1556,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "openeffects"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -1579,7 +1579,7 @@ dependencies = [
 
 [[package]]
 name = "openeffects-integration-tests"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "gstreamer",
@@ -1592,7 +1592,7 @@ dependencies = [
 
 [[package]]
 name = "openeffectsctl"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1611,7 +1611,7 @@ dependencies = [
 
 [[package]]
 name = "openeffectsd"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "dirs",
@@ -2135,7 +2135,7 @@ dependencies = [
 
 [[package]]
 name = "shared"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "dirs",
