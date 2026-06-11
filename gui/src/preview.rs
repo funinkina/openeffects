@@ -95,13 +95,16 @@ pub fn build(content: &impl IsA<gtk::Widget>) -> Rc<Preview> {
     // Start/stop the pipeline strictly on reveal/hide.
     {
         let preview = preview.clone();
-        preview.split.clone().connect_show_sidebar_notify(move |split| {
-            if split.shows_sidebar() {
-                preview.start();
-            } else {
-                preview.stop();
-            }
-        });
+        preview
+            .split
+            .clone()
+            .connect_show_sidebar_notify(move |split| {
+                if split.shows_sidebar() {
+                    preview.start();
+                } else {
+                    preview.stop();
+                }
+            });
     }
 
     preview

@@ -295,6 +295,22 @@ mod imp {
         /// (true) or the full frame (false); a mismatch forces a re-segment so a
         /// normalized mask sampled in the wrong coordinate space is never reused.
         mask_is_roi: bool,
+        /// Bumped on every fresh segmentation; keys the rasterized LUT below.
+        mask_gen: u64,
+        /// Per-pixel mask weights (0–255) rasterized at canvas resolution.
+        /// Rebuilt only when a fresh mask arrives or the canvas size changes,
+        /// so the per-frame effects read one byte per pixel instead of
+        /// bilinearly sampling the 256² mask once per pass.
+        mask_lut: Vec<u8>,
+        lut_gen: u64,
+        lut_w: usize,
+        lut_h: usize,
+        /// Reusable packed-frame buffer (a multi-MB alloc otherwise repeated
+        /// every frame).
+        canvas: Vec<u8>,
+        /// Scratch for the downscaled blur (image + ping-pong buffer).
+        blur_low: Vec<u8>,
+        blur_tmp: Vec<u8>,
         faces: Vec<Face>,
         bg: Option<BgImage>,
         /// Reverse-rain emoji particle system (manual + gesture triggers).
@@ -501,6 +517,9 @@ mod imp {
             state.target = CropState::default();
             state.cs_out_frames = 0;
             state.mask = None;
+            state.mask_lut.clear();
+            state.lut_w = 0;
+            state.lut_h = 0;
             state.bg = None;
             // Normalized hand crops don't survive a resolution change.
             state.tracks.clear();
@@ -535,8 +554,10 @@ mod imp {
             }
             state.frame = state.frame.wrapping_add(1);
 
-            // Pack the (possibly strided) plane into a tight RGBA buffer.
-            let mut img = pack(plane, w, h, stride);
+            // Pack the (possibly strided) plane into a tight RGBA buffer,
+            // reusing the canvas allocation across frames.
+            let mut img = std::mem::take(&mut state.canvas);
+            pack_into(plane, &mut img, w, h, stride);
 
             // Gesture detection runs on the original frame, before center stage
             // crops it in place, so hands outside the crop are still seen. It may
@@ -565,6 +586,7 @@ mod imp {
             }
 
             unpack(&img, plane, w, h, stride);
+            state.canvas = img;
             Ok(gst::FlowSuccess::Ok)
         }
     }
@@ -670,40 +692,79 @@ mod imp {
     /// background. `is_roi` selects the mask coordinate space (full vs crop ROI).
     fn masked_effects(state: &mut State, img: &mut [u8], w: usize, h: usize, is_roi: bool) {
         ensure_mask(state, img, w, h, w * 4, is_roi);
+        ensure_mask_lut(state, w, h);
+        if state.lut_w != w || state.lut_h != h {
+            // No usable mask (e.g. the model is missing or the first
+            // segmentation failed): skip the masked effects entirely.
+            return;
+        }
+
+        // Studio light first, so the lit subject is what blur/bg-replace then
+        // composites over the (untouched-exposure) background.
+        if state.settings.studio_enabled {
+            apply_studio(
+                img,
+                &state.mask_lut,
+                state.settings.studio_brightness,
+                state.settings.studio_contrast,
+            );
+        }
+        if !state.settings.needs_composite() {
+            return;
+        }
         if state.settings.bg_enabled {
             ensure_bg(state, w, h);
-        }
-        // Borrow split: take mask out so we can also touch state.bg.
-        if let Some(mask) = state.mask.take() {
-            // Studio light first, so the lit subject is what blur/bg-replace
-            // then composites over the (untouched-exposure) background.
-            if state.settings.studio_enabled {
-                apply_studio(
-                    img,
-                    &mask,
-                    w,
-                    h,
-                    state.settings.studio_brightness,
-                    state.settings.studio_contrast,
-                );
+            let path = &state.settings.bg_path;
+            if let Some(color) = path.strip_prefix('#').and_then(parse_hex_color) {
+                composite_color(img, color, &state.mask_lut);
+            } else if let Some(bg) = state.bg.as_ref().filter(|b| b.w == w && b.h == h) {
+                composite_full(img, &bg.rgba, &state.mask_lut);
             }
-            if state.settings.needs_composite() {
-                let bg_buf = if state.settings.bg_enabled {
-                    background_buffer(state, w, h)
-                } else {
-                    Some(box_blur(
-                        img,
-                        w,
-                        h,
-                        blur_radius(state.settings.blur_strength),
-                    ))
-                };
-                if let Some(bg) = bg_buf {
-                    composite(img, &bg, &mask, w, h);
-                }
-            }
-            state.mask = Some(mask);
+        } else {
+            // Portrait blur runs on a downscaled copy of the frame, then the
+            // composite bilinearly upsamples it on the fly. A blurred
+            // background is low-frequency by construction, so the result is
+            // visually identical at a fraction of the full-resolution cost
+            // (the dominant per-frame load when blur is on).
+            let radius = blur_radius(state.settings.blur_strength);
+            let scale = blur_scale(radius);
+            let lw = w.div_ceil(scale).max(1);
+            let lh = h.div_ceil(scale).max(1);
+            downsample(img, w, h, scale, &mut state.blur_low, lw, lh);
+            box_blur(
+                &mut state.blur_low,
+                &mut state.blur_tmp,
+                lw,
+                lh,
+                (radius / scale).max(1),
+            );
+            composite_low(img, &state.blur_low, lw, lh, scale, &state.mask_lut, w, h);
         }
+    }
+
+    /// Rasterize the segmentation mask into per-pixel u8 weights at canvas
+    /// resolution. Rebuilt only when a fresh mask arrives or the canvas size
+    /// changes (ROI vs full frame), so the bilinear mask sampling happens once
+    /// per segmentation instead of once per pixel per effect per frame.
+    fn ensure_mask_lut(state: &mut State, w: usize, h: usize) {
+        if state.lut_gen == state.mask_gen && state.lut_w == w && state.lut_h == h {
+            return;
+        }
+        let Some(mask) = &state.mask else {
+            return;
+        };
+        state.mask_lut.resize(w * h, 0);
+        for y in 0..h {
+            let v = (y as f32 + 0.5) / h as f32;
+            for x in 0..w {
+                let u = (x as f32 + 0.5) / w as f32;
+                state.mask_lut[y * w + x] =
+                    (mask.sample(u, v).clamp(0.0, 1.0) * 255.0).round() as u8;
+            }
+        }
+        state.lut_gen = state.mask_gen;
+        state.lut_w = w;
+        state.lut_h = h;
     }
 
     /// Center stage: decide framing on the full frame, then crop to the ROI and
@@ -769,6 +830,7 @@ mod imp {
                 Ok(mask) => {
                     state.mask = Some(mask);
                     state.mask_is_roi = is_roi;
+                    state.mask_gen = state.mask_gen.wrapping_add(1);
                 }
                 Err(err) => warn!(%err, "segmentation failed this frame"),
             }
@@ -875,32 +937,13 @@ mod imp {
         }
     }
 
-    /// The background pixels to composite behind the subject: either the cached
-    /// image, or a solid color filling the frame.
-    fn background_buffer(state: &State, w: usize, h: usize) -> Option<Vec<u8>> {
-        let path = &state.settings.bg_path;
-        if let Some(color) = path.strip_prefix('#').and_then(parse_hex_color) {
-            let mut buf = vec![0u8; w * h * 4];
-            for px in buf.chunks_exact_mut(4) {
-                px.copy_from_slice(&color);
-            }
-            return Some(buf);
-        }
-        state
-            .bg
-            .as_ref()
-            .filter(|b| b.w == w && b.h == h)
-            .map(|b| b.rgba.clone())
-    }
-
-    /// Pack a strided RGBA plane into a tight `w*h*4` buffer.
-    fn pack(plane: &[u8], w: usize, h: usize, stride: usize) -> Vec<u8> {
+    /// Pack a strided RGBA plane into the reusable tight `w*h*4` buffer.
+    fn pack_into(plane: &[u8], out: &mut Vec<u8>, w: usize, h: usize, stride: usize) {
         let row = w * 4;
-        let mut out = vec![0u8; row * h];
+        out.resize(row * h, 0);
         for y in 0..h {
             out[y * row..y * row + row].copy_from_slice(&plane[y * stride..y * stride + row]);
         }
-        out
     }
 
     /// Write a tight RGBA buffer back into the strided plane.
@@ -915,69 +958,159 @@ mod imp {
     /// only to the person, blended by the mask so the background keeps its
     /// original exposure. Per channel, on normalized values:
     /// `adjusted = (p − 0.5)·contrast + 0.5 + brightness`, then
-    /// `out = lerp(p, adjusted, mask)`.
-    fn apply_studio(
-        img: &mut [u8],
-        mask: &Mask,
+    /// `out = lerp(p, adjusted, mask)`. The transfer depends only on the input
+    /// value, so it's a 256-entry table and the blend is pure integer math.
+    fn apply_studio(img: &mut [u8], lut: &[u8], brightness: f32, contrast: f32) {
+        let mut adj = [0u8; 256];
+        for (p, out) in adj.iter_mut().enumerate() {
+            let v = p as f32 / 255.0;
+            *out =
+                (((v - 0.5) * contrast + 0.5 + brightness).clamp(0.0, 1.0) * 255.0).round() as u8;
+        }
+        for (px, &m) in img.chunks_exact_mut(4).zip(lut) {
+            if m == 0 {
+                continue; // background pixel: exposure untouched
+            }
+            let m = m as u32;
+            for c in 0..3 {
+                let p = px[c] as u32;
+                let a = adj[px[c] as usize] as u32;
+                px[c] = ((p * (255 - m) + a * m + 127) / 255) as u8;
+            }
+            // leave alpha as-is
+        }
+    }
+
+    /// `out = fg·m + bg·(1-m)` against a full-resolution background buffer
+    /// (user image, already cached at frame size).
+    fn composite_full(fg: &mut [u8], bg: &[u8], lut: &[u8]) {
+        for (i, &m) in lut.iter().enumerate() {
+            if m == 255 {
+                continue; // fully foreground: nothing to blend
+            }
+            let p = i * 4;
+            let m = m as u32;
+            for c in 0..3 {
+                fg[p + c] =
+                    ((fg[p + c] as u32 * m + bg[p + c] as u32 * (255 - m) + 127) / 255) as u8;
+            }
+        }
+    }
+
+    /// Composite a solid color behind the subject — no background buffer is
+    /// ever materialized.
+    fn composite_color(fg: &mut [u8], color: [u8; 4], lut: &[u8]) {
+        for (px, &m) in fg.chunks_exact_mut(4).zip(lut) {
+            if m == 255 {
+                continue;
+            }
+            let m = m as u32;
+            for c in 0..3 {
+                px[c] = ((px[c] as u32 * m + color[c] as u32 * (255 - m) + 127) / 255) as u8;
+            }
+        }
+    }
+
+    /// Composite the low-res blurred background behind the subject, bilinearly
+    /// upsampling it on the fly (no full-resolution intermediate buffer).
+    #[allow(clippy::too_many_arguments)]
+    fn composite_low(
+        fg: &mut [u8],
+        low: &[u8],
+        lw: usize,
+        lh: usize,
+        scale: usize,
+        lut: &[u8],
         w: usize,
         h: usize,
-        brightness: f32,
-        contrast: f32,
     ) {
+        let inv = 1.0 / scale as f32;
         for y in 0..h {
-            let v = (y as f32 + 0.5) / h as f32;
+            let sv = (y as f32 + 0.5) * inv - 0.5;
             for x in 0..w {
-                let u = (x as f32 + 0.5) / w as f32;
-                let m = mask.sample(u, v).clamp(0.0, 1.0);
-                if m <= 0.0 {
+                let m = lut[y * w + x];
+                if m == 255 {
                     continue;
                 }
-                let i = (y * w + x) * 4;
+                let su = (x as f32 + 0.5) * inv - 0.5;
+                let mut bg = [0u8; 4];
+                sample_bilinear(low, lw, lh, su, sv, &mut bg);
+                let p = (y * w + x) * 4;
+                let m = m as u32;
                 for c in 0..3 {
-                    let p = img[i + c] as f32 / 255.0;
-                    let adj = ((p - 0.5) * contrast + 0.5 + brightness).clamp(0.0, 1.0);
-                    img[i + c] = ((p + (adj - p) * m) * 255.0).round() as u8;
+                    fg[p + c] =
+                        ((fg[p + c] as u32 * m + bg[c] as u32 * (255 - m) + 127) / 255) as u8;
                 }
-                // leave alpha as-is
             }
         }
     }
 
-    /// `out = fg·mask + bg·(1-mask)` per pixel, with the mask bilinearly sampled.
-    fn composite(fg: &mut [u8], bg: &[u8], mask: &Mask, w: usize, h: usize) {
-        for y in 0..h {
-            let v = (y as f32 + 0.5) / h as f32;
-            for x in 0..w {
-                let u = (x as f32 + 0.5) / w as f32;
-                let m = mask.sample(u, v).clamp(0.0, 1.0);
-                let inv = 1.0 - m;
-                let i = (y * w + x) * 4;
-                for c in 0..3 {
-                    fg[i + c] = (fg[i + c] as f32 * m + bg[i + c] as f32 * inv).round() as u8;
-                }
-                // leave alpha as-is
-            }
-        }
-    }
-
-    /// Map a 0–100 strength to a box-blur radius.
+    /// Map a 0–100 strength to a box-blur radius (full-resolution units).
     fn blur_radius(strength: u32) -> usize {
         1 + (strength as usize * 24) / 100
     }
 
-    /// Separable box blur (two passes ≈ triangle kernel) over a tight RGBA
-    /// buffer, using per-row/column prefix sums so cost is independent of radius.
-    fn box_blur(src: &[u8], w: usize, h: usize, radius: usize) -> Vec<u8> {
+    /// Downscale factor the blur runs at. Heavier blurs tolerate (and benefit
+    /// from) a smaller working image; light blurs stay near full resolution so
+    /// the minimum strength still looks subtle.
+    fn blur_scale(radius: usize) -> usize {
+        match radius {
+            0..=1 => 1,
+            2..=5 => 2,
+            _ => 4,
+        }
+    }
+
+    /// Box-average the frame down by `scale` into `dst` (RGB only; the
+    /// composite never reads background alpha).
+    fn downsample(
+        src: &[u8],
+        w: usize,
+        h: usize,
+        scale: usize,
+        dst: &mut Vec<u8>,
+        lw: usize,
+        lh: usize,
+    ) {
+        dst.resize(lw * lh * 4, 0);
+        for y in 0..lh {
+            let y0 = y * scale;
+            let y1 = (y0 + scale).min(h);
+            for x in 0..lw {
+                let x0 = x * scale;
+                let x1 = (x0 + scale).min(w);
+                let mut acc = [0u32; 3];
+                for sy in y0..y1 {
+                    let row = sy * w;
+                    for sx in x0..x1 {
+                        let p = (row + sx) * 4;
+                        acc[0] += src[p] as u32;
+                        acc[1] += src[p + 1] as u32;
+                        acc[2] += src[p + 2] as u32;
+                    }
+                }
+                let n = ((y1 - y0) * (x1 - x0)) as u32;
+                let d = (y * lw + x) * 4;
+                dst[d] = (acc[0] / n) as u8;
+                dst[d + 1] = (acc[1] / n) as u8;
+                dst[d + 2] = (acc[2] / n) as u8;
+                dst[d + 3] = 255;
+            }
+        }
+    }
+
+    /// Separable box blur (two passes ≈ triangle kernel) in place, ping-ponging
+    /// through `tmp`. Per-row/column prefix sums keep cost independent of
+    /// radius; only RGB is blurred (alpha is never read back).
+    fn box_blur(buf: &mut [u8], tmp: &mut Vec<u8>, w: usize, h: usize, radius: usize) {
         if radius == 0 {
-            return src.to_vec();
+            return;
         }
-        let mut a = src.to_vec();
-        let mut b = vec![0u8; src.len()];
+        tmp.resize(buf.len(), 0);
         for _ in 0..2 {
-            box_blur_h(&a, &mut b, w, h, radius);
-            box_blur_v(&b, &mut a, w, h, radius);
+            box_blur_h(buf, tmp, w, h, radius);
+            box_blur_v(tmp, buf, w, h, radius);
         }
-        a
     }
 
     fn box_blur_h(src: &[u8], dst: &mut [u8], w: usize, h: usize, r: usize) {
@@ -986,7 +1119,7 @@ mod imp {
         let mut prefix = vec![0i32; w + 1];
         for y in 0..h {
             let base = y * w * 4;
-            for c in 0..4 {
+            for c in 0..3 {
                 for x in 0..w {
                     prefix[x + 1] = prefix[x] + src[base + x * 4 + c] as i32;
                 }
@@ -1004,7 +1137,7 @@ mod imp {
         let row = w * 4;
         let mut prefix = vec![0i32; h + 1];
         for x in 0..w {
-            for c in 0..4 {
+            for c in 0..3 {
                 for y in 0..h {
                     prefix[y + 1] = prefix[y] + src[y * row + x * 4 + c] as i32;
                 }

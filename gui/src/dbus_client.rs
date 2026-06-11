@@ -116,19 +116,31 @@ async fn run_once(
     loop {
         tokio::select! {
             cmd = cmd_rx.recv() => {
+                // A failed method call is not a lost connection: tearing the
+                // loop down would re-snapshot all state and visibly reset the
+                // controls. Log and keep going; a real disconnect surfaces as
+                // a closed signal stream below.
                 match cmd {
                     Some(GuiCommand::SetEnabled { id, on }) => {
-                        effects.set_enabled(&id, on).await?;
+                        if let Err(err) = effects.set_enabled(&id, on).await {
+                            tracing::warn!(%err, id, "SetEnabled failed");
+                        }
                     }
                     Some(GuiCommand::SetParam { id, key, value }) => {
                         let value: Value<'_> = value.into();
-                        effects.set_param(&id, &key, &value).await?;
+                        if let Err(err) = effects.set_param(&id, &key, &value).await {
+                            tracing::warn!(%err, id, key, "SetParam failed");
+                        }
                     }
                     Some(GuiCommand::SelectCamera { id }) => {
-                        devices.select_camera(&id).await?;
+                        if let Err(err) = devices.select_camera(&id).await {
+                            tracing::warn!(%err, id, "SelectCamera failed");
+                        }
                     }
                     Some(GuiCommand::TriggerReaction { id }) => {
-                        effects.trigger_reaction(&id).await?;
+                        if let Err(err) = effects.trigger_reaction(&id).await {
+                            tracing::warn!(%err, id, "TriggerReaction failed");
+                        }
                     }
                     None => return Ok(()),
                 }
