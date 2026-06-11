@@ -17,6 +17,10 @@ pub const EFFECT_IDS: [&str; 5] = [
     "reactions",
 ];
 
+/// Canonical reaction emoji ids: the three gesture-mapped ones first
+/// (thumbs_up, thumbs_down, heart), then extras shown only in the manual picker.
+pub const REACTION_IDS: [&str; 6] = ["thumbs_up", "thumbs_down", "heart", "joy", "tada", "clap"];
+
 pub type VariantMap = HashMap<String, OwnedValue>;
 
 pub fn str_value(value: impl AsRef<str>) -> OwnedValue {

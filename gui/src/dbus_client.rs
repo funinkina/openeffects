@@ -34,6 +34,10 @@ pub enum GuiCommand {
     SelectCamera {
         id: String,
     },
+    /// Fire a one-shot emoji burst (a `shared::dbus::REACTION_IDS` id).
+    TriggerReaction {
+        id: String,
+    },
 }
 
 /// A physical camera as shown in the Camera page picker.
@@ -122,6 +126,9 @@ async fn run_once(
                     }
                     Some(GuiCommand::SelectCamera { id }) => {
                         devices.select_camera(&id).await?;
+                    }
+                    Some(GuiCommand::TriggerReaction { id }) => {
+                        effects.trigger_reaction(&id).await?;
                     }
                     None => return Ok(()),
                 }

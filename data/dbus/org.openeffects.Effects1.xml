@@ -20,6 +20,11 @@
       <arg name="value" type="v" direction="in"/>
     </method>
 
+    <!-- Play a one-shot emoji burst; id is one of shared::dbus::REACTION_IDS -->
+    <method name="TriggerReaction">
+      <arg name="id" type="s" direction="in"/>
+    </method>
+
     <!-- Returns a{sv} of current params for this effect -->
     <method name="GetParams">
       <arg name="id"     type="s"     direction="in"/>

@@ -37,6 +37,10 @@ enum Command {
         assignment: String,
         value: String,
     },
+    /// Fire a one-shot emoji burst (e.g. thumbs_up, heart, tada).
+    TriggerReaction {
+        reaction: String,
+    },
     Camera {
         #[command(subcommand)]
         command: CameraCommand,
@@ -88,6 +92,12 @@ async fn main() -> anyhow::Result<()> {
         }
         Command::Toggle { effect } => toggle(&conn, &effect).await?,
         Command::Set { assignment, value } => set_param(&conn, &assignment, &value).await?,
+        Command::TriggerReaction { reaction } => {
+            effects_proxy(&conn)
+                .await?
+                .call::<_, _, ()>("TriggerReaction", &(reaction.as_str()))
+                .await?
+        }
         Command::Camera { command } => camera(&conn, command).await?,
         Command::Watch => watch(&conn).await?,
     }

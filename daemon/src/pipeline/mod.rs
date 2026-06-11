@@ -75,6 +75,10 @@ pub enum PipelineCommand {
     /// values (a duplicated mapping here once let param changes go stale until
     /// a restart).
     ApplyEffects(AppState),
+    /// Fire a one-shot reaction burst (a [`shared::dbus::REACTION_IDS`] id) into
+    /// the live `oe_effects` element. A no-op when no capture pipeline is up
+    /// (nothing is consuming the virtual camera).
+    TriggerReaction(String),
     Shutdown,
 }
 
@@ -206,6 +210,12 @@ fn worker_loop(
                     c.apply_app_state(&app);
                 }
                 stored_app = Some(app);
+            }
+            Ok(PipelineCommand::TriggerReaction(id)) => {
+                // Only meaningful while a consumer is streaming; otherwise drop.
+                if let Some(c) = capture.as_ref() {
+                    c.trigger_reaction(&id);
+                }
             }
             Ok(PipelineCommand::Shutdown) => {
                 if let Some(c) = capture.take() {

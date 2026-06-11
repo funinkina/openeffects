@@ -1,4 +1,6 @@
 pub mod engine;
+pub mod gesture;
+pub mod hand;
 pub mod manifest;
 pub mod registry;
 

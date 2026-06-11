@@ -57,6 +57,14 @@ impl BuiltCapture {
             effects::apply_app_state_to_elements(&effects_el, app);
         }
     }
+
+    /// Fire a one-shot reaction burst into the live effects element via its
+    /// write-only `trigger-reaction` property.
+    pub fn trigger_reaction(&self, id: &str) {
+        if let Some(effects_el) = self.pipeline.by_name("oe_effects") {
+            effects_el.set_property("trigger-reaction", id);
+        }
+    }
 }
 
 /// The output caps: every processed frame the appsink delivers (and thus every

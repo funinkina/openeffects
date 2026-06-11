@@ -26,7 +26,11 @@
 //! (`SEG_INTERVAL`) with the mask reused in between, and YuNet detection on a
 //! coarser one (`FACE_INTERVAL`) — the reframe deadzone absorbs the staleness.
 //!
-//! Reactions arrive in Phase 4.
+//! 4. **Reactions** — reverse-rain emoji bursts (see [`reactions`]), composited
+//!    last over the final canvas. Triggered manually (the `trigger-reaction`
+//!    property) or, when enabled, automatically by the hand-gesture pipeline.
+//!
+//! [`reactions`]: crate::pipeline::filters::reactions
 
 use gst::glib;
 use gstreamer as gst;
@@ -50,6 +54,9 @@ mod imp {
     use tracing::warn;
 
     use crate::inference::engine::{Face, Mask, SelfieSeg, YuNet};
+    use crate::inference::gesture::{self, Gesture};
+    use crate::inference::hand::{CropBox, HandLandmarker, HandLandmarks, PalmDetector};
+    use crate::pipeline::filters::reactions::Reactions;
 
     const DEFAULT_STRENGTH: u32 = 50;
     const DEFAULT_ZOOM: &str = "normal";
@@ -90,6 +97,20 @@ mod imp {
     const CS_CONFIRM: u32 = 30;
     const CS_FAST_CONFIRM: u32 = 9;
 
+    /// Run the gesture pipeline every Nth frame (offset from the seg/face slots).
+    const GESTURE_INTERVAL: u64 = 3;
+    /// Consecutive gesture checks the same gesture must hold before triggering.
+    const GESTURE_CONFIRM: u32 = 3;
+    /// Frames to suppress new gesture triggers after one fires (~3 s at 30 fps).
+    const REACTION_COOLDOWN: u64 = 90;
+    /// Frames between palm re-detections while fewer than two hands are tracked.
+    const REDETECT_INTERVAL: u64 = 30;
+    /// Minimum palm score / hand-landmark confidence to accept.
+    const PALM_SCORE_THRESH: f32 = 0.6;
+    const HAND_CONF_THRESH: f32 = 0.5;
+    /// Most hands tracked at once (two needed for the heart gesture).
+    const MAX_TRACKS: usize = 2;
+
     #[derive(Debug, Clone)]
     struct Settings {
         blur_enabled: bool,
@@ -104,6 +125,10 @@ mod imp {
         studio_brightness: f32,
         /// Contrast multiplier around mid-gray, 0.0..2.0.
         studio_contrast: f32,
+        /// Reactions effect: when on, the gesture pipeline runs and may
+        /// auto-trigger bursts (manual bursts work regardless, via a one-shot
+        /// property that doesn't touch this flag).
+        reactions_enabled: bool,
     }
 
     impl Default for Settings {
@@ -119,6 +144,7 @@ mod imp {
                 studio_enabled: false,
                 studio_brightness: 0.0,
                 studio_contrast: 1.0,
+                reactions_enabled: false,
             }
         }
     }
@@ -131,6 +157,7 @@ mod imp {
                 || self.bg_enabled
                 || self.studio_enabled
                 || (self.cs_enabled && self.cs_zoom != "off")
+                || self.reactions_enabled
         }
 
         /// Whether the blur/bg-replace composite step should run.
@@ -182,6 +209,10 @@ mod imp {
         selfie_failed: bool,
         yunet: Option<YuNet>,
         yunet_failed: bool,
+        palm: Option<PalmDetector>,
+        palm_failed: bool,
+        hand: Option<HandLandmarker>,
+        hand_failed: bool,
     }
 
     impl Engine {
@@ -210,6 +241,39 @@ mod imp {
             }
             self.yunet.as_mut()
         }
+
+        fn palm(&mut self) -> Option<&mut PalmDetector> {
+            if self.palm.is_none() && !self.palm_failed {
+                match PalmDetector::load() {
+                    Ok(m) => self.palm = Some(m),
+                    Err(err) => {
+                        warn!(%err, "palm detection unavailable; gesture reactions disabled");
+                        self.palm_failed = true;
+                    }
+                }
+            }
+            self.palm.as_mut()
+        }
+
+        fn hand(&mut self) -> Option<&mut HandLandmarker> {
+            if self.hand.is_none() && !self.hand_failed {
+                match HandLandmarker::load() {
+                    Ok(m) => self.hand = Some(m),
+                    Err(err) => {
+                        warn!(%err, "hand landmark model unavailable; gesture reactions disabled");
+                        self.hand_failed = true;
+                    }
+                }
+            }
+            self.hand.as_mut()
+        }
+    }
+
+    /// A tracked hand: the crop to sample next frame, and how many consecutive
+    /// frames the landmark model returned low confidence (dropped after 2).
+    struct HandTrack {
+        crop: CropBox,
+        missed: u32,
     }
 
     #[derive(Default)]
@@ -233,6 +297,17 @@ mod imp {
         mask_is_roi: bool,
         faces: Vec<Face>,
         bg: Option<BgImage>,
+        /// Reverse-rain emoji particle system (manual + gesture triggers).
+        reactions: Reactions,
+        /// Hands currently tracked by the gesture pipeline (≤ `MAX_TRACKS`).
+        tracks: Vec<HandTrack>,
+        /// Earliest frame palm re-detection may run again.
+        redetect_at: u64,
+        /// Gesture held across the last `held_count` checks (debounce).
+        held: Option<Gesture>,
+        held_count: u32,
+        /// No new gesture trigger fires before this frame.
+        cooldown_until: u64,
         width: usize,
         height: usize,
     }
@@ -279,6 +354,12 @@ mod imp {
                         .maximum(2.0)
                         .default_value(1.0)
                         .build(),
+                    glib::ParamSpecBoolean::builder("reactions-enabled").build(),
+                    // Write-only one-shot: setting it (even to a repeated value)
+                    // fires a burst of that reaction id.
+                    glib::ParamSpecString::builder("trigger-reaction")
+                        .flags(glib::ParamFlags::WRITABLE)
+                        .build(),
                 ]
             });
             PROPERTIES.as_ref()
@@ -309,13 +390,25 @@ mod imp {
                         .unwrap_or_else(|| DEFAULT_MODE.into());
                 }
                 "studio-light-enabled" => state.settings.studio_enabled = value.get().unwrap(),
-                "studio-light-brightness" => state.settings.studio_brightness = value.get().unwrap(),
+                "studio-light-brightness" => {
+                    state.settings.studio_brightness = value.get().unwrap()
+                }
                 "studio-light-contrast" => state.settings.studio_contrast = value.get().unwrap(),
+                "reactions-enabled" => state.settings.reactions_enabled = value.get().unwrap(),
+                "trigger-reaction" => {
+                    let id = value.get::<Option<String>>().unwrap().unwrap_or_default();
+                    let frame = state.frame;
+                    state.reactions.trigger(&id, frame);
+                }
                 _ => unimplemented!(),
             }
             let active = state.settings.active();
+            // A burst must keep the filter live even with every effect off, so a
+            // trigger always disables passthrough; it is restored lazily in
+            // transform once the burst drains.
+            let triggered = pspec.name() == "trigger-reaction";
             drop(state);
-            self.obj().set_passthrough(!active);
+            self.obj().set_passthrough(!active && !triggered);
         }
 
         fn property(&self, _id: usize, pspec: &glib::ParamSpec) -> glib::Value {
@@ -332,6 +425,8 @@ mod imp {
                 "studio-light-enabled" => s.studio_enabled.to_value(),
                 "studio-light-brightness" => s.studio_brightness.to_value(),
                 "studio-light-contrast" => s.studio_contrast.to_value(),
+                "reactions-enabled" => s.reactions_enabled.to_value(),
+                "trigger-reaction" => "".to_value(), // write-only; defensive
                 _ => unimplemented!(),
             }
         }
@@ -407,6 +502,11 @@ mod imp {
             state.cs_out_frames = 0;
             state.mask = None;
             state.bg = None;
+            // Normalized hand crops don't survive a resolution change.
+            state.tracks.clear();
+            state.redetect_at = 0;
+            state.held = None;
+            state.held_count = 0;
             drop(state);
             self.parent_set_info(incaps, in_info, outcaps, out_info)
         }
@@ -424,13 +524,26 @@ mod imp {
             let plane = frame.plane_data_mut(0).map_err(|_| gst::FlowError::Error)?;
 
             let mut state = self.state.lock().unwrap();
-            if !state.settings.active() {
+            if !state.settings.active() && !state.reactions.active() {
+                // No effect is on and no manual burst is in flight: restore
+                // passthrough so we stop being handed frames. (Fallback if this
+                // ever misbehaves: drop the set_passthrough call and just return
+                // — that costs one buffer map per idle frame.)
+                drop(state);
+                self.obj().set_passthrough(true);
                 return Ok(gst::FlowSuccess::Ok);
             }
             state.frame = state.frame.wrapping_add(1);
 
             // Pack the (possibly strided) plane into a tight RGBA buffer.
             let mut img = pack(plane, w, h, stride);
+
+            // Gesture detection runs on the original frame, before center stage
+            // crops it in place, so hands outside the crop are still seen. It may
+            // enqueue a reaction burst, drawn by the overlay step below.
+            if state.settings.reactions_enabled {
+                run_gestures(&mut state, &img, w, h);
+            }
 
             let cs_active = state.settings.cs_enabled && state.settings.cs_zoom != "off";
             if cs_active {
@@ -444,9 +557,112 @@ mod imp {
                 masked_effects(&mut state, &mut img, w, h, false);
             }
 
+            // Reactions overlay runs last, on the final canvas, so emojis are
+            // never cropped/blurred by the effects above.
+            if state.settings.reactions_enabled || state.reactions.active() {
+                let frame = state.frame;
+                state.reactions.step_and_render(&mut img, w, h, frame);
+            }
+
             unpack(&img, plane, w, h, stride);
             Ok(gst::FlowSuccess::Ok)
         }
+    }
+
+    /// The reactions gesture pipeline, run on a cadence over the original frame:
+    /// palm-detect (only when fewer than two hands are tracked) → per-hand
+    /// landmarks (tracked from the previous frame's crop, the cheap path) →
+    /// rule-based classify, with hold-to-confirm debounce and a post-trigger
+    /// cooldown. A confirmed gesture enqueues the matching emoji burst.
+    fn run_gestures(state: &mut State, img: &[u8], w: usize, h: usize) {
+        if state.frame % GESTURE_INTERVAL != 2 {
+            return;
+        }
+        let stride = w * 4;
+
+        // 1. (Re)acquire hands via palm detection when there's room for more.
+        if state.tracks.len() < MAX_TRACKS && state.frame >= state.redetect_at {
+            let palms = match state.engine.palm() {
+                Some(model) => model
+                    .detect(img, w, h, stride, PALM_SCORE_THRESH)
+                    .unwrap_or_default(),
+                None => Vec::new(),
+            };
+            state.redetect_at = state.frame + REDETECT_INTERVAL;
+            for palm in palms {
+                if state.tracks.len() >= MAX_TRACKS {
+                    break;
+                }
+                let crop = palm.crop(w, h);
+                if !state.tracks.iter().any(|t| crops_overlap(t.crop, crop)) {
+                    state.tracks.push(HandTrack { crop, missed: 0 });
+                }
+            }
+        }
+
+        if state.tracks.is_empty() {
+            return;
+        }
+
+        // 2. Landmarks per tracked hand. Crops are copied out so the engine can
+        //    be borrowed while we read them.
+        let crops: Vec<CropBox> = state.tracks.iter().map(|t| t.crop).collect();
+        let mut landmarks: Vec<HandLandmarks> = Vec::with_capacity(crops.len());
+        // Per track: the refreshed crop on success, or None to count a miss.
+        let mut next: Vec<Option<CropBox>> = Vec::with_capacity(crops.len());
+        for crop in crops {
+            let lm = state
+                .engine
+                .hand()
+                .and_then(|model| model.infer(img, w, h, stride, crop).ok());
+            match lm {
+                Some(lm) if lm.confidence >= HAND_CONF_THRESH => {
+                    next.push(Some(lm.tracking_crop(w, h)));
+                    landmarks.push(lm);
+                }
+                _ => next.push(None),
+            }
+        }
+
+        // Advance confident tracks; drop a track after two consecutive misses.
+        let mut updated = Vec::with_capacity(state.tracks.len());
+        for (i, track) in state.tracks.drain(..).enumerate() {
+            match next.get(i).and_then(|o| *o) {
+                Some(crop) => updated.push(HandTrack { crop, missed: 0 }),
+                None if track.missed + 1 < 2 => updated.push(HandTrack {
+                    crop: track.crop,
+                    missed: track.missed + 1,
+                }),
+                None => {}
+            }
+        }
+        state.tracks = updated;
+
+        // 3. Classify with hold-to-confirm debounce, gated by the cooldown.
+        match gesture::classify(&landmarks) {
+            g if g == state.held => state.held_count = state.held_count.saturating_add(1),
+            g => {
+                state.held = g;
+                state.held_count = if g.is_some() { 1 } else { 0 };
+            }
+        }
+        if let Some(g) = state.held {
+            if state.held_count >= GESTURE_CONFIRM && state.frame >= state.cooldown_until {
+                let frame = state.frame;
+                state.reactions.trigger(g.reaction_id(), frame);
+                state.cooldown_until = frame + REACTION_COOLDOWN;
+                state.held = None;
+                state.held_count = 0;
+            }
+        }
+    }
+
+    /// Whether two hand crops are close enough to be the same hand (dedup on
+    /// palm re-detection).
+    fn crops_overlap(a: CropBox, b: CropBox) -> bool {
+        let dx = a.cx - b.cx;
+        let dy = a.cy - b.cy;
+        (dx * dx + dy * dy).sqrt() < 0.25 * (a.side + b.side)
     }
 
     /// Run every mask-gated effect over a tight RGBA buffer: segment **once**,
@@ -700,7 +916,14 @@ mod imp {
     /// original exposure. Per channel, on normalized values:
     /// `adjusted = (p − 0.5)·contrast + 0.5 + brightness`, then
     /// `out = lerp(p, adjusted, mask)`.
-    fn apply_studio(img: &mut [u8], mask: &Mask, w: usize, h: usize, brightness: f32, contrast: f32) {
+    fn apply_studio(
+        img: &mut [u8],
+        mask: &Mask,
+        w: usize,
+        h: usize,
+        brightness: f32,
+        contrast: f32,
+    ) {
         for y in 0..h {
             let v = (y as f32 + 0.5) / h as f32;
             for x in 0..w {

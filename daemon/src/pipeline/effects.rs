@@ -89,7 +89,10 @@ pub fn apply_app_state_to_elements(effects: &gst::Element, app: &AppState) {
     let contrast_delta = (studio.contrast as f64 - 50.0) / 50.0;
     let contrast = 1.0 + contrast_delta * intensity;
     effects.set_property("studio-light-enabled", studio.enabled);
-    effects.set_property("studio-light-brightness", brightness.clamp(-1.0, 1.0) as f32);
+    effects.set_property(
+        "studio-light-brightness",
+        brightness.clamp(-1.0, 1.0) as f32,
+    );
     effects.set_property("studio-light-contrast", contrast.clamp(0.0, 2.0) as f32);
 
     let blur = &app.effects.portrait_blur;
@@ -104,6 +107,8 @@ pub fn apply_app_state_to_elements(effects: &gst::Element, app: &AppState) {
     effects.set_property("center-stage-enabled", center.enabled);
     effects.set_property("center-stage-zoom", &center.zoom);
     effects.set_property("center-stage-mode", &center.mode);
+
+    effects.set_property("reactions-enabled", app.effects.reactions.enabled);
 }
 
 #[cfg(test)]
@@ -139,6 +144,7 @@ mod tests {
         assert_eq!(effects.property::<String>("center-stage-zoom"), "normal");
         assert_eq!(effects.property::<String>("center-stage-mode"), "single");
         assert!(!effects.property::<bool>("bg-replace-enabled"));
+        assert!(!effects.property::<bool>("reactions-enabled"));
     }
 
     #[test]
@@ -176,6 +182,68 @@ mod tests {
         assert_eq!(effects.property::<u32>("portrait-blur-strength"), 75);
         assert!(effects.property::<bool>("bg-replace-enabled"));
         assert_eq!(effects.property::<String>("bg-replace-path"), "#102030");
+
+        app.effects.reactions.enabled = true;
+        apply_app_state_to_elements(&effects, &app);
+        assert!(effects.property::<bool>("reactions-enabled"));
+    }
+
+    /// A manual `trigger-reaction` must process frames even with every effect
+    /// disabled: it flips the element out of passthrough, renders the burst, and
+    /// restores passthrough once it drains — all without erroring the pipeline.
+    #[test]
+    fn trigger_reaction_processes_frames_with_effects_off() {
+        if !effects_available() || gst::ElementFactory::find("videotestsrc").is_none() {
+            eprintln!("skipping: GStreamer plugins not available");
+            return;
+        }
+        // Default AppState: no effect enabled -> element starts in passthrough.
+        let app = AppState::default();
+
+        let pipeline = gst::Pipeline::new();
+        let src = gst::ElementFactory::make("videotestsrc")
+            .property("num-buffers", 6i32)
+            .build()
+            .unwrap();
+        let caps = gst::ElementFactory::make("capsfilter")
+            .property(
+                "caps",
+                gst::Caps::builder("video/x-raw")
+                    .field("width", 320i32)
+                    .field("height", 240i32)
+                    .build(),
+            )
+            .build()
+            .unwrap();
+        let bin = build_effects_bin(&app).unwrap();
+        let effects = bin.by_name("oe_effects").unwrap();
+        let sink = gst::ElementFactory::make("fakesink").build().unwrap();
+        pipeline
+            .add_many([&src, &caps, bin.upcast_ref(), &sink])
+            .unwrap();
+        gst::Element::link_many([&src, &caps, bin.upcast_ref(), &sink]).unwrap();
+
+        pipeline.set_state(gst::State::Playing).unwrap();
+        // Fire a burst into the live element; this disables passthrough.
+        effects.set_property("trigger-reaction", "tada");
+
+        let bus = pipeline.bus().unwrap();
+        let mut saw_eos = false;
+        for msg in bus.iter_timed(gst::ClockTime::from_seconds(15)) {
+            match msg.view() {
+                gst::MessageView::Eos(_) => {
+                    saw_eos = true;
+                    break;
+                }
+                gst::MessageView::Error(err) => {
+                    pipeline.set_state(gst::State::Null).unwrap();
+                    panic!("pipeline error: {} ({:?})", err.error(), err.debug());
+                }
+                _ => {}
+            }
+        }
+        pipeline.set_state(gst::State::Null).unwrap();
+        assert!(saw_eos, "pipeline did not reach EOS within timeout");
     }
 
     /// End-to-end smoke test of the hot path: push real frames through the
@@ -220,6 +288,61 @@ mod tests {
         let bus = pipeline.bus().unwrap();
         let mut saw_eos = false;
         for msg in bus.iter_timed(gst::ClockTime::from_seconds(15)) {
+            match msg.view() {
+                gst::MessageView::Eos(_) => {
+                    saw_eos = true;
+                    break;
+                }
+                gst::MessageView::Error(err) => {
+                    pipeline.set_state(gst::State::Null).unwrap();
+                    panic!("pipeline error: {} ({:?})", err.error(), err.debug());
+                }
+                _ => {}
+            }
+        }
+        pipeline.set_state(gst::State::Null).unwrap();
+        assert!(saw_eos, "pipeline did not reach EOS within timeout");
+    }
+
+    /// With reactions enabled, the gesture pipeline (palm + hand inference)
+    /// runs on each cadence frame. videotestsrc has no hands, so nothing
+    /// triggers — this just asserts the integration runs to EOS without error,
+    /// whether or not the hand models are installed (fail-memo path).
+    #[test]
+    fn reactions_enabled_runs_gesture_pipeline() {
+        if !effects_available() || gst::ElementFactory::find("videotestsrc").is_none() {
+            eprintln!("skipping: GStreamer plugins not available");
+            return;
+        }
+        let mut app = AppState::default();
+        app.effects.reactions.enabled = true;
+
+        let pipeline = gst::Pipeline::new();
+        let src = gst::ElementFactory::make("videotestsrc")
+            .property("num-buffers", 8i32)
+            .build()
+            .unwrap();
+        let caps = gst::ElementFactory::make("capsfilter")
+            .property(
+                "caps",
+                gst::Caps::builder("video/x-raw")
+                    .field("width", 320i32)
+                    .field("height", 240i32)
+                    .build(),
+            )
+            .build()
+            .unwrap();
+        let bin = build_effects_bin(&app).unwrap();
+        let sink = gst::ElementFactory::make("fakesink").build().unwrap();
+        pipeline
+            .add_many([&src, &caps, bin.upcast_ref(), &sink])
+            .unwrap();
+        gst::Element::link_many([&src, &caps, bin.upcast_ref(), &sink]).unwrap();
+
+        pipeline.set_state(gst::State::Playing).unwrap();
+        let bus = pipeline.bus().unwrap();
+        let mut saw_eos = false;
+        for msg in bus.iter_timed(gst::ClockTime::from_seconds(20)) {
             match msg.view() {
                 gst::MessageView::Eos(_) => {
                     saw_eos = true;

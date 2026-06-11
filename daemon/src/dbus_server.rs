@@ -166,6 +166,19 @@ impl Effects1Iface {
         Ok(())
     }
 
+    /// Fire a one-shot reaction burst. Stateless: no config is changed and no
+    /// signal is emitted — it just hands the pipeline a trigger.
+    async fn trigger_reaction(&self, id: &str) -> fdo::Result<()> {
+        if !shared::dbus::REACTION_IDS.contains(&id) {
+            return Err(fdo::Error::InvalidArgs(format!("unknown reaction '{id}'")));
+        }
+        self.pipeline_tx
+            .send(PipelineCommand::TriggerReaction(id.to_string()))
+            .await
+            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+        Ok(())
+    }
+
     async fn get_params(&self, id: &str) -> fdo::Result<VariantMap> {
         self.state
             .read()

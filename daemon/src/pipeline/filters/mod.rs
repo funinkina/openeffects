@@ -1,4 +1,5 @@
 pub mod oe_effects;
+pub mod reactions;
 
 pub use oe_effects::OeEffects;
 

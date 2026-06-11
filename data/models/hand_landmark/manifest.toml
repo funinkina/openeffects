@@ -1,0 +1,48 @@
+[model]
+id = "hand_landmark"
+name = "MediaPipe Hand Landmark"
+version = "2023feb"
+license = "Apache-2.0"
+
+# NHWC RGB input scaled to 0..1; a square crop around the detected palm,
+# resized to 224x224 (v1 does not rotation-normalize the crop).
+[model.input]
+name = "input_1"
+shape = [1, 224, 224, 3]
+layout = "NHWC"
+preprocessing = "scale_0_1"
+
+# tf2onnx names the four graph outputs "Identity".."Identity_3" in this order:
+# landmarks (screen, 21×xyz in 224px), confidence, handedness, world landmarks.
+# The wrapper binds screen landmarks by value magnitude and confidence by order.
+[model.output.landmarks]
+name = "Identity"
+shape = [1, 63]
+postprocessing = "none"
+
+[model.output.confidence]
+name = "Identity_1"
+shape = [1, 1]
+postprocessing = "sigmoid"
+
+[model.output.handedness]
+name = "Identity_2"
+shape = [1, 1]
+postprocessing = "none"
+
+[model.output.world_landmarks]
+name = "Identity_3"
+shape = [1, 63]
+postprocessing = "none"
+
+[model.execution]
+supported_eps = ["cpu", "cuda", "tensorrt", "openvino"]
+min_vram_mb = 0
+
+[[model.variants]]
+name = "fp32"
+file = "handpose_estimation_mediapipe_2023feb.onnx"
+sha256 = "db0898ae717b76b075d9bf563af315b29562e11f8df5027a1ef07b02bef6d81c"
+
+[model.source]
+url = "https://github.com/opencv/opencv_zoo/raw/main/models/handpose_estimation_mediapipe/handpose_estimation_mediapipe_2023feb.onnx"

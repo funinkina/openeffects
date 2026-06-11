@@ -46,6 +46,18 @@ pub const BG_PRESETS: &[(&str, &str)] = &[
     ("Warm Gray", "#3a3a3a"),
 ];
 
+/// Emoji reaction buttons shown on the Reactions page (reaction id, glyph,
+/// tooltip), in the same order as `shared::dbus::REACTION_IDS`. Clicking one
+/// fires a one-shot reverse-rain burst, independent of the gesture toggle.
+pub const REACTION_BUTTONS: &[(&str, &str, &str)] = &[
+    ("thumbs_up", "\u{1F44D}", "Thumbs up"),
+    ("thumbs_down", "\u{1F44E}", "Thumbs down"),
+    ("heart", "\u{2764}\u{FE0F}", "Heart"),
+    ("joy", "\u{1F602}", "Laughing"),
+    ("tada", "\u{1F389}", "Celebrate"),
+    ("clap", "\u{1F44F}", "Applause"),
+];
+
 /// Bundled models listed in Preferences (id, display name, purpose).
 pub const BUNDLED_MODELS: &[(&str, &str, &str)] = &[
     (
@@ -54,6 +66,16 @@ pub const BUNDLED_MODELS: &[(&str, &str, &str)] = &[
         "Portrait blur &amp; background replace",
     ),
     ("yunet", "YuNet", "Face detection for Center Stage"),
+    (
+        "palm_detection",
+        "MediaPipe Palm Detection",
+        "Hand detection for gesture reactions",
+    ),
+    (
+        "hand_landmark",
+        "MediaPipe Hand Landmark",
+        "Hand keypoints for gesture reactions",
+    ),
 ];
 
 /// View-stack pages, shown as titled+icon entries in the `AdwViewSwitcher`:
