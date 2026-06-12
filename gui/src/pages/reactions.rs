@@ -9,7 +9,7 @@ use adw::prelude::*;
 
 use crate::constants::REACTION_BUTTONS;
 use crate::dbus_client::{CmdTx, GuiCommand};
-use crate::widgets::{add_switch, pref_group, Switches};
+use crate::widgets::{Switches, add_switch, pref_group};
 
 /// One-time CSS so the emoji buttons render the glyphs large.
 fn install_css() {

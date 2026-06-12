@@ -8,7 +8,7 @@ use shared::config::AppState;
 use tracing::{info, warn};
 
 use super::bridge::Bridge;
-use super::{cameras, effects, PipelineFormat};
+use super::{PipelineFormat, cameras, effects};
 
 /// The GStreamer half of the virtual camera: it captures the real webcam, runs
 /// the effects bin, and hands each processed frame to the [`Bridge`] via an

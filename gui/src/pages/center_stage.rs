@@ -3,11 +3,11 @@
 
 use adw::glib;
 use adw::prelude::*;
-use shared::dbus::{value_as_bool, value_as_string, VariantMap};
+use shared::dbus::{VariantMap, value_as_bool, value_as_string};
 
-use crate::constants::{FRAMING_LEVELS, FRAMING_MODES, FRAMING_MODE_ICONS};
+use crate::constants::{FRAMING_LEVELS, FRAMING_MODE_ICONS, FRAMING_MODES};
 use crate::dbus_client::{CmdTx, GuiCommand};
-use crate::widgets::{pref_group, toggle_group, toggle_group_stacked, ToggleCtl};
+use crate::widgets::{ToggleCtl, pref_group, toggle_group, toggle_group_stacked};
 
 /// Widgets the state-sync layer keeps in sync with the daemon.
 pub struct Widgets {

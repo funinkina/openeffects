@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use shared::dbus::{VariantMap, EFFECT_IDS};
-use tokio::sync::{mpsc, RwLock};
+use shared::dbus::{EFFECT_IDS, VariantMap};
+use tokio::sync::{RwLock, mpsc};
 use zbus::{fdo, interface, object_server::SignalEmitter};
 use zvariant::OwnedValue;
 

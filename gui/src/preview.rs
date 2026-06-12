@@ -126,11 +126,11 @@ impl Preview {
             }
         }
 
-        if let Some(pipeline) = self.pipeline.borrow().as_ref() {
-            if let Err(err) = pipeline.set_state(gst::State::Playing) {
-                self.status
-                    .set_label(&format!("Could not start preview: {err}"));
-            }
+        if let Some(pipeline) = self.pipeline.borrow().as_ref()
+            && let Err(err) = pipeline.set_state(gst::State::Playing)
+        {
+            self.status
+                .set_label(&format!("Could not start preview: {err}"));
         }
     }
 

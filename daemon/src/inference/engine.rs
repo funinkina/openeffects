@@ -285,11 +285,7 @@ fn iou(a: &Face, b: &Face) -> f32 {
     let ih = (iy1 - iy0).max(0.0);
     let inter = iw * ih;
     let union = a.w * a.h + b.w * b.h - inter;
-    if union <= 0.0 {
-        0.0
-    } else {
-        inter / union
-    }
+    if union <= 0.0 { 0.0 } else { inter / union }
 }
 
 #[cfg(test)]

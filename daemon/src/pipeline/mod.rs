@@ -6,8 +6,8 @@ pub mod filters;
 pub mod probe;
 pub mod provider;
 
-use std::sync::mpsc as std_mpsc;
 use std::sync::Arc;
+use std::sync::mpsc as std_mpsc;
 use std::time::{Duration, Instant};
 
 use pipewire as pw;
@@ -187,10 +187,8 @@ fn worker_loop(
 
                 // If a consumer is already streaming (live camera switch), rebuild
                 // the capture immediately rather than waiting for a state change.
-                if consumer_streaming {
-                    if let Some(app) = stored_app.clone() {
-                        start_capture(&app, current_fmt, &bridge, &events, &mut capture);
-                    }
+                if consumer_streaming && let Some(app) = stored_app.clone() {
+                    start_capture(&app, current_fmt, &bridge, &events, &mut capture);
                 }
             }
             Ok(PipelineCommand::Stop) => {
@@ -237,10 +235,10 @@ fn worker_loop(
                 // A consumer is back -> cancel any pending release and ensure the
                 // camera is running (it may still be warm from a recent blip).
                 stop_deadline = None;
-                if capture.is_none() {
-                    if let Some(app) = stored_app.clone() {
-                        start_capture(&app, current_fmt, &bridge, &events, &mut capture);
-                    }
+                if capture.is_none()
+                    && let Some(app) = stored_app.clone()
+                {
+                    start_capture(&app, current_fmt, &bridge, &events, &mut capture);
                 }
             }
             Ok(CaptureCmd::Stop) => {
@@ -257,13 +255,14 @@ fn worker_loop(
 
         // Release the camera once the grace window elapses with no consumer.
         if let Some(deadline) = stop_deadline {
-            if !consumer_streaming && Instant::now() >= deadline {
-                if let Some(c) = capture.take() {
-                    c.stop();
-                    bridge.clear();
-                    info!("capture stopped: no consumer, camera released");
-                    let _ = events.blocking_send(PipelineEvent::Idle);
-                }
+            if !consumer_streaming
+                && Instant::now() >= deadline
+                && let Some(c) = capture.take()
+            {
+                c.stop();
+                bridge.clear();
+                info!("capture stopped: no consumer, camera released");
+                let _ = events.blocking_send(PipelineEvent::Idle);
             }
             if consumer_streaming || Instant::now() >= deadline {
                 stop_deadline = None;

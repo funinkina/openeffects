@@ -1,10 +1,10 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use gst::prelude::*;
 use gstreamer as gst;
 use tracing::warn;
 
-use super::probe::PIPEWIRE_NODE_NAME;
 use super::PipelineFormat;
+use super::probe::PIPEWIRE_NODE_NAME;
 
 #[derive(Debug, Clone)]
 pub struct CameraInfo {

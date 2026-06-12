@@ -668,14 +668,15 @@ mod imp {
                 state.held_count = if g.is_some() { 1 } else { 0 };
             }
         }
-        if let Some(g) = state.held {
-            if state.held_count >= GESTURE_CONFIRM && state.frame >= state.cooldown_until {
-                let frame = state.frame;
-                state.reactions.trigger(g.reaction_id(), frame);
-                state.cooldown_until = frame + REACTION_COOLDOWN;
-                state.held = None;
-                state.held_count = 0;
-            }
+        if let Some(g) = state.held
+            && state.held_count >= GESTURE_CONFIRM
+            && state.frame >= state.cooldown_until
+        {
+            let frame = state.frame;
+            state.reactions.trigger(g.reaction_id(), frame);
+            state.cooldown_until = frame + REACTION_COOLDOWN;
+            state.held = None;
+            state.held_count = 0;
         }
     }
 

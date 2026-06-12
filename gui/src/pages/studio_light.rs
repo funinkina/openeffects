@@ -4,10 +4,10 @@
 
 use adw::glib;
 use adw::prelude::*;
-use shared::dbus::{value_as_bool, value_as_i32, value_as_u32, VariantMap};
+use shared::dbus::{VariantMap, value_as_bool, value_as_i32, value_as_u32};
 
 use crate::dbus_client::{CmdTx, GuiCommand};
-use crate::widgets::{add_slider_i32, add_slider_u32, pref_group, SliderCtl};
+use crate::widgets::{SliderCtl, add_slider_i32, add_slider_u32, pref_group};
 
 /// Widgets the state-sync layer keeps in sync with the daemon.
 pub struct Widgets {

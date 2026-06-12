@@ -1,6 +1,6 @@
 use shared::{
     config::AppState,
-    dbus::{bool_value, i32_value, str_value, u32_value, VariantMap},
+    dbus::{VariantMap, bool_value, i32_value, str_value, u32_value},
 };
 
 use crate::inference::{EpKind, Tier};

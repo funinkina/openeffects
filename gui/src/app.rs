@@ -9,11 +9,11 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use adw::ApplicationWindow;
 use adw::glib;
 use adw::prelude::*;
-use adw::ApplicationWindow;
 use gtk::gio;
-use shared::dbus::{value_as_bool, value_as_string, VariantMap, EFFECT_IDS};
+use shared::dbus::{EFFECT_IDS, VariantMap, value_as_bool, value_as_string};
 
 use crate::about;
 use crate::config::GuiConfig;

@@ -17,13 +17,13 @@ use adw::glib;
 use adw::prelude::*;
 use gtk::gdk::RGBA;
 use gtk::gio;
-use shared::dbus::{value_as_bool, value_as_string, value_as_u32, VariantMap};
+use shared::dbus::{VariantMap, value_as_bool, value_as_string, value_as_u32};
 
 use crate::constants::{
-    BG_BLUR, BG_IMAGE_PRESETS, BG_MODES, BG_MODE_ICONS, BG_PRESETS, BG_REPLACE, BLUR_LEVELS,
+    BG_BLUR, BG_IMAGE_PRESETS, BG_MODE_ICONS, BG_MODES, BG_PRESETS, BG_REPLACE, BLUR_LEVELS,
 };
 use crate::dbus_client::{CmdTx, GuiCommand};
-use crate::widgets::{pref_group, toggle_group, toggle_group_stacked, ToggleCtl};
+use crate::widgets::{ToggleCtl, pref_group, toggle_group, toggle_group_stacked};
 
 const CUSTOM_SWATCH_CLASS: &str = "oe-custom-swatch";
 const CUSTOM_IMAGE_CLASS: &str = "oe-custom-image";
@@ -398,10 +398,10 @@ fn open_image_dialog(widget: &impl IsA<gtk::Widget>, cmd_tx: &CmdTx) {
     let cmd_tx = cmd_tx.clone();
     let parent = widget.root().and_downcast::<gtk::Window>();
     dialog.open(parent.as_ref(), gio::Cancellable::NONE, move |res| {
-        if let Ok(file) = res {
-            if let Some(path) = file.path() {
-                set_background(&cmd_tx, &path.to_string_lossy());
-            }
+        if let Ok(file) = res
+            && let Some(path) = file.path()
+        {
+            set_background(&cmd_tx, &path.to_string_lossy());
         }
     });
 }

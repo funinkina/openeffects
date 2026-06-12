@@ -394,11 +394,7 @@ fn palm_iou(a: &Palm, b: &Palm) -> f32 {
     let ih = (ay1.min(by1) - ay0.max(by0)).max(0.0);
     let inter = iw * ih;
     let union = a.w * a.h + b.w * b.h - inter;
-    if union <= 0.0 {
-        0.0
-    } else {
-        inter / union
-    }
+    if union <= 0.0 { 0.0 } else { inter / union }
 }
 
 #[cfg(test)]

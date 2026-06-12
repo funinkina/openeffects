@@ -1,10 +1,10 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = ["shared", "daemon", "cli", "gui", "tests/integration"]
 
 [workspace.package]
 version = "0.1.2"
-edition = "2021"
+edition = "2024"
 license = "GPL-3.0-or-later"
 authors = ["Aryan <hello@funinkina.co.in>"]
 rust-version = "1.88"

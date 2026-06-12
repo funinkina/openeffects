@@ -16,8 +16,8 @@
 //! the shared `Arc<Bridge>` latest-frame slot.
 
 use std::io::Cursor;
-use std::sync::mpsc::Sender as StdSender;
 use std::sync::Arc;
+use std::sync::mpsc::Sender as StdSender;
 use std::time::Duration;
 
 use pipewire as pw;

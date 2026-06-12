@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand, ValueEnum};
 use futures_util::StreamExt;
 use shared::dbus::{
-    value_as_bool, VariantMap, DAEMON_INTERFACE, DEVICES_INTERFACE, EFFECTS_INTERFACE, OBJECT_PATH,
-    SERVICE_NAME,
+    DAEMON_INTERFACE, DEVICES_INTERFACE, EFFECTS_INTERFACE, OBJECT_PATH, SERVICE_NAME, VariantMap,
+    value_as_bool,
 };
 use zbus::{Connection, Proxy};
 use zvariant::{OwnedValue, Str, Value};

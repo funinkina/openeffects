@@ -10,7 +10,7 @@ use shared::{
     config::AppState,
     dbus::{OBJECT_PATH, SERVICE_NAME},
 };
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{RwLock, mpsc};
 use tracing::{error, info, warn};
 use zbus::object_server::SignalEmitter;
 
@@ -32,12 +32,17 @@ async fn main() -> anyhow::Result<()> {
         AppState::default()
     });
     if app.camera.selected.trim().is_empty() {
-        if let Err(err) = gstreamer::init() {
-            error!(%err, "failed to initialize GStreamer for camera autodetect");
-        } else if let Some(camera) = pipeline::cameras::autodetect() {
-            app.camera.selected = camera.id;
-            if let Err(err) = app.save() {
-                error!(%err, "failed to persist default camera selection");
+        match gstreamer::init() {
+            Err(err) => {
+                error!(%err, "failed to initialize GStreamer for camera autodetect");
+            }
+            Ok(_) => {
+                if let Some(camera) = pipeline::cameras::autodetect() {
+                    app.camera.selected = camera.id;
+                    if let Err(err) = app.save() {
+                        error!(%err, "failed to persist default camera selection");
+                    }
+                }
             }
         }
     }
@@ -53,7 +58,9 @@ async fn main() -> anyhow::Result<()> {
     let models_ready = inference::registry::find_model("yunet").is_some()
         && inference::registry::find_model("selfie_segmentation").is_some();
     if !models_ready {
-        warn!("ML models not found; run scripts/fetch-models.sh to enable Portrait Blur and Center Stage");
+        warn!(
+            "ML models not found; run scripts/fetch-models.sh to enable Portrait Blur and Center Stage"
+        );
     }
 
     let state = Arc::new(RwLock::new(DaemonState::new(app, ep, tier, models_ready)));
@@ -121,12 +128,11 @@ async fn main() -> anyhow::Result<()> {
                 (old_status, state.status)
             };
 
-            if old_status != new_status {
-                if let Err(err) =
+            if old_status != new_status
+                && let Err(err) =
                     Daemon1Iface::daemon_status_changed(&status_emitter, new_status.as_str()).await
-                {
-                    error!(%err, "failed to emit StatusChanged");
-                }
+            {
+                error!(%err, "failed to emit StatusChanged");
             }
         }
     });

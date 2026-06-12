@@ -124,7 +124,7 @@ mod tests {
     fn curled_hand(thumb_tip: [f32; 3], thumb_mcp: [f32; 3]) -> [[f32; 3]; 21] {
         let mut p = [[0.0f32; 3]; 21];
         p[0] = [0.5, 0.8, 0.0]; // wrist
-                                // thumb chain (1 CMC, 2 MCP, 3 IP, 4 TIP)
+        // thumb chain (1 CMC, 2 MCP, 3 IP, 4 TIP)
         p[1] = [0.46, 0.76, 0.0];
         p[2] = thumb_mcp;
         p[3] = [
@@ -209,11 +209,11 @@ mod tests {
             p[6] = [0.5 + sign * 0.08, 0.5, 0.0];
             p[7] = [0.5 + sign * 0.04, 0.46, 0.0];
             p[8] = [0.5 + sign * 0.01, 0.42, 0.0]; // index tip (top, near center)
-                                                   // thumb tip just below index tip, near center
+            // thumb tip just below index tip, near center
             p[2] = [0.5 + sign * 0.13, 0.6, 0.0];
             p[3] = [0.5 + sign * 0.06, 0.52, 0.0];
             p[4] = [0.5 + sign * 0.01, 0.48, 0.0]; // thumb tip below index tip
-                                                   // palm width reference (index MCP 5 to pinky MCP 17)
+            // palm width reference (index MCP 5 to pinky MCP 17)
             p[17] = [0.5 + sign * 0.2, 0.6, 0.0];
             // middle/ring/pinky curled (tips near wrist)
             for &(m, pi, t) in &[(9usize, 10usize, 12usize), (13, 14, 16), (17, 18, 20)] {

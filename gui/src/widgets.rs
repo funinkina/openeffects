@@ -117,10 +117,10 @@ pub struct SliderCtl {
 
 impl SliderCtl {
     pub fn set_value(&self, value: f64) {
-        if let Some(at) = self.last_input.get() {
-            if at.elapsed() < SLIDER_ECHO_HOLDOFF {
-                return;
-            }
+        if let Some(at) = self.last_input.get()
+            && at.elapsed() < SLIDER_ECHO_HOLDOFF
+        {
+            return;
         }
         if (self.scale.value() - value).abs() < 0.5 {
             return;
