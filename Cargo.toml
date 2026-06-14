@@ -47,6 +47,10 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 clap = { version = "4", features = ["derive"] }
 futures-util = "0.3.32"
 
+# xdg-desktop-portal client (Camera + Background portals). Only exercised inside
+# the Flatpak sandbox (gated on FLATPAK_ID); dormant on native installs.
+ashpd = { version = "0.12", default-features = false, features = ["tokio"] }
+
 [profile.release]
 opt-level = 3
 lto = "thin"

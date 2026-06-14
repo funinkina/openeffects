@@ -1,6 +1,7 @@
 mod dbus_server;
 mod inference;
 mod pipeline;
+mod portal;
 mod state;
 
 use std::sync::Arc;
@@ -137,6 +138,12 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // Flatpak: grab the camera portal grant once (may prompt) before any capture,
+    // and tell the shell we're a background app so we show up sensibly once the
+    // GUI window is closed.
+    portal::init_camera().await;
+    portal::set_background_status("Ready to apply webcam effects").await;
+
     if start_pipeline {
         let app = state.read().await.app.clone();
         {
@@ -147,10 +154,16 @@ async fn main() -> anyhow::Result<()> {
     }
 
     info!("openeffectsd is running on the session bus");
+    // SIGTERM is how GNOME Shell's "Background Apps -> Quit" stops us.
+    let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        .context("install SIGTERM handler")?;
     tokio::select! {
         result = tokio::signal::ctrl_c() => {
             result?;
             info!("received ctrl-c, shutting down");
+        }
+        _ = sigterm.recv() => {
+            info!("received SIGTERM, shutting down");
         }
         _ = shutdown_rx.recv() => {
             info!("received Quit, shutting down");

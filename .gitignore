@@ -2,3 +2,5 @@
 /build/
 /.cache/
 /dist/
+.flatpak-builder
+build-dir

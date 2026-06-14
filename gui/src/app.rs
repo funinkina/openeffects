@@ -159,8 +159,12 @@ pub fn build_window(
             if quitting.get() {
                 return glib::Propagation::Proceed;
             }
+            // In the Flatpak sandbox the daemon is the persistent background
+            // process (it holds the shell's background-app status), so closing
+            // the window always leaves it running. The launcher does not kill it.
+            let in_flatpak = std::env::var_os("FLATPAK_ID").is_some();
             let keep_running = gui_config.borrow().keep_running_in_background;
-            if keep_running || shared::systemd::is_enabled() {
+            if in_flatpak || keep_running || shared::systemd::is_enabled() {
                 return glib::Propagation::Proceed;
             }
             quitting.set(true);

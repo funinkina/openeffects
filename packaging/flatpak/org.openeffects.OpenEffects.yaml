@@ -1,0 +1,136 @@
+# Flatpak manifest for OpenEffects (GUI + daemon + CLI in one sandboxed app).
+#
+# Notes on the design (see README.md in this directory for the full rationale):
+#   * One app id ships all three binaries. `command` is a launcher that starts
+#     the daemon (no systemd in the sandbox) and then runs the GUI.
+#   * ONNX Runtime is dlopen'd at runtime (ort `load-dynamic`), NOT downloaded at
+#     build time — Flathub builds are offline. We ship Microsoft's prebuilt
+#     libonnxruntime.so and point ort at it via ORT_DYLIB_PATH. CPU EP only;
+#     the GPU execution providers need host drivers we can't sandbox.
+#   * The 4 ML models (~8 MB) are bundled as sha256-pinned sources into
+#     /app/share/openeffects/models, which the daemon already searches under
+#     FLATPAK_ID (daemon/src/inference/registry.rs). No runtime network needed.
+#   * Cargo deps are vendored offline via cargo-sources.json, generated from
+#     packaging/flatpak/Cargo.lock (the `load-dynamic` lock, NOT the repo's
+#     download-binaries Cargo.lock). Regenerate both with generate-cargo-sources.sh.
+id: org.openeffects.OpenEffects
+
+# GNOME 50 is the current Flathub runtime (mid-2026); it's based on freedesktop
+# 25.08, so the SDK extensions below resolve to their //25.08 branches. The GUI
+# only needs gtk4 v4_12 + libadwaita v1_7 (GNOME 48+), so bump freely.
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+  - org.freedesktop.Sdk.Extension.llvm20   # libclang for bindgen (pipewire-sys / libspa-sys)
+
+command: openeffects-launcher
+
+finish-args:
+  - --share=ipc
+  - --socket=wayland                          # Wayland-only GUI
+  - --filesystem=xdg-run/pipewire-0           # publish the virtual camera node + enumerate devices (the Camera portal can't create nodes); pipewire is not a --socket type, access is via its runtime socket
+  - --device=dri                              # GPU for the GStreamer GL pipeline
+  - --talk-name=org.freedesktop.portal.Desktop  # xdg-desktop-portal Camera + file chooser
+  - --own-name=org.openeffects.Daemon         # session-bus name the daemon claims (shared/src/dbus.rs)
+  - --filesystem=xdg-pictures:ro              # custom background images picked from ~/Pictures
+  # dlopen target for ort load-dynamic; applies to every process in the sandbox
+  # (the GUI's `--command=openeffectsd` runs too).
+  - --env=ORT_DYLIB_PATH=/app/lib/libonnxruntime.so
+
+cleanup:
+  - /include
+  - /lib/cmake
+  - /lib/pkgconfig
+  - /lib/*.a
+  - '*.la'
+
+modules:
+  # ---------------------------------------------------------------------------
+  # ONNX Runtime: ship Microsoft's prebuilt CPU shared lib; ort dlopen's it.
+  # Pin the version to >= the ORT API ort-sys targets (17); a newer .so is
+  # backward-compatible with the older API version ort requests at load time.
+  # ---------------------------------------------------------------------------
+  - name: onnxruntime
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 lib/libonnxruntime.so.1.22.0 /app/lib/libonnxruntime.so.1.22.0
+      - ln -sf libonnxruntime.so.1.22.0 /app/lib/libonnxruntime.so
+      - install -Dm644 LICENSE /app/share/licenses/onnxruntime/LICENSE
+    sources:
+      - type: archive
+        url: https://github.com/microsoft/onnxruntime/releases/download/v1.22.0/onnxruntime-linux-x64-1.22.0.tgz
+        sha256: 8344d55f93d5bc5021ce342db50f62079daf39aaafb5d311a451846228be49b3
+        only-arches:
+          - x86_64
+
+  # ---------------------------------------------------------------------------
+  # OpenEffects: build all three binaries, install the launcher, desktop files,
+  # bundled models, and AppStream metainfo.
+  # ---------------------------------------------------------------------------
+  - name: openeffects
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/llvm20/bin
+      env:
+        CARGO_HOME: /run/build/openeffects/cargo
+        CARGO_NET_OFFLINE: 'true'
+        LIBCLANG_PATH: /usr/lib/sdk/llvm20/lib
+        # ort load-dynamic does no build-time linking; nothing to point at here.
+    build-commands:
+      # Use the load-dynamic lock that cargo-sources.json was vendored from, and
+      # switch ort off download-binaries (Flathub build has no network).
+      # load-dynamic compiles every EP register path, which reference api-gated
+      # OrtApi fields; pin api-22 to match the bundled libonnxruntime.so.1.22.0.
+      - cp packaging/flatpak/Cargo.lock Cargo.lock
+      - sed -i 's/"download-binaries"/"load-dynamic", "api-22"/; /"tls-rustls",/d' Cargo.toml
+      # The CLI is intentionally NOT shipped in the Flatpak: the GUI + daemon are
+      # the coupled unit here. Use the native package for `openeffectsctl`.
+      - cargo --offline build --release -p openeffectsd -p openeffects
+
+      - install -Dm755 target/release/openeffectsd /app/bin/openeffectsd
+      - install -Dm755 target/release/openeffects  /app/bin/openeffects
+      - install -Dm755 packaging/flatpak/openeffects-launcher.sh /app/bin/openeffects-launcher
+
+      # Desktop entry, icon, AppStream metainfo (renamed to the app id where needed).
+      - install -Dm644 data/applications/org.openeffects.OpenEffects.desktop /app/share/applications/org.openeffects.OpenEffects.desktop
+      - install -Dm644 data/icons/org.openeffects.OpenEffects.svg /app/share/icons/hicolor/scalable/apps/org.openeffects.OpenEffects.svg
+      - install -Dm644 packaging/flatpak/org.openeffects.OpenEffects.metainfo.xml /app/share/metainfo/org.openeffects.OpenEffects.metainfo.xml
+
+      # Bundled, sha256-verified ML models -> /app/share/openeffects/models/<id>/.
+      # Manifests come from the repo; the .onnx blobs are the pinned `file` sources below.
+      - install -Dm644 data/models/yunet/manifest.toml /app/share/openeffects/models/yunet/manifest.toml
+      - install -Dm644 face_detection_yunet_2026may.onnx /app/share/openeffects/models/yunet/face_detection_yunet_2026may.onnx
+      - install -Dm644 data/models/selfie_segmentation/manifest.toml /app/share/openeffects/models/selfie_segmentation/manifest.toml
+      - install -Dm644 selfie_segmentation.onnx /app/share/openeffects/models/selfie_segmentation/selfie_segmentation.onnx
+      - install -Dm644 data/models/hand_landmark/manifest.toml /app/share/openeffects/models/hand_landmark/manifest.toml
+      - install -Dm644 handpose_estimation_mediapipe_2023feb.onnx /app/share/openeffects/models/hand_landmark/handpose_estimation_mediapipe_2023feb.onnx
+      - install -Dm644 data/models/palm_detection/manifest.toml /app/share/openeffects/models/palm_detection/manifest.toml
+      - install -Dm644 palm_detection_mediapipe_2023feb.onnx /app/share/openeffects/models/palm_detection/palm_detection_mediapipe_2023feb.onnx
+    sources:
+      # For local builds, point at the working tree. For a Flathub submission,
+      # replace this with a `type: git` source pinned to a tag + commit.
+      - type: dir
+        path: ../..
+      # Vendored crates + cargo config (writes cargo/config -> cargo/vendor).
+      - cargo-sources.json
+
+      # --- Bundled ML models (sha256 from data/models/*/manifest.toml) ---
+      - type: file
+        url: https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2026may.onnx
+        sha256: ebafce4e3c118d6554634be5c27ab333b4c047a9a8c3faf1d7cf93101c22f0f0
+        dest-filename: face_detection_yunet_2026may.onnx
+      - type: file
+        url: https://huggingface.co/onnx-community/mediapipe_selfie_segmentation/resolve/main/onnx/model.onnx
+        sha256: 3241ac4ad8aa35bdaf33946776db29f7c283a413aa0b0dacb9483594b4531aad
+        dest-filename: selfie_segmentation.onnx
+      - type: file
+        url: https://github.com/opencv/opencv_zoo/raw/main/models/handpose_estimation_mediapipe/handpose_estimation_mediapipe_2023feb.onnx
+        sha256: db0898ae717b76b075d9bf563af315b29562e11f8df5027a1ef07b02bef6d81c
+        dest-filename: handpose_estimation_mediapipe_2023feb.onnx
+      - type: file
+        url: https://github.com/opencv/opencv_zoo/raw/main/models/palm_detection_mediapipe/palm_detection_mediapipe_2023feb.onnx
+        sha256: 78ff51c38496b7fc8b8ebdb6cc8c1abb02fa6c38427c6848254cdaba57fcce7c
+        dest-filename: palm_detection_mediapipe_2023feb.onnx

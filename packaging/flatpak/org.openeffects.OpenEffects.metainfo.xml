@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metainfo. Validate with: appstreamcli validate <file>.
+     Flathub REQUIRES at least one real screenshot (see <screenshots> below) and
+     a maintained <releases> list. Update both before submitting. -->
+<component type="desktop-application">
+  <id>org.openeffects.OpenEffects</id>
+
+  <name>OpenEffects</name>
+  <summary>Apply real-time effects to your webcam</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <developer id="in.co.funinkina">
+    <name>Aryan Kushwaha</name>
+  </developer>
+
+  <description>
+    <p>
+      OpenEffects is a Linux-native, GPU-accelerated webcam effects engine. It
+      brings advanced camera features to any Wayland desktop and works with any
+      app that consumes a PipeWire camera node (Zoom, OBS, WebRTC, and more).
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Portrait Mode: high-quality background blur with feathered edges</li>
+      <li>Center Stage: face and body tracking that keeps you centered</li>
+      <li>Background Replacement: a solid color or a custom image</li>
+      <li>Studio Light: subject-aware brightening and separation</li>
+      <li>Reactions: hand-gesture-triggered animated overlays (off by default)</li>
+    </ul>
+    <p>
+      All inference runs locally on your machine. No telemetry, no network
+      calls, no cloud inference.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">org.openeffects.OpenEffects.desktop</launchable>
+
+  <categories>
+    <category>AudioVideo</category>
+    <category>Video</category>
+  </categories>
+
+  <keywords>
+    <keyword>webcam</keyword>
+    <keyword>camera</keyword>
+    <keyword>effects</keyword>
+    <keyword>background</keyword>
+    <keyword>blur</keyword>
+    <keyword>portrait</keyword>
+    <keyword>virtual camera</keyword>
+  </keywords>
+
+  <!-- TODO: replace with a real, publicly-hosted screenshot before submitting to
+       Flathub. The URL must point at an actual PNG/JPG (e.g. a release asset or a
+       raw file committed to the repo). -->
+  <screenshots>
+    <screenshot type="default">
+      <caption>The OpenEffects control window</caption>
+      <image>https://raw.githubusercontent.com/funinkina/openeffects/main/docs/screenshots/main.png</image>
+    </screenshot>
+  </screenshots>
+
+  <url type="homepage">https://github.com/funinkina/openeffects</url>
+  <url type="bugtracker">https://github.com/funinkina/openeffects/issues</url>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.1.2" date="2026-06-12">
+      <description>
+        <p>Beta release.</p>
+      </description>
+    </release>
+  </releases>
+</component>
