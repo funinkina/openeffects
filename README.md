@@ -1,6 +1,6 @@
 <img src="data/icons/org.openeffects.OpenEffects.svg" align="left" width="80" alt="OpenEffects icon">
 
-# OpenEffects (Beta)
+# OpenEffects
 
 [![Latest Release](https://img.shields.io/github/v/release/funinkina/openeffects?style=flat-square)](https://github.com/funinkina/openeffects/releases/latest)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
@@ -17,7 +17,7 @@ OpenEffects is a Linux-native, GPU-accelerated webcam effects engine. It brings 
 - **Center Stage:** Intelligent face and body tracking that smoothly crops and zooms to keep you (or your group) centered.
 - **Background Replacement:** Replace your messy room with a solid color or custom image.
 - **Studio Light:** Subtly brightens and separates the subject from the background using face-region-aware tone mapping.
-- **Reactions:** Hand-gesture-triggered animated overlays (e.g., thumbs-up for 👍 burst, peace sign for confetti). *Off by default.*
+- **Reactions:** Hand-gesture-triggered animated overlays (e.g., thumbs-up for 👍 and thumbs down and heart emojies based on gestures). *Off by default.* Can be trigerred manually via 
 
 ## Components
 
