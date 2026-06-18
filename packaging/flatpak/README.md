@@ -1,6 +1,6 @@
 # Flatpak packaging
 
-A single sandboxed app (`org.openeffects.OpenEffects`) bundling the **GUI + daemon**
+A single sandboxed app (`in.co.funinkina.OpenEffects`) bundling the **GUI + daemon**
 as one tightly-coupled unit. This is the Flathub-targeted build.
 
 The **CLI (`openeffectsctl`) is intentionally not shipped** in the Flatpak — it's a
@@ -11,8 +11,8 @@ only the GUI and the daemon it controls.
 
 | File                                       | Purpose                                                          |
 | ------------------------------------------ | ---------------------------------------------------------------- |
-| `org.openeffects.OpenEffects.yaml`         | flatpak-builder manifest                                         |
-| `org.openeffects.OpenEffects.metainfo.xml` | AppStream metadata (Flathub-required)                            |
+| `in.co.funinkina.OpenEffects.yaml`         | flatpak-builder manifest                                         |
+| `in.co.funinkina.OpenEffects.metainfo.xml` | AppStream metadata (Flathub-required)                            |
 | `openeffects-launcher.sh`                  | starts the daemon, then runs the GUI (no systemd in the sandbox) |
 | `Cargo.lock`                               | lockfile resolved for the `load-dynamic` ort build               |
 | `cargo-sources.json`                       | vendored crate sources for the offline build                     |
@@ -26,10 +26,10 @@ flatpak install -y flathub org.gnome.Platform//50 org.gnome.Sdk//50 \
     org.freedesktop.Sdk.Extension.llvm20//25.08    # 25.08 = GNOME 50's freedesktop base
 
 cd packaging/flatpak
-flatpak-builder --user --install --force-clean build-dir org.openeffects.OpenEffects.yaml
+flatpak-builder --user --install --force-clean build-dir in.co.funinkina.OpenEffects.yaml
 
-flatpak run org.openeffects.OpenEffects                                # GUI (+ daemon)
-flatpak run --command=openeffectsd org.openeffects.OpenEffects --start # headless daemon only
+flatpak run in.co.funinkina.OpenEffects                                # GUI (+ daemon)
+flatpak run --command=openeffectsd in.co.funinkina.OpenEffects --start # headless daemon only
 ```
 
 The `type: dir` source builds from the working tree, so local rebuilds pick up
@@ -108,12 +108,12 @@ It patches a throwaway copy to `load-dynamic`, re-resolves the lockfile, writes
    the install command above) to the GNOME runtime Flathub currently ships.
 4. **Validate.**
    ```bash
-   appstreamcli validate org.openeffects.OpenEffects.metainfo.xml
-   desktop-file-validate ../../data/applications/org.openeffects.OpenEffects.desktop
-   flatpak run org.flatpak.Builder --show-manifest org.openeffects.OpenEffects.yaml
+   appstreamcli validate in.co.funinkina.OpenEffects.metainfo.xml
+   desktop-file-validate ../../data/applications/in.co.funinkina.OpenEffects.desktop
+   flatpak run org.flatpak.Builder --show-manifest in.co.funinkina.OpenEffects.yaml
    ```
    Flathub CI also runs `flatpak-builder-lint manifest` and `...lint repo`.
-5. **Submit.** Open a PR adding `org.openeffects.OpenEffects.yaml` (+ this dir's
+5. **Submit.** Open a PR adding `in.co.funinkina.OpenEffects.yaml` (+ this dir's
    sources) to the [`flathub/flathub`](https://github.com/flathub/flathub)
    `new-pr` branch. See <https://docs.flathub.org/docs/for-app-authors/submission>.
 

@@ -13,7 +13,7 @@
 #   * Cargo deps are vendored offline via cargo-sources.json, generated from
 #     packaging/flatpak/Cargo.lock (the `load-dynamic` lock, NOT the repo's
 #     download-binaries Cargo.lock). Regenerate both with generate-cargo-sources.sh.
-id: org.openeffects.OpenEffects
+id: in.co.funinkina.OpenEffects
 
 # GNOME 50 is the current Flathub runtime (mid-2026); it's based on freedesktop
 # 25.08, so the SDK extensions below resolve to their //25.08 branches. The GUI
@@ -34,7 +34,7 @@ finish-args:
   - --filesystem=xdg-run/pipewire-0           # publish the virtual camera node + enumerate devices (the Camera portal can't create nodes); pipewire is not a --socket type, access is via its runtime socket
   - --device=dri                              # GPU for the GStreamer GL pipeline
   - --talk-name=org.freedesktop.portal.Desktop  # xdg-desktop-portal Camera + file chooser
-  - --own-name=org.openeffects.Daemon         # session-bus name the daemon claims (shared/src/dbus.rs)
+  - --own-name=in.co.funinkina.Daemon         # session-bus name the daemon claims (shared/src/dbus.rs)
   - --filesystem=xdg-pictures:ro              # custom background images picked from ~/Pictures
   # dlopen target for ort load-dynamic; applies to every process in the sandbox
   # (the GUI's `--command=openeffectsd` runs too).
@@ -95,9 +95,9 @@ modules:
       - install -Dm755 packaging/flatpak/openeffects-launcher.sh /app/bin/openeffects-launcher
 
       # Desktop entry, icon, AppStream metainfo (renamed to the app id where needed).
-      - install -Dm644 data/applications/org.openeffects.OpenEffects.desktop /app/share/applications/org.openeffects.OpenEffects.desktop
-      - install -Dm644 data/icons/org.openeffects.OpenEffects.svg /app/share/icons/hicolor/scalable/apps/org.openeffects.OpenEffects.svg
-      - install -Dm644 packaging/flatpak/org.openeffects.OpenEffects.metainfo.xml /app/share/metainfo/org.openeffects.OpenEffects.metainfo.xml
+      - install -Dm644 data/applications/in.co.funinkina.OpenEffects.desktop /app/share/applications/in.co.funinkina.OpenEffects.desktop
+      - install -Dm644 data/icons/in.co.funinkina.OpenEffects.svg /app/share/icons/hicolor/scalable/apps/in.co.funinkina.OpenEffects.svg
+      - install -Dm644 packaging/flatpak/in.co.funinkina.OpenEffects.metainfo.xml /app/share/metainfo/in.co.funinkina.OpenEffects.metainfo.xml
 
       # Bundled, sha256-verified ML models -> /app/share/openeffects/models/<id>/.
       # Manifests come from the repo; the .onnx blobs are the pinned `file` sources below.

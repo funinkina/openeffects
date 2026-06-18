@@ -21,10 +21,10 @@ contents:
     dst: /usr/bin/openeffects
 
   # App icon + desktop entry
-  - src: data/icons/org.openeffects.OpenEffects.svg
-    dst: /usr/share/icons/hicolor/scalable/apps/org.openeffects.OpenEffects.svg
-  - src: data/applications/org.openeffects.OpenEffects.desktop
-    dst: /usr/share/applications/org.openeffects.OpenEffects.desktop
+  - src: data/icons/in.co.funinkina.OpenEffects.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/in.co.funinkina.OpenEffects.svg
+  - src: data/applications/in.co.funinkina.OpenEffects.desktop
+    dst: /usr/share/applications/in.co.funinkina.OpenEffects.desktop
 
 overrides:
   deb:

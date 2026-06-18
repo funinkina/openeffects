@@ -14,17 +14,17 @@ foreach bin : ['openeffectsd', 'openeffectsctl', 'openeffects']
 endforeach
 
 install_data(
-  'data/dbus/org.openeffects.Daemon1.xml',
-  'data/dbus/org.openeffects.Effects1.xml',
-  'data/dbus/org.openeffects.Devices1.xml',
+  'data/dbus/in.co.funinkina.Daemon1.xml',
+  'data/dbus/in.co.funinkina.Effects1.xml',
+  'data/dbus/in.co.funinkina.Devices1.xml',
   install_dir: datadir / 'dbus-1/interfaces',
 )
 
 dbus_service_conf = configuration_data()
 dbus_service_conf.set('bindir', get_option('prefix') / bindir)
 configure_file(
-  input: 'data/dbus-services/org.openeffects.Daemon.service.in',
-  output: 'org.openeffects.Daemon.service',
+  input: 'data/dbus-services/in.co.funinkina.Daemon.service.in',
+  output: 'in.co.funinkina.Daemon.service',
   configuration: dbus_service_conf,
   install_dir: datadir / 'dbus-1/services',
 )
@@ -39,12 +39,12 @@ configure_file(
 )
 
 install_data(
-  'data/icons/org.openeffects.OpenEffects.svg',
+  'data/icons/in.co.funinkina.OpenEffects.svg',
   install_dir: datadir / 'icons/hicolor/scalable/apps',
 )
 
 install_data(
-  'data/applications/org.openeffects.OpenEffects.desktop',
+  'data/applications/in.co.funinkina.OpenEffects.desktop',
   install_dir: datadir / 'applications',
 )
 

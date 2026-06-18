@@ -8,11 +8,11 @@ a release.
 
 OpenEffects ships as **three** packages so users install only what they need:
 
-| Package | Contents | Depends on |
-| --- | --- | --- |
-| `openeffectsd` | daemon binary, D-Bus service + systemd user unit, bundled ML models | pipewire/gstreamer stack, dbus |
-| `openeffectsctl` | CLI binary | **`openeffectsd`**, dbus |
-| `openeffects` | GTK4/libadwaita GUI binary, `.desktop` + icon | **`openeffectsd`**, gtk4, libadwaita |
+| Package          | Contents                                                            | Depends on                           |
+| ---------------- | ------------------------------------------------------------------- | ------------------------------------ |
+| `openeffectsd`   | daemon binary, D-Bus service + systemd user unit, bundled ML models | pipewire/gstreamer stack, dbus       |
+| `openeffectsctl` | CLI binary                                                          | **`openeffectsd`**, dbus             |
+| `openeffects`    | GTK4/libadwaita GUI binary, `.desktop` + icon                       | **`openeffectsd`**, gtk4, libadwaita |
 
 The daemon is the only process that touches the pipeline, so both clients declare a
 hard dependency on it. The dependency is unversioned (`Depends: openeffectsd`) and is
@@ -103,23 +103,23 @@ dist/openeffectsd-<ver>-1-x86_64.pkg.tar.zst  ...ctl...  ...openeffects...
 
 **`openeffectsd`** (daemon + everything the pipeline needs):
 
-| Path | Source |
-| --- | --- |
-| `/usr/bin/openeffectsd` | `target/release/openeffectsd` |
-| `/usr/share/dbus-1/interfaces/org.openeffects.*.xml` | `data/dbus/*.xml` |
-| `/usr/share/dbus-1/services/org.openeffects.Daemon.service` | rendered template |
-| `/usr/lib/systemd/user/openeffectsd.service` | rendered template |
-| `/usr/share/openeffects/models/<id>/` | `dist/models/` (downloaded + verified) |
+| Path                                                        | Source                                 |
+| ----------------------------------------------------------- | -------------------------------------- |
+| `/usr/bin/openeffectsd`                                     | `target/release/openeffectsd`          |
+| `/usr/share/dbus-1/interfaces/in.co.funinkina.*.xml`        | `data/dbus/*.xml`                      |
+| `/usr/share/dbus-1/services/in.co.funinkina.Daemon.service` | rendered template                      |
+| `/usr/lib/systemd/user/openeffectsd.service`                | rendered template                      |
+| `/usr/share/openeffects/models/<id>/`                       | `dist/models/` (downloaded + verified) |
 
 **`openeffectsctl`** (CLI): `/usr/bin/openeffectsctl`.
 
 **`openeffects`** (GUI):
 
-| Path | Source |
-| --- | --- |
-| `/usr/bin/openeffects` | `target/release/openeffects` |
-| `/usr/share/icons/hicolor/scalable/apps/org.openeffects.OpenEffects.svg` | `data/icons/org.openeffects.OpenEffects.svg` |
-| `/usr/share/applications/org.openeffects.OpenEffects.desktop` | `data/applications/org.openeffects.OpenEffects.desktop` |
+| Path                                                                     | Source                                                  |
+| ------------------------------------------------------------------------ | ------------------------------------------------------- |
+| `/usr/bin/openeffects`                                                   | `target/release/openeffects`                            |
+| `/usr/share/icons/hicolor/scalable/apps/in.co.funinkina.OpenEffects.svg` | `data/icons/in.co.funinkina.OpenEffects.svg`            |
+| `/usr/share/applications/in.co.funinkina.OpenEffects.desktop`            | `data/applications/in.co.funinkina.OpenEffects.desktop` |
 
 The GUI package's deb/rpm run `packaging/postinstall.sh` / `postremove.sh` (icon cache +
 `update-desktop-database`). Arch handles those via pacman hooks — no scriptlet.

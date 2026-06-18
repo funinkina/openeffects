@@ -27,16 +27,16 @@ contents:
     dst: /usr/bin/openeffectsd
 
   # D-Bus interface introspection XML
-  - src: data/dbus/org.openeffects.Daemon1.xml
-    dst: /usr/share/dbus-1/interfaces/org.openeffects.Daemon1.xml
-  - src: data/dbus/org.openeffects.Effects1.xml
-    dst: /usr/share/dbus-1/interfaces/org.openeffects.Effects1.xml
-  - src: data/dbus/org.openeffects.Devices1.xml
-    dst: /usr/share/dbus-1/interfaces/org.openeffects.Devices1.xml
+  - src: data/dbus/in.co.funinkina.Daemon1.xml
+    dst: /usr/share/dbus-1/interfaces/in.co.funinkina.Daemon1.xml
+  - src: data/dbus/in.co.funinkina.Effects1.xml
+    dst: /usr/share/dbus-1/interfaces/in.co.funinkina.Effects1.xml
+  - src: data/dbus/in.co.funinkina.Devices1.xml
+    dst: /usr/share/dbus-1/interfaces/in.co.funinkina.Devices1.xml
 
   # D-Bus session service activation (rendered with @bindir@ -> /usr/bin)
-  - src: dist/org.openeffects.Daemon.service
-    dst: /usr/share/dbus-1/services/org.openeffects.Daemon.service
+  - src: dist/in.co.funinkina.Daemon.service
+    dst: /usr/share/dbus-1/services/in.co.funinkina.Daemon.service
 
   # systemd user unit (rendered with @bindir@ -> /usr/bin)
   - src: dist/openeffectsd.service

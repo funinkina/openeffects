@@ -1,0 +1,186 @@
+# Maintainer: Aryan <hello@funinkina.co.in>
+# Contributor: Aryan <hello@funinkina.co.in>
+
+pkgbase=openeffects
+pkgname=('openeffectsd' 'openeffectsctl' 'openeffects')
+pkgver=0.1.2
+pkgrel=1
+pkgdesc='Real-time webcam effects for Linux (PipeWire virtual camera)'
+arch=('x86_64')
+url='https://github.com/funinkina/openeffects'
+license=('GPL-3.0-or-later')
+makedepends=(
+  'rust'
+  'cargo'
+  'clang'
+  'pkgconf'
+  'pipewire'
+  'gst-plugins-base'
+  'gst-plugins-good'
+  'gst-plugin-pipewire'
+  'gtk4'
+  'libadwaita'
+)
+
+source=(
+  "$pkgbase-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz"
+  "hand_landmark.onnx::https://github.com/opencv/opencv_zoo/raw/main/models/handpose_estimation_mediapipe/handpose_estimation_mediapipe_2023feb.onnx"
+  "palm_detection.onnx::https://github.com/opencv/opencv_zoo/raw/main/models/palm_detection_mediapipe/palm_detection_mediapipe_2023feb.onnx"
+  "selfie_segmentation.onnx::https://huggingface.co/onnx-community/mediapipe_selfie_segmentation/resolve/main/onnx/model.onnx"
+  "yunet.onnx::https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2026may.onnx"
+  "LICENSE.Apache-2.0::https://www.apache.org/licenses/LICENSE-2.0.txt"
+  "LICENSE.MIT::https://opensource.org/licenses/MIT"
+)
+sha256sums=(
+  'SKIP'
+  'db0898ae717b76b075d9bf563af315b29562e11f8df5027a1ef07b02bef6d81c'
+  '78ff51c38496b7fc8b8ebdb6cc8c1abb02fa6c38427c6848254cdaba57fcce7c'
+  '3241ac4ad8aa35bdaf33946776db29f7c283a413aa0b0dacb9483594b4531aad'
+  'ebafce4e3c118d6554634be5c27ab333b4c047a9a8c3faf1d7cf93101c22f0f0'
+  'SKIP'
+  'SKIP'
+)
+
+prepare() {
+  cd "$srcdir/$pkgbase-$pkgver"
+
+  # --- Rename data files (their paths are baked into packaging) ---
+
+  # D-Bus introspection XMLs
+  for src in data/dbus/org.openeffects.*.xml; do
+    mv "$src" "${src/org.openeffects/in.co.funinkina}"
+  done
+
+  # D-Bus service template
+  mv data/dbus-services/org.openeffects.Daemon.service.in \
+     data/dbus-services/in.co.funinkina.Daemon.service.in
+
+  # Desktop file + icon (SVG is pure markup, no identifiers)
+  mv data/applications/org.openeffects.OpenEffects.desktop \
+     data/applications/in.co.funinkina.OpenEffects.desktop
+  mv data/icons/org.openeffects.OpenEffects.svg \
+     data/icons/in.co.funinkina.OpenEffects.svg
+
+  # --- Patch D-Bus identifiers in every file that mentions them ---
+
+  # Dotted bus / interface / app names
+  sed -i 's/org\.openeffects/in.co.funinkina/g' \
+    data/dbus/in.co.funinkina.Daemon1.xml \
+    data/dbus/in.co.funinkina.Effects1.xml \
+    data/dbus/in.co.funinkina.Devices1.xml \
+    data/dbus-services/in.co.funinkina.Daemon.service.in \
+    data/applications/in.co.funinkina.OpenEffects.desktop \
+    data/systemd/openeffectsd.service.in \
+    shared/src/dbus.rs \
+    daemon/src/dbus_server.rs \
+    gui/src/constants.rs \
+    daemon/build.rs \
+    cli/build.rs \
+    gui/build.rs \
+    tests/integration/dbus_roundtrip.rs
+
+  # D-Bus object paths (/org/openeffects/ -> /in/co/funinkina/)
+  sed -i 's|/org/openeffects/|/in/co/funinkina/|g' \
+    data/dbus/in.co.funinkina.Daemon1.xml \
+    data/dbus/in.co.funinkina.Effects1.xml \
+    data/dbus/in.co.funinkina.Devices1.xml \
+    shared/src/dbus.rs \
+    daemon/build.rs \
+    cli/build.rs \
+    gui/build.rs \
+    tests/integration/dbus_roundtrip.rs
+
+  # --- Render service templates (@bindir@ -> /usr/bin) ---
+  sed 's|@bindir@|/usr/bin|g' data/dbus-services/in.co.funinkina.Daemon.service.in \
+    > data/dbus-services/in.co.funinkina.Daemon.service
+  sed 's|@bindir@|/usr/bin|g' data/systemd/openeffectsd.service.in \
+    > data/systemd/openeffectsd.service
+}
+
+build() {
+  cd "$srcdir/$pkgbase-$pkgver"
+
+  export CARGO_BUILD_JOBS="$(nproc)"
+  cargo build --release --workspace --locked
+}
+
+package_openeffectsd() {
+  depends=(
+    'pipewire'
+    'wireplumber'
+    'gstreamer'
+    'gst-plugins-base'
+    'gst-plugins-good'
+    'gst-plugin-pipewire'
+    'dbus'
+  )
+
+  cd "$srcdir/$pkgbase-$pkgver"
+
+  install -Dm755 target/release/openeffectsd "$pkgdir/usr/bin/openeffectsd"
+
+  install -Dm644 data/dbus/in.co.funinkina.Daemon1.xml \
+    "$pkgdir/usr/share/dbus-1/interfaces/in.co.funinkina.Daemon1.xml"
+  install -Dm644 data/dbus/in.co.funinkina.Effects1.xml \
+    "$pkgdir/usr/share/dbus-1/interfaces/in.co.funinkina.Effects1.xml"
+  install -Dm644 data/dbus/in.co.funinkina.Devices1.xml \
+    "$pkgdir/usr/share/dbus-1/interfaces/in.co.funinkina.Devices1.xml"
+
+  install -Dm644 data/dbus-services/in.co.funinkina.Daemon.service \
+    "$pkgdir/usr/share/dbus-1/services/in.co.funinkina.Daemon.service"
+
+  install -Dm644 data/systemd/openeffectsd.service \
+    "$pkgdir/usr/lib/systemd/user/openeffectsd.service"
+
+  install -Dm644 "$srcdir/yunet.onnx" \
+    "$pkgdir/usr/share/openeffects/models/yunet/face_detection_yunet_2026may.onnx"
+  install -Dm644 data/models/yunet/manifest.toml \
+    "$pkgdir/usr/share/openeffects/models/yunet/manifest.toml"
+
+  install -Dm644 "$srcdir/selfie_segmentation.onnx" \
+    "$pkgdir/usr/share/openeffects/models/selfie_segmentation/selfie_segmentation.onnx"
+  install -Dm644 data/models/selfie_segmentation/manifest.toml \
+    "$pkgdir/usr/share/openeffects/models/selfie_segmentation/manifest.toml"
+
+  install -Dm644 "$srcdir/hand_landmark.onnx" \
+    "$pkgdir/usr/share/openeffects/models/hand_landmark/handpose_estimation_mediapipe_2023feb.onnx"
+  install -Dm644 data/models/hand_landmark/manifest.toml \
+    "$pkgdir/usr/share/openeffects/models/hand_landmark/manifest.toml"
+
+  install -Dm644 "$srcdir/palm_detection.onnx" \
+    "$pkgdir/usr/share/openeffects/models/palm_detection/palm_detection_mediapipe_2023feb.onnx"
+  install -Dm644 data/models/palm_detection/manifest.toml \
+    "$pkgdir/usr/share/openeffects/models/palm_detection/manifest.toml"
+
+  install -Dm644 LICENSE \
+    "$pkgdir/usr/share/licenses/openeffectsd/LICENSE"
+  install -Dm644 "$srcdir/LICENSE.Apache-2.0" \
+    "$pkgdir/usr/share/licenses/openeffectsd/LICENSE.Apache-2.0"
+  install -Dm644 "$srcdir/LICENSE.MIT" \
+    "$pkgdir/usr/share/licenses/openeffectsd/LICENSE.MIT"
+}
+
+package_openeffectsctl() {
+  depends=('openeffectsd' 'dbus')
+
+  cd "$srcdir/$pkgbase-$pkgver"
+
+  install -Dm755 target/release/openeffectsctl "$pkgdir/usr/bin/openeffectsctl"
+
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/openeffectsctl/LICENSE"
+}
+
+package_openeffects() {
+  depends=('openeffectsd' 'gtk4' 'libadwaita')
+
+  cd "$srcdir/$pkgbase-$pkgver"
+
+  install -Dm755 target/release/openeffects "$pkgdir/usr/bin/openeffects"
+
+  install -Dm644 data/icons/in.co.funinkina.OpenEffects.svg \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/in.co.funinkina.OpenEffects.svg"
+  install -Dm644 data/applications/in.co.funinkina.OpenEffects.desktop \
+    "$pkgdir/usr/share/applications/in.co.funinkina.OpenEffects.desktop"
+
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/openeffects/LICENSE"
+}

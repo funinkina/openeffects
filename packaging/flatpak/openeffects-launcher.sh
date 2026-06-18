@@ -12,10 +12,10 @@
 # down the sandbox with it.
 #
 # To run the daemon headless (no GUI):
-#   flatpak run --command=openeffectsd org.openeffects.OpenEffects --start
+#   flatpak run --command=openeffectsd in.co.funinkina.OpenEffects --start
 set -eu
 
-BUS_NAME=org.openeffects.Daemon
+BUS_NAME=in.co.funinkina.Daemon
 
 owned() {
     gdbus call --session \

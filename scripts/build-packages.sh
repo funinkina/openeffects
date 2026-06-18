@@ -57,8 +57,8 @@ rm -rf "$dist"
 mkdir -p "$dist"
 
 echo "==> Rendering service templates (@bindir@ -> $bindir)"
-sed "s|@bindir@|$bindir|g" data/dbus-services/org.openeffects.Daemon.service.in \
-    > "$dist/org.openeffects.Daemon.service"
+sed "s|@bindir@|$bindir|g" data/dbus-services/in.co.funinkina.Daemon.service.in \
+    > "$dist/in.co.funinkina.Daemon.service"
 sed "s|@bindir@|$bindir|g" data/systemd/openeffectsd.service.in \
     > "$dist/openeffectsd.service"
 

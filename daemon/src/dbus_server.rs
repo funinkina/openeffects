@@ -33,7 +33,7 @@ impl Daemon1Iface {
     }
 }
 
-#[interface(name = "org.openeffects.Daemon1")]
+#[interface(name = "in.co.funinkina.Daemon1")]
 impl Daemon1Iface {
     async fn start(&self, #[zbus(signal_emitter)] emitter: SignalEmitter<'_>) -> fdo::Result<()> {
         let app = {
@@ -111,7 +111,7 @@ impl Effects1Iface {
     }
 }
 
-#[interface(name = "org.openeffects.Effects1")]
+#[interface(name = "in.co.funinkina.Effects1")]
 impl Effects1Iface {
     async fn list_effects(&self) -> Vec<String> {
         EFFECT_IDS.iter().map(|id| (*id).to_string()).collect()
@@ -227,7 +227,7 @@ impl Devices1Iface {
     }
 }
 
-#[interface(name = "org.openeffects.Devices1")]
+#[interface(name = "in.co.funinkina.Devices1")]
 impl Devices1Iface {
     async fn list_cameras(&self) -> Vec<VariantMap> {
         let active = self.state.read().await.active_camera.clone();

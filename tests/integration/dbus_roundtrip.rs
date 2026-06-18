@@ -4,11 +4,11 @@ use shared::dbus::{
 
 #[test]
 fn dbus_contract_constants_match_prd() {
-    assert_eq!(SERVICE_NAME, "org.openeffects.Daemon");
-    assert_eq!(OBJECT_PATH, "/org/openeffects/Daemon");
-    assert_eq!(DAEMON_INTERFACE, "org.openeffects.Daemon1");
-    assert_eq!(EFFECTS_INTERFACE, "org.openeffects.Effects1");
-    assert_eq!(DEVICES_INTERFACE, "org.openeffects.Devices1");
+    assert_eq!(SERVICE_NAME, "in.co.funinkina.Daemon");
+    assert_eq!(OBJECT_PATH, "/in/co/funinkina/Daemon");
+    assert_eq!(DAEMON_INTERFACE, "in.co.funinkina.Daemon1");
+    assert_eq!(EFFECTS_INTERFACE, "in.co.funinkina.Effects1");
+    assert_eq!(DEVICES_INTERFACE, "in.co.funinkina.Devices1");
 }
 
 #[tokio::test]

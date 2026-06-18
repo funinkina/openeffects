@@ -3,7 +3,7 @@
      Flathub REQUIRES at least one real screenshot (see <screenshots> below) and
      a maintained <releases> list. Update both before submitting. -->
 <component type="desktop-application">
-  <id>org.openeffects.OpenEffects</id>
+  <id>in.co.funinkina.OpenEffects</id>
 
   <name>OpenEffects</name>
   <summary>Apply real-time effects to your webcam</summary>
@@ -35,7 +35,7 @@
     </p>
   </description>
 
-  <launchable type="desktop-id">org.openeffects.OpenEffects.desktop</launchable>
+  <launchable type="desktop-id">in.co.funinkina.OpenEffects.desktop</launchable>
 
   <categories>
     <category>AudioVideo</category>

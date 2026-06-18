@@ -4,3 +4,7 @@
 /dist/
 .flatpak-builder
 build-dir
+packaging/src
+packaging/*onnx
+packaging/*tar.gz
+packaging/LICENSE*

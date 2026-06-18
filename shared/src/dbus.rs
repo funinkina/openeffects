@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use zvariant::{OwnedValue, Str};
 
-pub const SERVICE_NAME: &str = "org.openeffects.Daemon";
-pub const OBJECT_PATH: &str = "/org/openeffects/Daemon";
+pub const SERVICE_NAME: &str = "in.co.funinkina.Daemon";
+pub const OBJECT_PATH: &str = "/in/co/funinkina/Daemon";
 
-pub const DAEMON_INTERFACE: &str = "org.openeffects.Daemon1";
-pub const EFFECTS_INTERFACE: &str = "org.openeffects.Effects1";
-pub const DEVICES_INTERFACE: &str = "org.openeffects.Devices1";
+pub const DAEMON_INTERFACE: &str = "in.co.funinkina.Daemon1";
+pub const EFFECTS_INTERFACE: &str = "in.co.funinkina.Effects1";
+pub const DEVICES_INTERFACE: &str = "in.co.funinkina.Devices1";
 
 pub const EFFECT_IDS: [&str; 5] = [
     "center_stage",

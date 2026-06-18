@@ -1,7 +1,7 @@
 //! Static lookup tables shared across pages: app id, toggle-group option
 //! lists, built-in presets, and the view-stack page descriptors.
 
-pub const APP_ID: &str = "org.openeffects.OpenEffects";
+pub const APP_ID: &str = "in.co.funinkina.OpenEffects";
 
 /// PipeWire node name the daemon advertises the virtual camera under. The
 /// preview pipeline targets this to show the processed output. Must match the
