@@ -305,6 +305,12 @@ mod imp {
         lut_gen: u64,
         lut_w: usize,
         lut_h: usize,
+        /// Blurred copy of `mask_lut` for studio light's soft edge. The radius
+        /// scales with resolution (max(w,h)/100), so the transition between
+        /// subject and background stays natural at any canvas size.
+        studio_mask_blurred: Vec<u8>,
+        /// Set to `lut_gen` when `studio_mask_blurred` is up to date.
+        studio_mask_blur_gen: u64,
         /// Reusable packed-frame buffer (a multi-MB alloc otherwise repeated
         /// every frame).
         canvas: Vec<u8>,
@@ -700,12 +706,14 @@ mod imp {
             return;
         }
 
-        // Studio light first, so the lit subject is what blur/bg-replace then
-        // composites over the (untouched-exposure) background.
+        // Studio light first — uses a blurred copy of the mask so the edge
+        // between subject and background transitions smoothly instead of
+        // cutting sharply.
         if state.settings.studio_enabled {
+            ensure_studio_mask(state, w, h);
             apply_studio(
                 img,
-                &state.mask_lut,
+                &state.studio_mask_blurred,
                 state.settings.studio_brightness,
                 state.settings.studio_contrast,
             );
@@ -766,6 +774,62 @@ mod imp {
         state.lut_gen = state.mask_gen;
         state.lut_w = w;
         state.lut_h = h;
+    }
+
+    /// Blur a single-channel u8 image in place using a separable box blur
+    /// (two passes ≈ triangle kernel), ping-ponging through `tmp`. Per-row and
+    /// per-column prefix sums keep cost independent of radius.
+    fn blur_mask(buf: &mut [u8], tmp: &mut Vec<u8>, w: usize, h: usize, radius: usize) {
+        if radius == 0 {
+            return;
+        }
+        tmp.resize(buf.len(), 0);
+        for _ in 0..2 {
+            // Horizontal pass
+            let mut prefix = vec![0i32; w + 1];
+            for y in 0..h {
+                let base = y * w;
+                for x in 0..w {
+                    prefix[x + 1] = prefix[x] + buf[base + x] as i32;
+                }
+                for x in 0..w {
+                    let lo = x.saturating_sub(radius);
+                    let hi = (x + radius + 1).min(w);
+                    tmp[base + x] = ((prefix[hi] - prefix[lo]) / (hi - lo) as i32) as u8;
+                }
+            }
+            // Vertical pass
+            let mut prefix = vec![0i32; h + 1];
+            for x in 0..w {
+                for y in 0..h {
+                    prefix[y + 1] = prefix[y] + tmp[y * w + x] as i32;
+                }
+                for y in 0..h {
+                    let lo = y.saturating_sub(radius);
+                    let hi = (y + radius + 1).min(h);
+                    buf[y * w + x] = ((prefix[hi] - prefix[lo]) / (hi - lo) as i32) as u8;
+                }
+            }
+        }
+    }
+
+    /// Blur the mask LUT into a soft-edged copy for studio light. The radius
+    /// scales with resolution so the transition looks natural at any canvas
+    /// size. Only recomputed when a new mask arrives.
+    fn ensure_studio_mask(state: &mut State, w: usize, h: usize) {
+        if state.studio_mask_blur_gen == state.lut_gen {
+            return;
+        }
+        state.studio_mask_blurred = state.mask_lut.clone();
+        let radius = w.max(h) / 100;
+        blur_mask(
+            &mut state.studio_mask_blurred,
+            &mut state.blur_tmp,
+            w,
+            h,
+            radius.max(1),
+        );
+        state.studio_mask_blur_gen = state.lut_gen;
     }
 
     /// Center stage: decide framing on the full frame, then crop to the ROI and
