@@ -311,6 +311,11 @@ mod imp {
         studio_mask_blurred: Vec<u8>,
         /// Set to `lut_gen` when `studio_mask_blurred` is up to date.
         studio_mask_blur_gen: u64,
+        /// Dimensions the blurred mask was computed at; mismatch forces a
+        /// re-blur even when `lut_gen` hasn't changed (e.g. during a center-stage
+        /// crop transition where the ROI size shifts every frame).
+        studio_mask_blur_w: usize,
+        studio_mask_blur_h: usize,
         /// Reusable packed-frame buffer (a multi-MB alloc otherwise repeated
         /// every frame).
         canvas: Vec<u8>,
@@ -815,9 +820,15 @@ mod imp {
 
     /// Blur the mask LUT into a soft-edged copy for studio light. The radius
     /// scales with resolution so the transition looks natural at any canvas
-    /// size. Only recomputed when a new mask arrives.
+    /// size. Only recomputed when a new mask arrives or the canvas dimensions
+    /// change (the latter can happen every frame during a center-stage crop
+    /// transition without a fresh segmentation, so a generation counter alone
+    /// would miss the size drift).
     fn ensure_studio_mask(state: &mut State, w: usize, h: usize) {
-        if state.studio_mask_blur_gen == state.lut_gen {
+        if state.studio_mask_blur_gen == state.lut_gen
+            && state.studio_mask_blur_w == w
+            && state.studio_mask_blur_h == h
+        {
             return;
         }
         state.studio_mask_blurred = state.mask_lut.clone();
@@ -830,6 +841,8 @@ mod imp {
             radius.max(1),
         );
         state.studio_mask_blur_gen = state.lut_gen;
+        state.studio_mask_blur_w = w;
+        state.studio_mask_blur_h = h;
     }
 
     /// Center stage: decide framing on the full frame, then crop to the ROI and
