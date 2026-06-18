@@ -23,6 +23,7 @@ pub fn present(parent: &impl IsA<gtk::Widget>) {
         "Report an Issue",
         "https://github.com/funinkina/openeffects/issues",
     );
+    about.add_link("Portfolio and Blogs", "https://funinkina.co.in");
 
     about.present(Some(parent));
 }
