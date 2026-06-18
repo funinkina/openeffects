@@ -9,7 +9,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/funinkina/openeffects?style=flat-square)](https://github.com/funinkina/openeffects/stargazers)
 [![GitHub Issues](https://img.shields.io/github/issues/funinkina/openeffects?style=flat-square)](https://github.com/funinkina/openeffects/issues)
 
-OpenEffects is a Linux-native, GPU-accelerated webcam effects engine. It brings advanced camera features like Center Stage, Portrait blur, Background Replacement, and gesture-triggered Reactions to any Wayland Linux desktop. It works transparently with any app that consumes a PipeWire camera node or `/dev/video*` device (Zoom, OBS, WebRTC, etc.).
+OpenEffects is a Linux-native webcam effects engine powered by ONNX Runtime. It brings advanced camera features like Center Stage, Portrait blur, Background Replacement, and gesture-triggered Reactions to any Wayland Linux desktop. It works transparently with any app that consumes a PipeWire camera node or `/dev/video*` device (Zoom, OBS, WebRTC, etc.).
 
 ## Features
 
@@ -23,21 +23,19 @@ OpenEffects is a Linux-native, GPU-accelerated webcam effects engine. It brings 
 
 OpenEffects is designed to be lightweight and modular, avoiding the need for an always-open GUI window:
 
-- **`openeffectsd` (Daemon):** Headless, GPU-accelerated GStreamer pipeline that handles capture, ML inference, compositing, and publishing via PipeWire.
+- **`openeffectsd` (Daemon):** Headless GStreamer pipeline that handles capture, ML inference, compositing, and publishing via PipeWire.
 - **`openeffects` (GUI):** A GTK4/libadwaita app and primary control surface — live effect toggles and adjustments, camera settings, opt-in model downloads, and background asset management.
 - **`openeffectsctl` (CLI):** First-class command-line interface for styling WMs (Hyprland, Sway), scripting, and keybinds.
 
-## Hardware & ML Support
+## ML Inference
 
-Inference is powered by **ONNX Runtime**, unified behind a single execution priority chain to leverage whatever hardware you have:
+All models run on the **CPU** via **ONNX Runtime** (`ort` crate with `download-binaries` feature). The bundled models (selfie segmentation, face detection, hand/palm landmarks) are lightweight MobileNet-class architectures — 256² and 640² — and complete inference in 2–5 ms on modern x86_64 CPUs. No GPU is required.
 
-1. NVIDIA: TensorRT / CUDA
-2. AMD: ROCm / MIGraphX
-3. Intel: OpenVINO
-4. Universal GPU: Vulkan
-5. CPU Fallback: XNNPACK
-
-OpenEffects automatically detects your hardware capabilities (Tier 1 to Tier 4) and gracefully degrades effect quality, resolution, or frame rates to maintain a sub-50ms latency budget.
+> [!NOTE]
+> GPU execution providers (CUDA, OpenVINO, Vulkan) were evaluated and rejected: for
+> sub-1 MB models the kernel-launch and transfer latency of a discrete GPU exceeds
+> the total CPU inference time. Camera capture and the GStreamer/PipeWire pipeline
+> are the actual bottlenecks, not inference.
 
 ## Installation
 

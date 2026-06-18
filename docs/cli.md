@@ -32,7 +32,7 @@ openeffectsctl status
 | ------------------------------- | --------------------------------------------------------------------------------------------------- |
 | `openeffectsctl start`          | Arm the virtual camera. The real camera opens on demand when a consumer (browser, OBS, …) connects. |
 | `openeffectsctl stop`           | Tear down the pipeline and release the camera.                                                      |
-| `openeffectsctl status`         | Print status plus capabilities (tier, execution provider, model readiness, output sink).            |
+| `openeffectsctl status`         | Print status plus capabilities (execution provider, model readiness, output sink).            |
 | `openeffectsctl status --short` | One-word status, e.g. for Waybar.                                                                   |
 | `openeffectsctl status --json`  | Machine-readable status.                                                                            |
 | `openeffectsctl watch`          | Stream `EffectChanged` signals until interrupted (Ctrl-C).                                          |
