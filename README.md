@@ -100,7 +100,6 @@ Use with Waybar:
 - Cameras are accessed securely via the `xdg-desktop-portal-camera`.
 - IPC is restricted exclusively to the D-Bus **session bus**.
 - No telemetry, network calls, or cloud inference. All ML processing happens locally. 
-- Heavier models can be downloaded via the GUI, verified by SHA256 hashes defined in local manifests.
 
 ## Development Platform
 
