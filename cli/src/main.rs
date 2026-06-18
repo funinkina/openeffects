@@ -113,6 +113,9 @@ enum Command {
         /// Contrast (0-100).
         #[arg(long, value_parser = clap::value_parser!(u8).range(0..=100))]
         contrast: Option<u8>,
+        /// Background brightness (-100 to 100).
+        #[arg(long, value_parser = clap::value_parser!(i8).range(-100..=100))]
+        bg_brightness: Option<i8>,
     },
 
     /// Reactions: gesture/emoji overlay. Toggle the effect or fire a one-shot burst.
@@ -389,6 +392,7 @@ async fn main() -> anyhow::Result<()> {
             intensity,
             brightness,
             contrast,
+            bg_brightness,
         } => {
             let effects = effects_proxy(&conn).await?;
             let id = "studio_light";
@@ -401,6 +405,9 @@ async fn main() -> anyhow::Result<()> {
             }
             if let Some(v) = contrast {
                 set_param_u32(&effects, id, "contrast", v as u32).await?;
+            }
+            if let Some(v) = bg_brightness {
+                set_param_i32(&effects, id, "bg_brightness", v as i32).await?;
             }
             show_effect(&conn, id).await?;
         }

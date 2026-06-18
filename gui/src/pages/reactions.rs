@@ -61,11 +61,14 @@ pub fn build(cmd_tx: &CmdTx, switches: &mut Switches) -> adw::PreferencesPage {
     page.add(&send_group);
 
     // ── Gesture auto-trigger toggle ───────────────────────────────────────────
-    let group = pref_group("Gesture Reactions", "Trigger reactions with hand gestures");
+    let group = pref_group(
+        "Automatic Reactions",
+        "Trigger reactions with hand gestures",
+    );
     add_switch(
         &group,
-        "Reactions",
-        "Off by default — enable to react to hand gestures",
+        "Gesture Reactions",
+        "Enable to automatically trigger the reaction based on hand gestures.",
         "reactions",
         cmd_tx,
         switches,

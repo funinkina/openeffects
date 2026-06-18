@@ -125,6 +125,9 @@ mod imp {
         studio_brightness: f32,
         /// Contrast multiplier around mid-gray, 0.0..2.0.
         studio_contrast: f32,
+        /// Background additive brightness, -1.0..1.0. Applied to the inverted
+        /// mask so only the background (not the subject) is affected.
+        studio_bg_brightness: f32,
         /// Reactions effect: when on, the gesture pipeline runs and may
         /// auto-trigger bursts (manual bursts work regardless, via a one-shot
         /// property that doesn't touch this flag).
@@ -144,6 +147,7 @@ mod imp {
                 studio_enabled: false,
                 studio_brightness: 0.0,
                 studio_contrast: 1.0,
+                studio_bg_brightness: 0.0,
                 reactions_enabled: false,
             }
         }
@@ -381,6 +385,11 @@ mod imp {
                         .maximum(2.0)
                         .default_value(1.0)
                         .build(),
+                    glib::ParamSpecFloat::builder("studio-light-bg-brightness")
+                        .minimum(-1.0)
+                        .maximum(1.0)
+                        .default_value(0.0)
+                        .build(),
                     glib::ParamSpecBoolean::builder("reactions-enabled").build(),
                     // Write-only one-shot: setting it (even to a repeated value)
                     // fires a burst of that reaction id.
@@ -421,6 +430,9 @@ mod imp {
                     state.settings.studio_brightness = value.get().unwrap()
                 }
                 "studio-light-contrast" => state.settings.studio_contrast = value.get().unwrap(),
+                "studio-light-bg-brightness" => {
+                    state.settings.studio_bg_brightness = value.get().unwrap()
+                }
                 "reactions-enabled" => state.settings.reactions_enabled = value.get().unwrap(),
                 "trigger-reaction" => {
                     let id = value.get::<Option<String>>().unwrap().unwrap_or_default();
@@ -452,6 +464,7 @@ mod imp {
                 "studio-light-enabled" => s.studio_enabled.to_value(),
                 "studio-light-brightness" => s.studio_brightness.to_value(),
                 "studio-light-contrast" => s.studio_contrast.to_value(),
+                "studio-light-bg-brightness" => s.studio_bg_brightness.to_value(),
                 "reactions-enabled" => s.reactions_enabled.to_value(),
                 "trigger-reaction" => "".to_value(), // write-only; defensive
                 _ => unimplemented!(),
@@ -721,6 +734,7 @@ mod imp {
                 &state.studio_mask_blurred,
                 state.settings.studio_brightness,
                 state.settings.studio_contrast,
+                state.settings.studio_bg_brightness,
             );
         }
         if !state.settings.needs_composite() {
@@ -1033,29 +1047,46 @@ mod imp {
     }
 
     /// Studio Light: a `videobalance`-style brightness/contrast lift applied
-    /// only to the person, blended by the mask so the background keeps its
-    /// original exposure. Per channel, on normalized values:
-    /// `adjusted = (p − 0.5)·contrast + 0.5 + brightness`, then
-    /// `out = lerp(p, adjusted, mask)`. The transfer depends only on the input
-    /// value, so it's a 256-entry table and the blend is pure integer math.
-    fn apply_studio(img: &mut [u8], lut: &[u8], brightness: f32, contrast: f32) {
-        let mut adj = [0u8; 256];
-        for (p, out) in adj.iter_mut().enumerate() {
+    /// to the person (masked by the foreground mask), with an independent
+    /// background brightness applied to the complementary area (inverted mask).
+    /// Per channel, on normalized values:
+    /// `fg_adjusted = (p − 0.5)·contrast + 0.5 + brightness` (foreground),
+    /// `bg_adjusted = p + bg_brightness` (background), then
+    /// `out = blend(lerp(p, fg_adj, m), lerp(p, bg_adj, 1-m), m)`.
+    /// The transfer depends only on the input value, so it uses 256-entry
+    /// lookup tables and pure integer math.
+    fn apply_studio(img: &mut [u8], lut: &[u8], brightness: f32, contrast: f32, bg_brightness: f32) {
+        let has_bg = bg_brightness != 0.0;
+        let mut adj_fg = [0u8; 256];
+        let mut adj_bg = [0u8; 256];
+        for p in 0..=255 {
             let v = p as f32 / 255.0;
-            *out =
+            adj_fg[p] =
                 (((v - 0.5) * contrast + 0.5 + brightness).clamp(0.0, 1.0) * 255.0).round() as u8;
+            adj_bg[p] = ((v + bg_brightness).clamp(0.0, 1.0) * 255.0).round() as u8;
         }
         for (px, &m) in img.chunks_exact_mut(4).zip(lut) {
-            if m == 0 {
-                continue; // background pixel: exposure untouched
-            }
             let m = m as u32;
+            let bg_m = 255 - m;
+            // Skip pixels entirely unaffected by either pass (m == 0 and no bg
+            // adjustment) — this is the vast majority when bg_brightness == 0.
+            if m == 0 && !has_bg {
+                continue;
+            }
             for c in 0..3 {
                 let p = px[c] as u32;
-                let a = adj[px[c] as usize] as u32;
-                px[c] = ((p * (255 - m) + a * m + 127) / 255) as u8;
+                // Foreground blend: lerp(p, adj_fg, m/255)
+                let fg = (p * bg_m + adj_fg[px[c] as usize] as u32 * m + 127) / 255;
+                let out = if has_bg && bg_m > 0 {
+                    // Background blend: lerp(result, adj_bg, bg_m/255)
+                    let bg = (p * m + adj_bg[px[c] as usize] as u32 * bg_m + 127) / 255;
+                    // Weighted sum of the two blends by the mask
+                    (fg * m + bg * bg_m + 127) / 255
+                } else {
+                    fg
+                };
+                px[c] = out as u8;
             }
-            // leave alpha as-is
         }
     }
 

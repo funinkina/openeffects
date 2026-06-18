@@ -1,6 +1,8 @@
 //! Studio Light page: a master switch plus brightness/contrast/intensity
-//! sliders. The lift is applied to the person only (masked in `oe_effects`).
-//! Turning the switch off disables the sliders.
+//! sliders for the subject, plus a background brightness slider. The lift is
+//! applied to the person only (foreground) and the background brightness is
+//! applied to the complementary area (inverted mask). Turning the switch off
+//! disables the sliders.
 
 use adw::glib;
 use adw::prelude::*;
@@ -16,6 +18,7 @@ pub struct Widgets {
     intensity: SliderCtl,
     brightness: SliderCtl,
     contrast: SliderCtl,
+    bg_brightness: SliderCtl,
     /// Group dimmed while Studio Light is off.
     controls: adw::PreferencesGroup,
 }
@@ -76,6 +79,17 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
         "contrast",
         cmd_tx,
     );
+    let bg_brightness = add_slider_i32(
+        &controls,
+        "Background Brightness",
+        "Darken or brighten the background to make the subject stand out",
+        -100.0,
+        100.0,
+        1.0,
+        "studio_light",
+        "bg_brightness",
+        cmd_tx,
+    );
     page.add(&controls);
 
     let widgets = Widgets {
@@ -84,6 +98,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
         intensity,
         brightness,
         contrast,
+        bg_brightness,
         controls,
     };
     (page, widgets)
@@ -105,6 +120,9 @@ impl Widgets {
         }
         if let Some(v) = params.get("contrast").and_then(value_as_u32) {
             self.contrast.set_value(v as f64);
+        }
+        if let Some(v) = params.get("bg_brightness").and_then(value_as_i32) {
+            self.bg_brightness.set_value(v as f64);
         }
     }
 }

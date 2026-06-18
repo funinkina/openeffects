@@ -88,6 +88,8 @@ pub struct StudioLightState {
     pub brightness: i8,
     /// 0–100 mapped to the masked contrast in `oe_effects`
     pub contrast: u8,
+    /// -100..100 mapped to background brightness in `oe_effects`
+    pub bg_brightness: i8,
 }
 impl Default for StudioLightState {
     fn default() -> Self {
@@ -96,6 +98,7 @@ impl Default for StudioLightState {
             intensity: 50,
             brightness: 0,
             contrast: 50,
+            bg_brightness: 0,
         }
     }
 }
@@ -208,6 +211,7 @@ enabled = false
 intensity = 50
 brightness = 0
 contrast = 50
+bg_brightness = 0
 
 [effects.reactions]
 enabled = false

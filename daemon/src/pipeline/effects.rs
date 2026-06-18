@@ -94,6 +94,11 @@ pub fn apply_app_state_to_elements(effects: &gst::Element, app: &AppState) {
         brightness.clamp(-1.0, 1.0) as f32,
     );
     effects.set_property("studio-light-contrast", contrast.clamp(0.0, 2.0) as f32);
+    let bg_brightness = studio.bg_brightness as f64 / 100.0;
+    effects.set_property(
+        "studio-light-bg-brightness",
+        bg_brightness.clamp(-1.0, 1.0) as f32,
+    );
 
     let blur = &app.effects.portrait_blur;
     effects.set_property("portrait-blur-enabled", blur.enabled);
@@ -158,6 +163,7 @@ mod tests {
         assert!(!effects.property::<bool>("studio-light-enabled"));
         assert_eq!(effects.property::<f32>("studio-light-brightness"), 0.0);
         assert_eq!(effects.property::<f32>("studio-light-contrast"), 1.0);
+        assert_eq!(effects.property::<f32>("studio-light-bg-brightness"), 0.0);
         assert!(!effects.property::<bool>("portrait-blur-enabled"));
         assert!(!effects.property::<bool>("center-stage-enabled"));
 
