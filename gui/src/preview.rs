@@ -62,11 +62,11 @@ pub fn build(content: &impl IsA<gtk::Widget>) -> Rc<Preview> {
     pane.add_top_bar(&pane_header);
     pane.set_content(Some(&overlay));
 
-    // ── Split view: page content + collapsible right sidebar ────────────────
+    // ── Split view: page content + collapsible left sidebar ─────────────────
     let split = adw::OverlaySplitView::builder()
         .content(content)
         .sidebar(&pane)
-        .sidebar_position(gtk::PackType::End)
+        .sidebar_position(gtk::PackType::Start)
         .show_sidebar(false)
         .min_sidebar_width(280.0)
         .max_sidebar_width(420.0)

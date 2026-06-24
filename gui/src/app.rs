@@ -84,7 +84,7 @@ pub fn build_window(
         .build();
 
     let header = adw::HeaderBar::builder().title_widget(&switcher).build();
-    header.pack_start(&menu_button);
+    header.pack_end(&menu_button);
 
     // Connection-trouble banner, sits just under the header.
     let banner = adw::Banner::builder().revealed(false).build();
@@ -98,7 +98,7 @@ pub fn build_window(
     // Global live-preview side pane wraps the whole content; its header toggle
     // reveals it without covering the page controls or the narrow switcher bar.
     let preview = preview::build(&toolbar);
-    header.pack_end(&preview.toggle);
+    header.pack_start(&preview.toggle);
 
     let window = ApplicationWindow::builder()
         .application(app)
