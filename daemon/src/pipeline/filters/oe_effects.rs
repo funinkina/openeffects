@@ -326,6 +326,10 @@ mod imp {
         /// Scratch for the downscaled blur (image + ping-pong buffer).
         blur_low: Vec<u8>,
         blur_tmp: Vec<u8>,
+        /// Reusable prefix-sum scratch shared by the separable box blurs (frame
+        /// blur + studio mask blur), hoisted out of the passes so each blur does
+        /// no per-frame heap work. Sized to `max(w,h)+1` on demand.
+        blur_prefix: Vec<i32>,
         faces: Vec<Face>,
         bg: Option<BgImage>,
         /// Reverse-rain emoji particle system (manual + gesture triggers).
@@ -762,6 +766,7 @@ mod imp {
             box_blur(
                 &mut state.blur_low,
                 &mut state.blur_tmp,
+                &mut state.blur_prefix,
                 lw,
                 lh,
                 (radius / scale).max(1),
@@ -798,14 +803,15 @@ mod imp {
     /// Blur a single-channel u8 image in place using a separable box blur
     /// (two passes ≈ triangle kernel), ping-ponging through `tmp`. Per-row and
     /// per-column prefix sums keep cost independent of radius.
-    fn blur_mask(buf: &mut [u8], tmp: &mut Vec<u8>, w: usize, h: usize, radius: usize) {
+    fn blur_mask(buf: &mut [u8], tmp: &mut Vec<u8>, prefix: &mut Vec<i32>, w: usize, h: usize, radius: usize) {
         if radius == 0 {
             return;
         }
         tmp.resize(buf.len(), 0);
+        // Shared scratch sized for both passes; index 0 stays 0 (never written).
+        prefix.resize(w.max(h) + 1, 0);
         for _ in 0..2 {
             // Horizontal pass
-            let mut prefix = vec![0i32; w + 1];
             for y in 0..h {
                 let base = y * w;
                 for x in 0..w {
@@ -818,7 +824,6 @@ mod imp {
                 }
             }
             // Vertical pass
-            let mut prefix = vec![0i32; h + 1];
             for x in 0..w {
                 for y in 0..h {
                     prefix[y + 1] = prefix[y] + tmp[y * w + x] as i32;
@@ -850,6 +855,7 @@ mod imp {
         blur_mask(
             &mut state.studio_mask_blurred,
             &mut state.blur_tmp,
+            &mut state.blur_prefix,
             w,
             h,
             radius.max(1),
@@ -1211,21 +1217,24 @@ mod imp {
     /// Separable box blur (two passes ≈ triangle kernel) in place, ping-ponging
     /// through `tmp`. Per-row/column prefix sums keep cost independent of
     /// radius; only RGB is blurred (alpha is never read back).
-    fn box_blur(buf: &mut [u8], tmp: &mut Vec<u8>, w: usize, h: usize, radius: usize) {
+    fn box_blur(buf: &mut [u8], tmp: &mut Vec<u8>, prefix: &mut Vec<i32>, w: usize, h: usize, radius: usize) {
         if radius == 0 {
             return;
         }
         tmp.resize(buf.len(), 0);
+        // One scratch sized for both passes (h needs w+1, v needs h+1), reused
+        // across both blur iterations. Index 0 is never written, so it stays 0 —
+        // which the window subtraction at `lo == 0` relies on.
+        prefix.resize(w.max(h) + 1, 0);
         for _ in 0..2 {
-            box_blur_h(buf, tmp, w, h, radius);
-            box_blur_v(tmp, buf, w, h, radius);
+            box_blur_h(buf, tmp, prefix, w, h, radius);
+            box_blur_v(tmp, buf, prefix, w, h, radius);
         }
     }
 
-    fn box_blur_h(src: &[u8], dst: &mut [u8], w: usize, h: usize, r: usize) {
+    fn box_blur_h(src: &[u8], dst: &mut [u8], prefix: &mut [i32], w: usize, h: usize, r: usize) {
         // prefix[i] = running sum of one channel over pixels 0..i; reused across
         // every (row, channel) to avoid per-iteration allocation on the hot path.
-        let mut prefix = vec![0i32; w + 1];
         for y in 0..h {
             let base = y * w * 4;
             for c in 0..3 {
@@ -1242,9 +1251,8 @@ mod imp {
         }
     }
 
-    fn box_blur_v(src: &[u8], dst: &mut [u8], w: usize, h: usize, r: usize) {
+    fn box_blur_v(src: &[u8], dst: &mut [u8], prefix: &mut [i32], w: usize, h: usize, r: usize) {
         let row = w * 4;
-        let mut prefix = vec![0i32; h + 1];
         for x in 0..w {
             for c in 0..3 {
                 for y in 0..h {

@@ -13,7 +13,7 @@ use anyhow::{Context, Result};
 use ort::session::Session;
 use ort::value::Tensor;
 
-use super::registry;
+use super::{build_session, registry};
 
 /// Both exports take a single NHWC input named `input_1`.
 const INPUT: &str = "input_1";
@@ -102,7 +102,7 @@ impl PalmDetector {
     pub fn load() -> Result<Self> {
         let resolved = registry::find_model("palm_detection")
             .context("palm_detection model not found; run scripts/fetch-models.sh")?;
-        let session = Session::builder()?
+        let session = build_session()?
             .commit_from_file(&resolved.model_path)
             .with_context(|| format!("load {}", resolved.model_path.display()))?;
         Ok(Self {
@@ -203,7 +203,7 @@ impl HandLandmarker {
     pub fn load() -> Result<Self> {
         let resolved = registry::find_model("hand_landmark")
             .context("hand_landmark model not found; run scripts/fetch-models.sh")?;
-        let session = Session::builder()?
+        let session = build_session()?
             .commit_from_file(&resolved.model_path)
             .with_context(|| format!("load {}", resolved.model_path.display()))?;
         Ok(Self { session })

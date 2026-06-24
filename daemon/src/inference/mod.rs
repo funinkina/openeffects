@@ -52,6 +52,31 @@ pub fn init_runtime() -> bool {
     ort::init().with_name("openeffectsd").commit()
 }
 
+/// Intra-op thread cap for the bundled models. They are sub-MB nets that run at
+/// ~10 Hz with long idle gaps between calls; ORT's default (one intra-op thread
+/// per logical core) over-subscribes for models this small, and those threads
+/// spin-wait when idle — pegging every core in the gaps between inferences.
+const INTRA_THREADS: usize = 2;
+
+/// Build an ORT session builder configured for the daemon's low-rate inference:
+/// a small intra-op thread cap and **spinning disabled**, so idle worker threads
+/// block instead of busy-waiting (the cause of the constant CPU burn when an
+/// effect is active). Every model `load()` goes through this instead of
+/// `Session::builder()` so the policy is applied uniformly.
+///
+/// `with_intra_threads`/`with_intra_op_spinning` return `Error<SessionBuilder>`,
+/// which isn't `Send + Sync` and so can't ride `?` into `anyhow::Result`; each
+/// step is mapped to a formatted message instead.
+pub fn build_session() -> anyhow::Result<ort::session::builder::SessionBuilder> {
+    let builder = ort::session::Session::builder()
+        .map_err(|e| anyhow::anyhow!("create ORT session builder: {e}"))?
+        .with_intra_threads(INTRA_THREADS)
+        .map_err(|e| anyhow::anyhow!("set intra-op threads: {e}"))?
+        .with_intra_op_spinning(false)
+        .map_err(|e| anyhow::anyhow!("disable intra-op spinning: {e}"))?;
+    Ok(builder)
+}
+
 /// Hardware capability tier (PRD §10.1). Drives model/quality selection and is
 /// surfaced to clients via the `Capabilities.tier` D-Bus property.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
