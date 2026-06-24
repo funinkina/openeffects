@@ -501,8 +501,6 @@ async fn status(conn: &Connection, json: bool, short: bool) -> anyhow::Result<()
         .get_property::<VariantMap>("Capabilities")
         .await
         .unwrap_or_default();
-    let tier = simple_value(&caps, "tier").unwrap_or_else(|| "unknown".into());
-    let ep = simple_value(&caps, "ep").unwrap_or_else(|| "unknown".into());
     let models = match simple_value(&caps, "models_ready").as_deref() {
         Some("true") => "ready",
         _ => "missing",
@@ -513,14 +511,12 @@ async fn status(conn: &Connection, json: bool, short: bool) -> anyhow::Result<()
             "{}",
             serde_json::json!({
                 "status": status,
-                "tier": tier,
-                "ep": ep,
                 "models": models,
                 "sink": sink,
             })
         );
     } else {
-        println!("{status} (tier: {tier}, ep: {ep}, models: {models}, sink: {sink})");
+        println!("{status} (models: {models}, sink: {sink})");
     }
     Ok(())
 }

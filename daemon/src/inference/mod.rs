@@ -36,12 +36,11 @@ impl EpKind {
 
 /// Probe the best available ONNX Runtime execution provider.
 ///
-/// Only CPU is selected for now: `ort`'s `is_available` check for
-/// [`ort::ep::CPU`] is unconditionally `true` (it's ONNX Runtime's documented
-/// universal floor), and the `download-binaries` feature only ships the CPU
-/// execution provider binary — there's no GPU on the reference dev hardware to
-/// validate the others against. `EpKind` carries the full PRD §8 priority
-/// chain so GPU probing can be added later without changing callers.
+/// Only CPU is selected for now: the bundled models (≤1 MB each, running at
+/// video frame rate) do not benefit from GPU EP — H2D/D2H transfer overhead
+/// exceeds inference time for models this small. `EpKind` carries the full
+/// PRD §8 priority chain so GPU probing can be added later without changing
+/// callers.
 pub fn probe_ep() -> EpKind {
     EpKind::Cpu
 }
@@ -91,8 +90,8 @@ impl Tier {
 /// Detect the hardware tier from the DRM render nodes (PRD §10.1). A discrete
 /// GPU (NVIDIA `nvidia*` node, or a non-Intel/non-virtual render node) maps to
 /// T1; an Intel/AMD integrated render node to T2; anything else to T4. This is
-/// a coarse heuristic — inference still runs on the CPU EP regardless — and
-/// exists so the GUI About page and degradation logic can report a tier.
+/// a coarse heuristic independent of the ONNX EP; it exists so the GUI About
+/// page and degradation logic can report a tier.
 pub fn detect_tier() -> Tier {
     // Discrete NVIDIA GPU.
     if std::path::Path::new("/proc/driver/nvidia/gpus").exists() {

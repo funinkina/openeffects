@@ -1,6 +1,6 @@
 //! The Preferences dialog (`AdwPreferencesDialog`): camera selection, the
-//! virtual-camera node readout, engine/runtime info, and the bundled-model
-//! library. Built once and re-presented from the primary menu.
+//! virtual-camera node readout, and the bundled-model library. Built once and
+//! re-presented from the primary menu.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -23,8 +23,6 @@ pub struct Widgets {
     /// change handler so a selection resolves back to an id.
     pub camera_ids: Rc<RefCell<Vec<String>>>,
     pub virtual_cam_row: adw::ActionRow,
-    pub tier: adw::ActionRow,
-    pub ep: adw::ActionRow,
     pub model_rows: HashMap<&'static str, adw::ActionRow>,
 }
 
@@ -69,23 +67,6 @@ pub fn build(
         .build();
     camera_group.add(&virtual_cam_row);
     page.add(&camera_group);
-
-    // ── Engine ───────────────────────────────────────────────────────────────
-    let engine = pref_group(
-        "Engine",
-        "ONNX runtime platform, detected at daemon startup",
-    );
-    let tier = adw::ActionRow::builder()
-        .title("Hardware tier")
-        .subtitle("—")
-        .build();
-    let ep = adw::ActionRow::builder()
-        .title("Running on")
-        .subtitle("—")
-        .build();
-    engine.add(&tier);
-    engine.add(&ep);
-    page.add(&engine);
 
     // ── Bundled models ───────────────────────────────────────────────────────
     let models_group = pref_group(
@@ -169,8 +150,6 @@ pub fn build(
             camera_handler,
             camera_ids,
             virtual_cam_row,
-            tier,
-            ep,
             model_rows,
         },
     )

@@ -191,7 +191,7 @@ async fn run_once(
                     .send(UiUpdate::Status(args.new_status.to_string()))
                     .await
                     .ok();
-                // Status transitions (idle/running) may change the active EP/tier readout.
+                // Refresh capabilities (models_ready, virtual_camera) on status change.
                 push_capabilities(&daemon, update_tx).await;
             }
             change = caps_changed.next() => {

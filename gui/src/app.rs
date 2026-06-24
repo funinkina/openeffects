@@ -236,14 +236,6 @@ fn apply_status_banner(w: &Widgets, status: &str) {
 }
 
 fn apply_capabilities(w: &Widgets, caps: &VariantMap) {
-    let tier = caps
-        .get("tier")
-        .and_then(value_as_string)
-        .unwrap_or_else(|| "—".into());
-    let ep = caps
-        .get("ep")
-        .and_then(value_as_string)
-        .unwrap_or_else(|| "—".into());
     let ready = caps
         .get("models_ready")
         .and_then(value_as_bool)
@@ -253,8 +245,6 @@ fn apply_capabilities(w: &Widgets, caps: &VariantMap) {
         .and_then(value_as_string)
         .unwrap_or_else(|| "—".into());
 
-    w.prefs.tier.set_subtitle(&tier.to_uppercase());
-    w.prefs.ep.set_subtitle(&ep.to_uppercase());
     w.prefs.virtual_cam_row.set_subtitle(&vcam);
 
     let pill_text = if ready { "Ready" } else { "Missing" };
