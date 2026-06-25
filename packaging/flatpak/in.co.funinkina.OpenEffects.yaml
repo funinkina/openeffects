@@ -83,9 +83,14 @@ modules:
       # Use the load-dynamic lock that cargo-sources.json was vendored from, and
       # switch ort off download-binaries (Flathub build has no network).
       # load-dynamic compiles every EP register path, which reference api-gated
-      # OrtApi fields; pin api-22 to match the bundled libonnxruntime.so.1.22.0.
+      # OrtApi fields. The highest field these need is api-18 (VitisAI), so api-21
+      # satisfies the build. Do NOT use api-22: it makes ort set an EpSelectionPolicy
+      # in Session::builder(), and ORT 1.22's auto-EP selection then aborts on
+      # `OrtEpDevice::front()` of an empty device list (no plugin EPs registered)
+      # the moment a model loads. api-21 omits that call; ORT 1.22.0 is backward
+      # compatible with the api-21 version ort requests at load time.
       - cp packaging/flatpak/Cargo.lock Cargo.lock
-      - sed -i 's/"download-binaries"/"load-dynamic", "api-22"/; /"tls-rustls",/d' Cargo.toml
+      - sed -i 's/"download-binaries"/"load-dynamic", "api-21"/; /"tls-rustls",/d' Cargo.toml
       # The CLI is intentionally NOT shipped in the Flatpak: the GUI + daemon are
       # the coupled unit here. Use the native package for `openeffectsctl`.
       - cargo --offline build --release -p openeffectsd -p openeffects
@@ -95,7 +100,11 @@ modules:
       - install -Dm755 packaging/flatpak/openeffects-launcher.sh /app/bin/openeffects-launcher
 
       # Desktop entry, icon, AppStream metainfo (renamed to the app id where needed).
+      # Flatpak exports the desktop Exec as `flatpak run --command=<Exec> APPID`,
+      # so the shipped `Exec=openeffects` would bypass the launcher (command:) and
+      # never start the daemon. Rewrite it to the launcher for the sandboxed build.
       - install -Dm644 data/applications/in.co.funinkina.OpenEffects.desktop /app/share/applications/in.co.funinkina.OpenEffects.desktop
+      - sed -i 's/^Exec=openeffects$/Exec=openeffects-launcher/' /app/share/applications/in.co.funinkina.OpenEffects.desktop
       - install -Dm644 data/icons/in.co.funinkina.OpenEffects.svg /app/share/icons/hicolor/scalable/apps/in.co.funinkina.OpenEffects.svg
       - install -Dm644 packaging/flatpak/in.co.funinkina.OpenEffects.metainfo.xml /app/share/metainfo/in.co.funinkina.OpenEffects.metainfo.xml
 
