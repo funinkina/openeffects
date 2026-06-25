@@ -114,6 +114,15 @@ modules:
       # replace this with a `type: git` source pinned to a tag + commit.
       - type: dir
         path: ../..
+        skip:
+          - .git
+          - target
+          - dist
+          - packaging/pkg
+          - packaging/src
+          - packaging/.flatpak-builder
+          - packaging/flatpak/.flatpak-builder
+          - packaging/flatpak/build-dir
       # Vendored crates + cargo config (writes cargo/config -> cargo/vendor).
       - cargo-sources.json
 
