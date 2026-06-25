@@ -93,51 +93,43 @@ pub fn build(
     // ── Startup ──────────────────────────────────────────────────────────────
     let startup = pref_group("Startup", "Control when the OpenEffects daemon runs");
 
-    if std::env::var_os("FLATPAK_ID").is_some() {
-        // Inside the sandbox there is no systemd unit to toggle, and closing the
-        // window always leaves the daemon running (it becomes a background app).
-        let info_row = adw::ActionRow::builder()
-            .title("Runs in the background")
-            .subtitle("Closing this window keeps effects running. Quit from the system's Background Apps menu.")
-            .build();
-        startup.add(&info_row);
-    } else {
+    // No systemd unit inside the sandbox, so the boot-autostart row is desktop-only.
+    let in_flatpak = std::env::var_os("FLATPAK_ID").is_some();
+
+    let keep_running_row = adw::SwitchRow::builder()
+        .title("Keep running in the background")
+        .subtitle("Leave the daemon running after this window is closed")
+        .active(gui_config.borrow().keep_running_in_background)
+        .build();
+
+    if !in_flatpak {
         let boot_row = adw::SwitchRow::builder()
             .title("Start on system boot")
             .subtitle("Launch the daemon automatically when you log in")
             .active(shared::systemd::is_enabled())
             .build();
+        // Moot when boot-autostart is on (the daemon always runs then).
+        keep_running_row.set_sensitive(!boot_row.is_active());
 
-        let keep_running_row = adw::SwitchRow::builder()
-            .title("Keep running in the background")
-            .subtitle("Leave the daemon running after this window is closed")
-            // Moot when boot-autostart is on (the daemon always runs then).
-            .sensitive(!boot_row.is_active())
-            .active(gui_config.borrow().keep_running_in_background)
-            .build();
-
-        {
-            let keep_running_row = keep_running_row.clone();
-            boot_row.connect_active_notify(move |row| {
-                let on = row.is_active();
-                if let Err(err) = shared::systemd::set_enabled(on) {
-                    tracing::warn!(%err, "failed to change daemon autostart");
-                }
-                keep_running_row.set_sensitive(!on);
-            });
-        }
-
-        {
-            let gui_config = Rc::clone(&gui_config);
-            keep_running_row.connect_active_notify(move |row| {
-                gui_config.borrow_mut().keep_running_in_background = row.is_active();
-                gui_config.borrow().save();
-            });
-        }
-
+        let keep_running_row = keep_running_row.clone();
+        boot_row.connect_active_notify(move |row| {
+            let on = row.is_active();
+            if let Err(err) = shared::systemd::set_enabled(on) {
+                tracing::warn!(%err, "failed to change daemon autostart");
+            }
+            keep_running_row.set_sensitive(!on);
+        });
         startup.add(&boot_row);
-        startup.add(&keep_running_row);
     }
+
+    {
+        let gui_config = Rc::clone(&gui_config);
+        keep_running_row.connect_active_notify(move |row| {
+            gui_config.borrow_mut().keep_running_in_background = row.is_active();
+            gui_config.borrow().save();
+        });
+    }
+    startup.add(&keep_running_row);
 
     page.add(&startup);
 

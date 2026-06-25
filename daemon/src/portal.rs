@@ -66,12 +66,30 @@ pub fn dup_camera_fd() -> Option<OwnedFd> {
     }
 }
 
-/// Set the daemon's background status message shown in GNOME Shell. No-op when
-/// not sandboxed; best-effort otherwise (older portals lack SetStatus).
+/// Register the daemon as a background app and set its status message. No-op when
+/// not sandboxed; best-effort otherwise.
+///
+/// `SetStatus` alone only updates the message of an app the shell already tracks;
+/// it does not make the app appear in GNOME's "Background Apps" menu. The app must
+/// first hold the background permission via `RequestBackground` (autostart off — we
+/// are already running, just asking to keep running window-less). Only then does
+/// `SetStatus` light up the menu entry.
 pub async fn set_background_status(message: &str) {
     if !in_sandbox() {
         return;
     }
+
+    match ashpd::desktop::background::Background::request()
+        .reason("Apply webcam effects to the virtual camera")
+        .auto_start(false)
+        .send()
+        .await
+        .and_then(|r| r.response())
+    {
+        Ok(_) => {}
+        Err(err) => warn!(%err, "Background portal RequestBackground failed"),
+    }
+
     let proxy = match ashpd::desktop::background::BackgroundProxy::new().await {
         Ok(p) => p,
         Err(err) => {

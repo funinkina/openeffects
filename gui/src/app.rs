@@ -159,12 +159,14 @@ pub fn build_window(
             if quitting.get() {
                 return glib::Propagation::Proceed;
             }
-            // In the Flatpak sandbox the daemon is the persistent background
-            // process (it holds the shell's background-app status), so closing
-            // the window always leaves it running. The launcher does not kill it.
+            // Keep the daemon alive on close when the user opted in, or (desktop
+            // only) when systemd boot-autostart manages its lifecycle. Otherwise
+            // quit it so the camera is released. In the Flatpak sandbox the daemon
+            // already holds the shell's background-app status via the Background
+            // portal, so leaving it running is enough to appear as a background app.
             let in_flatpak = std::env::var_os("FLATPAK_ID").is_some();
             let keep_running = gui_config.borrow().keep_running_in_background;
-            if in_flatpak || keep_running || shared::systemd::is_enabled() {
+            if keep_running || (!in_flatpak && shared::systemd::is_enabled()) {
                 return glib::Propagation::Proceed;
             }
             quitting.set(true);
