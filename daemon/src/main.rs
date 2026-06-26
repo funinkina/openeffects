@@ -56,10 +56,6 @@ async fn run() -> anyhow::Result<()> {
             }
         }
     }
-    let ep = inference::probe_ep();
-    let tier = inference::Tier::from_override(&app.pipeline.tier_override)
-        .unwrap_or_else(inference::detect_tier);
-    info!(tier = tier.as_str(), "hardware tier");
     let models_ready = inference::registry::find_model("yunet").is_some()
         && inference::registry::find_model("selfie_segmentation").is_some();
     if !models_ready {
@@ -68,7 +64,7 @@ async fn run() -> anyhow::Result<()> {
         );
     }
 
-    let state = Arc::new(RwLock::new(DaemonState::new(app, ep, tier, models_ready)));
+    let state = Arc::new(RwLock::new(DaemonState::new(app, models_ready)));
     let (pipeline_tx, pipeline_rx) = mpsc::channel(32);
     let (event_tx, mut event_rx) = mpsc::channel(32);
     // A `Quit` D-Bus call sends on this channel to drive a clean process exit.

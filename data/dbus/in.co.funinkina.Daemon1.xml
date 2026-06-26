@@ -19,7 +19,7 @@
       <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
     </property>
 
-    <!-- tier, ep, pipewire_version, virtual_cam_path -->
+    <!-- models_ready, output_sink, virtual_camera, error -->
     <property name="Capabilities" type="a{sv}" access="read">
       <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
     </property>

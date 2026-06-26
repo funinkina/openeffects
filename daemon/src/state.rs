@@ -3,7 +3,6 @@ use shared::{
     dbus::{VariantMap, bool_value, i32_value, str_value, u32_value},
 };
 
-use crate::inference::{EpKind, Tier};
 use crate::pipeline::probe::PIPEWIRE_NODE_NAME;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -48,13 +47,11 @@ pub struct DaemonState {
     pub output_sink: String,
     pub virtual_camera_verified: Option<bool>,
     pub last_error: Option<String>,
-    pub ep: EpKind,
-    pub tier: Tier,
     pub models_ready: bool,
 }
 
 impl DaemonState {
-    pub fn new(app: AppState, ep: EpKind, tier: Tier, models_ready: bool) -> Self {
+    pub fn new(app: AppState, models_ready: bool) -> Self {
         let active_camera = app.camera.selected.clone();
         Self {
             status: DaemonStatus::Stopped,
@@ -64,16 +61,12 @@ impl DaemonState {
             output_sink: "none".into(),
             virtual_camera_verified: None,
             last_error: None,
-            ep,
-            tier,
             models_ready,
         }
     }
 
     pub fn capabilities(&self) -> VariantMap {
         let mut values = VariantMap::new();
-        values.insert("tier".into(), str_value(self.tier.as_str()));
-        values.insert("ep".into(), str_value(self.ep.as_str()));
         values.insert("models_ready".into(), bool_value(self.models_ready));
         values.insert("output_sink".into(), str_value(&self.output_sink));
         values.insert(
@@ -297,7 +290,7 @@ impl DaemonState {
 mod tests {
     use shared::dbus::{value_as_bool, value_as_u32};
 
-    use super::{DaemonState, DaemonStatus, EpKind, Tier};
+    use super::{DaemonState, DaemonStatus};
 
     #[test]
     fn state_transition_guards_match_prd() {
@@ -313,12 +306,7 @@ mod tests {
 
     #[test]
     fn center_stage_params_include_phase1_crop_controls() {
-        let mut state = DaemonState::new(
-            shared::config::AppState::default(),
-            EpKind::Cpu,
-            Tier::T4,
-            false,
-        );
+        let mut state = DaemonState::new(shared::config::AppState::default(), false);
         assert!(state.set_enabled("center_stage", true));
         assert!(state.set_param("center_stage", "crop_left", &shared::dbus::u32_value(44)));
 
@@ -330,21 +318,8 @@ mod tests {
 
     #[test]
     fn capabilities_report_inference_engine_state() {
-        let state = DaemonState::new(
-            shared::config::AppState::default(),
-            EpKind::Cpu,
-            Tier::T2,
-            true,
-        );
+        let state = DaemonState::new(shared::config::AppState::default(), true);
         let caps = state.capabilities();
-        assert_eq!(
-            caps.get("ep").and_then(shared::dbus::value_as_string),
-            Some("cpu".to_string())
-        );
-        assert_eq!(
-            caps.get("tier").and_then(shared::dbus::value_as_string),
-            Some("t2".to_string())
-        );
         assert_eq!(caps.get("models_ready").and_then(value_as_bool), Some(true));
     }
 }

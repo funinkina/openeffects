@@ -11,8 +11,6 @@ pub struct AppState {
     pub effects: EffectsConfig,
     #[serde(default)]
     pub camera: CameraConfig,
-    #[serde(default)]
-    pub pipeline: PipelineConfig,
 }
 
 // ── Effects ────────────────────────────────────────────────────────────────────
@@ -109,14 +107,6 @@ impl Default for StudioLightState {
 pub struct CameraConfig {
     /// PipeWire node ID or /dev/videoN path; empty = auto-select
     pub selected: String,
-}
-
-// ── Pipeline ───────────────────────────────────────────────────────────────────
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct PipelineConfig {
-    /// "t1" | "t2" | "t3" | "t4" | "" = auto
-    pub tier_override: String,
 }
 
 // ── Crop config for manual rectangular crop (Phase 1 Center Stage placeholder) ─
@@ -218,9 +208,6 @@ enabled = false
 
 [camera]
 selected = ""
-
-[pipeline]
-tier_override = ""
 "#;
 
     #[test]
