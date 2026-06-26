@@ -1,31 +1,30 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
-  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
 <node name="/in/co/funinkina/Daemon">
   <interface name="in.co.funinkina.Daemon1">
 
-    <method name="Start"/>
-    <method name="Stop"/>
+    <method name="Start" />
+    <method name="Stop" />
 
     <!-- Terminate the daemon process (tears down the pipeline, then exits
-         cleanly). Clients use this to release the camera when no client wants
-         the daemon kept alive. Stop only halts the pipeline; the process lives. -->
-    <method name="Quit"/>
+        cleanly). Clients use this to release the camera when no client wants
+        the daemon kept alive. Stop only halts the pipeline; the process lives. -->
+    <method name="Quit" />
 
     <!-- "running" | "idle" | "error" | "stopped". Changes are announced via the
-         StatusChanged signal below, not org.freedesktop.DBus.Properties.PropertiesChanged
-         (avoids a receive_status_changed naming collision in generated proxies). -->
+        StatusChanged signal below, not org.freedesktop.DBus.Properties.PropertiesChanged
+        (avoids a receive_status_changed naming collision in generated proxies). -->
     <property name="Status" type="s" access="read">
-      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false" />
     </property>
 
     <!-- models_ready, output_sink, virtual_camera, error -->
     <property name="Capabilities" type="a{sv}" access="read">
-      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false"/>
+      <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false" />
     </property>
 
     <signal name="StatusChanged">
-      <arg name="new_status" type="s" direction="out"/>
+      <arg name="new_status" type="s" direction="out" />
     </signal>
 
   </interface>

@@ -69,10 +69,23 @@ mod imp {
     /// small/distant face doesn't blow up into an unusably pixelated frame.
     const CS_MIN_CROP: f32 = 0.25;
     /// Run selfie segmentation every Nth frame; the mask is reused in between.
-    /// 3 (≈10 Hz at 30 fps) keeps the ONNX call — the per-frame energy cost —
-    /// off two of every three frames while the subject's silhouette barely
-    /// moves frame-to-frame.
-    const SEG_INTERVAL: u64 = 3;
+    /// 2 (≈15 Hz at 30 fps) keeps the ONNX call — the per-frame energy cost —
+    /// off every other frame. The 1-frame hold is hidden by the temporal EMA
+    /// (model space) and the guided-filter edge re-snap (which re-aligns the
+    /// mask boundary to the *current* frame's luma every frame, see
+    /// `refine_mask_lut`).
+    const SEG_INTERVAL: u64 = 2;
+    /// Temporal EMA factor for the raw 256² model output: `e = α·new + (1-α)·e`.
+    /// Runs once per fresh segmentation (~15 Hz), killing boundary flicker
+    /// without smearing the image-aligned edge (which lives downstream). Lower
+    /// = steadier but laggier.
+    const SEG_EMA_ALPHA: f32 = 0.5;
+    /// Guided-filter subsample factor: coefficients are computed at 1/s² the
+    /// pixels, then applied against full-res luma (which carries the sharp edge).
+    const GF_SUBSAMPLE: usize = 4;
+    /// Guided-filter regularization. Lower = sharper/snappier to image edges
+    /// (and noisier); the primary edge-sharpness knob.
+    const GF_EPS: f32 = 4e-4;
     /// Run YuNet face detection every Nth frame. The comfort zone below absorbs
     /// detection jitter, so framing tolerates a slower (cheaper) detect cadence.
     const FACE_INTERVAL: u64 = 4;
@@ -295,6 +308,10 @@ mod imp {
         cs_out_frames: u32,
         frame: u64,
         mask: Option<Mask>,
+        /// Temporal-EMA-smoothed copy of the raw 256² model output, carried
+        /// across segmentations to suppress boundary flicker. `None` until the
+        /// first segmentation (or after a resolution / coordinate-space change).
+        mask_ema: Option<Vec<f32>>,
         /// Whether the cached `mask` was segmented from the center-stage ROI
         /// (true) or the full frame (false); a mismatch forces a re-segment so a
         /// normalized mask sampled in the wrong coordinate space is never reused.
@@ -309,17 +326,21 @@ mod imp {
         lut_gen: u64,
         lut_w: usize,
         lut_h: usize,
-        /// Blurred copy of `mask_lut` for studio light's soft edge. The radius
-        /// scales with resolution (max(w,h)/100), so the transition between
-        /// subject and background stays natural at any canvas size.
-        studio_mask_blurred: Vec<u8>,
-        /// Set to `lut_gen` when `studio_mask_blurred` is up to date.
-        studio_mask_blur_gen: u64,
-        /// Dimensions the blurred mask was computed at; mismatch forces a
-        /// re-blur even when `lut_gen` hasn't changed (e.g. during a center-stage
-        /// crop transition where the ROI size shifts every frame).
-        studio_mask_blur_w: usize,
-        studio_mask_blur_h: usize,
+        /// Fast-guided-filter linear coefficients at low-res (`gf_low_w`×
+        /// `gf_low_h`). Recomputed only on a fresh mask; the full-res apply that
+        /// reads them (`q = a·I + b` against the live frame luma) runs every
+        /// frame so the edge tracks motion even while the coarse mask is held.
+        gf_a_low: Vec<f32>,
+        gf_b_low: Vec<f32>,
+        /// Reusable low-res scratch planes for the guided-filter box passes.
+        gf_p_low: Vec<f32>,
+        gf_i_low: Vec<f32>,
+        gf_tmp: Vec<f32>,
+        gf_prefix: Vec<f32>,
+        gf_low_w: usize,
+        gf_low_h: usize,
+        /// `mask_gen` the low-res coefficients were computed for.
+        gf_coef_gen: u64,
         /// Reusable packed-frame buffer (a multi-MB alloc otherwise repeated
         /// every frame).
         canvas: Vec<u8>,
@@ -545,9 +566,12 @@ mod imp {
             state.target = CropState::default();
             state.cs_out_frames = 0;
             state.mask = None;
+            state.mask_ema = None;
             state.mask_lut.clear();
             state.lut_w = 0;
             state.lut_h = 0;
+            state.gf_low_w = 0;
+            state.gf_low_h = 0;
             state.bg = None;
             // Normalized hand crops don't survive a resolution change.
             state.tracks.clear();
@@ -721,21 +745,19 @@ mod imp {
     /// background. `is_roi` selects the mask coordinate space (full vs crop ROI).
     fn masked_effects(state: &mut State, img: &mut [u8], w: usize, h: usize, is_roi: bool) {
         ensure_mask(state, img, w, h, w * 4, is_roi);
-        ensure_mask_lut(state, w, h);
+        refine_mask_lut(state, img, w, h);
         if state.lut_w != w || state.lut_h != h {
             // No usable mask (e.g. the model is missing or the first
             // segmentation failed): skip the masked effects entirely.
             return;
         }
 
-        // Studio light first — uses a blurred copy of the mask so the edge
-        // between subject and background transitions smoothly instead of
-        // cutting sharply.
+        // Studio light first. The guided-filter mask already has a soft,
+        // image-aligned edge, so it's used directly (no separate blur pass).
         if state.settings.studio_enabled {
-            ensure_studio_mask(state, w, h);
             apply_studio(
                 img,
-                &state.studio_mask_blurred,
+                &state.mask_lut,
                 state.settings.studio_brightness,
                 state.settings.studio_contrast,
                 state.settings.studio_bg_brightness,
@@ -776,23 +798,151 @@ mod imp {
     }
 
     /// Rasterize the segmentation mask into per-pixel u8 weights at canvas
-    /// resolution. Rebuilt only when a fresh mask arrives or the canvas size
-    /// changes (ROI vs full frame), so the bilinear mask sampling happens once
-    /// per segmentation instead of once per pixel per effect per frame.
-    fn ensure_mask_lut(state: &mut State, w: usize, h: usize) {
-        if state.lut_gen == state.mask_gen && state.lut_w == w && state.lut_h == h {
+    /// resolution via a fast guided filterthe soft, image-
+    /// aligned linear coefficients `a,b` are computed at 1/`GF_SUBSAMPLE`²
+    /// resolution (only on a fresh mask), then `q = a·I + b` is applied at full
+    /// resolution against the *current* frame's luma every frame. The full-res
+    /// luma carries the sharp edge — it snaps the mask boundary onto the actual
+    /// person outline and re-tracks small motion even while the coarse mask is
+    /// held between segmentations.
+    fn refine_mask_lut(state: &mut State, img: &[u8], w: usize, h: usize) {
+        if state.mask.is_none() {
             return;
         }
-        let Some(mask) = &state.mask else {
-            return;
-        };
+        let s = GF_SUBSAMPLE;
+        let lw = w.div_ceil(s);
+        let lh = h.div_ceil(s);
+        let n = lw * lh;
+
+        if state.gf_coef_gen != state.mask_gen || state.gf_low_w != lw || state.gf_low_h != lh {
+            state.gf_p_low.resize(n, 0.0);
+            state.gf_i_low.resize(n, 0.0);
+            // Low-res mask (`p`) and luma guide (`I`, box-averaged per s×s block).
+            {
+                let mask = state.mask.as_ref().unwrap();
+                for ly in 0..lh {
+                    let v = (ly as f32 + 0.5) / lh as f32;
+                    let (y0, y1) = (ly * s, (ly * s + s).min(h));
+                    for lx in 0..lw {
+                        let u = (lx as f32 + 0.5) / lw as f32;
+                        state.gf_p_low[ly * lw + lx] = mask.sample(u, v).clamp(0.0, 1.0);
+                        let (x0, x1) = (lx * s, (lx * s + s).min(w));
+                        let mut acc = 0u32;
+                        for yy in y0..y1 {
+                            let row = yy * w;
+                            for xx in x0..x1 {
+                                let p = (row + xx) * 4;
+                                acc += 77 * img[p] as u32
+                                    + 150 * img[p + 1] as u32
+                                    + 29 * img[p + 2] as u32;
+                            }
+                        }
+                        let cnt = ((y1 - y0) * (x1 - x0)) as f32;
+                        state.gf_i_low[ly * lw + lx] = acc as f32 / (cnt * 65280.0);
+                    }
+                }
+            }
+
+            let r = (lw.min(lh) / 32).max(2);
+            let mut mean_i = vec![0f32; n];
+            let mut mean_p = vec![0f32; n];
+            let mut corr_i = vec![0f32; n];
+            let mut corr_ip = vec![0f32; n];
+            let mut prod = vec![0f32; n];
+            box_f32(
+                &state.gf_i_low,
+                &mut mean_i,
+                &mut state.gf_tmp,
+                &mut state.gf_prefix,
+                lw,
+                lh,
+                r,
+            );
+            box_f32(
+                &state.gf_p_low,
+                &mut mean_p,
+                &mut state.gf_tmp,
+                &mut state.gf_prefix,
+                lw,
+                lh,
+                r,
+            );
+            for i in 0..n {
+                prod[i] = state.gf_i_low[i] * state.gf_i_low[i];
+            }
+            box_f32(
+                &prod,
+                &mut corr_i,
+                &mut state.gf_tmp,
+                &mut state.gf_prefix,
+                lw,
+                lh,
+                r,
+            );
+            for i in 0..n {
+                prod[i] = state.gf_i_low[i] * state.gf_p_low[i];
+            }
+            box_f32(
+                &prod,
+                &mut corr_ip,
+                &mut state.gf_tmp,
+                &mut state.gf_prefix,
+                lw,
+                lh,
+                r,
+            );
+
+            let mut a = vec![0f32; n];
+            let mut b = vec![0f32; n];
+            for i in 0..n {
+                let var_i = corr_i[i] - mean_i[i] * mean_i[i];
+                let cov = corr_ip[i] - mean_i[i] * mean_p[i];
+                a[i] = cov / (var_i + GF_EPS);
+                b[i] = mean_p[i] - a[i] * mean_i[i];
+            }
+            box_f32(
+                &a,
+                &mut state.gf_a_low,
+                &mut state.gf_tmp,
+                &mut state.gf_prefix,
+                lw,
+                lh,
+                r,
+            );
+            box_f32(
+                &b,
+                &mut state.gf_b_low,
+                &mut state.gf_tmp,
+                &mut state.gf_prefix,
+                lw,
+                lh,
+                r,
+            );
+            state.gf_low_w = lw;
+            state.gf_low_h = lh;
+            state.gf_coef_gen = state.mask_gen;
+        }
+
+        // Full-res apply against the live frame luma (every frame).
         state.mask_lut.resize(w * h, 0);
         for y in 0..h {
-            let v = (y as f32 + 0.5) / h as f32;
+            let fy = ((y as f32 + 0.5) / s as f32 - 0.5).clamp(0.0, lh as f32 - 1.0);
+            let y0 = fy.floor() as usize;
+            let y1 = (y0 + 1).min(lh - 1);
+            let ty = fy - y0 as f32;
             for x in 0..w {
-                let u = (x as f32 + 0.5) / w as f32;
-                state.mask_lut[y * w + x] =
-                    (mask.sample(u, v).clamp(0.0, 1.0) * 255.0).round() as u8;
+                let fx = ((x as f32 + 0.5) / s as f32 - 0.5).clamp(0.0, lw as f32 - 1.0);
+                let x0 = fx.floor() as usize;
+                let x1 = (x0 + 1).min(lw - 1);
+                let tx = fx - x0 as f32;
+                let a = bilerp(&state.gf_a_low, lw, x0, x1, y0, y1, tx, ty);
+                let b = bilerp(&state.gf_b_low, lw, x0, x1, y0, y1, tx, ty);
+                let p = (y * w + x) * 4;
+                let lum = (77 * img[p] as u32 + 150 * img[p + 1] as u32 + 29 * img[p + 2] as u32)
+                    as f32
+                    / 65280.0;
+                let q = (a * lum + b).clamp(0.0, 1.0);
+                state.mask_lut[y * w + x] = (q * 255.0) as u8;
             }
         }
         state.lut_gen = state.mask_gen;
@@ -800,69 +950,61 @@ mod imp {
         state.lut_h = h;
     }
 
-    /// Blur a single-channel u8 image in place using a separable box blur
-    /// (two passes ≈ triangle kernel), ping-ponging through `tmp`. Per-row and
-    /// per-column prefix sums keep cost independent of radius.
-    fn blur_mask(buf: &mut [u8], tmp: &mut Vec<u8>, prefix: &mut Vec<i32>, w: usize, h: usize, radius: usize) {
-        if radius == 0 {
-            return;
-        }
-        tmp.resize(buf.len(), 0);
-        // Shared scratch sized for both passes; index 0 stays 0 (never written).
-        prefix.resize(w.max(h) + 1, 0);
-        for _ in 0..2 {
-            // Horizontal pass
-            for y in 0..h {
-                let base = y * w;
-                for x in 0..w {
-                    prefix[x + 1] = prefix[x] + buf[base + x] as i32;
-                }
-                for x in 0..w {
-                    let lo = x.saturating_sub(radius);
-                    let hi = (x + radius + 1).min(w);
-                    tmp[base + x] = ((prefix[hi] - prefix[lo]) / (hi - lo) as i32) as u8;
-                }
-            }
-            // Vertical pass
+    /// Single-pass separable box mean over an f32 plane (`src` → `dst`), using
+    /// row/column prefix sums (cost independent of radius). `tmp` holds the
+    /// horizontal pass; `prefix[0]` stays 0 (never written), which the window
+    /// subtraction at `lo == 0` relies on.
+    fn box_f32(
+        src: &[f32],
+        dst: &mut Vec<f32>,
+        tmp: &mut Vec<f32>,
+        prefix: &mut Vec<f32>,
+        w: usize,
+        h: usize,
+        r: usize,
+    ) {
+        let n = w * h;
+        dst.resize(n, 0.0);
+        tmp.resize(n, 0.0);
+        prefix.resize(w.max(h) + 1, 0.0);
+        for y in 0..h {
+            let base = y * w;
             for x in 0..w {
-                for y in 0..h {
-                    prefix[y + 1] = prefix[y] + tmp[y * w + x] as i32;
-                }
-                for y in 0..h {
-                    let lo = y.saturating_sub(radius);
-                    let hi = (y + radius + 1).min(h);
-                    buf[y * w + x] = ((prefix[hi] - prefix[lo]) / (hi - lo) as i32) as u8;
-                }
+                prefix[x + 1] = prefix[x] + src[base + x];
+            }
+            for x in 0..w {
+                let lo = x.saturating_sub(r);
+                let hi = (x + r + 1).min(w);
+                tmp[base + x] = (prefix[hi] - prefix[lo]) / (hi - lo) as f32;
+            }
+        }
+        for x in 0..w {
+            for y in 0..h {
+                prefix[y + 1] = prefix[y] + tmp[y * w + x];
+            }
+            for y in 0..h {
+                let lo = y.saturating_sub(r);
+                let hi = (y + r + 1).min(h);
+                dst[y * w + x] = (prefix[hi] - prefix[lo]) / (hi - lo) as f32;
             }
         }
     }
 
-    /// Blur the mask LUT into a soft-edged copy for studio light. The radius
-    /// scales with resolution so the transition looks natural at any canvas
-    /// size. Only recomputed when a new mask arrives or the canvas dimensions
-    /// change (the latter can happen every frame during a center-stage crop
-    /// transition without a fresh segmentation, so a generation counter alone
-    /// would miss the size drift).
-    fn ensure_studio_mask(state: &mut State, w: usize, h: usize) {
-        if state.studio_mask_blur_gen == state.lut_gen
-            && state.studio_mask_blur_w == w
-            && state.studio_mask_blur_h == h
-        {
-            return;
-        }
-        state.studio_mask_blurred = state.mask_lut.clone();
-        let radius = w.max(h) / 100;
-        blur_mask(
-            &mut state.studio_mask_blurred,
-            &mut state.blur_tmp,
-            &mut state.blur_prefix,
-            w,
-            h,
-            radius.max(1),
-        );
-        state.studio_mask_blur_gen = state.lut_gen;
-        state.studio_mask_blur_w = w;
-        state.studio_mask_blur_h = h;
+    /// Bilinear lookup into an `lw`-stride f32 plane at the four pre-resolved
+    /// corner indices with fractional weights `tx`,`ty`.
+    fn bilerp(
+        buf: &[f32],
+        lw: usize,
+        x0: usize,
+        x1: usize,
+        y0: usize,
+        y1: usize,
+        tx: f32,
+        ty: f32,
+    ) -> f32 {
+        let top = buf[y0 * lw + x0] + (buf[y0 * lw + x1] - buf[y0 * lw + x0]) * tx;
+        let bot = buf[y1 * lw + x0] + (buf[y1 * lw + x1] - buf[y1 * lw + x0]) * tx;
+        top + (bot - top) * ty
     }
 
     /// Center stage: decide framing on the full frame, then crop to the ROI and
@@ -917,15 +1059,30 @@ mod imp {
     /// (Re)segment into `state.mask` on the segmentation cadence, or whenever no
     /// valid mask is cached for the current coordinate space (full vs ROI).
     fn ensure_mask(state: &mut State, buf: &[u8], w: usize, h: usize, stride: usize, is_roi: bool) {
-        let stale = state.mask.is_none()
-            || state.mask_is_roi != is_roi
-            || state.frame.is_multiple_of(SEG_INTERVAL);
+        // A coordinate-space flip (full↔ROI) makes the previous mask grid
+        // incomparable, so drop the EMA history to avoid blending across spaces.
+        let space_changed = state.mask_is_roi != is_roi;
+        let stale =
+            state.mask.is_none() || space_changed || state.frame.is_multiple_of(SEG_INTERVAL);
         if !stale {
             return;
         }
+        if space_changed {
+            state.mask_ema = None;
+        }
         if let Some(model) = state.engine.selfie() {
             match model.segment(buf, w, h, stride) {
-                Ok(mask) => {
+                Ok(mut mask) => {
+                    let a = SEG_EMA_ALPHA;
+                    match &mut state.mask_ema {
+                        Some(e) if e.len() == mask.values.len() => {
+                            for (e, &n) in e.iter_mut().zip(&mask.values) {
+                                *e = a * n + (1.0 - a) * *e;
+                            }
+                            mask.values.copy_from_slice(e);
+                        }
+                        _ => state.mask_ema = Some(mask.values.clone()),
+                    }
                     state.mask = Some(mask);
                     state.mask_is_roi = is_roi;
                     state.mask_gen = state.mask_gen.wrapping_add(1);
@@ -1061,7 +1218,13 @@ mod imp {
     /// `out = blend(lerp(p, fg_adj, m), lerp(p, bg_adj, 1-m), m)`.
     /// The transfer depends only on the input value, so it uses 256-entry
     /// lookup tables and pure integer math.
-    fn apply_studio(img: &mut [u8], lut: &[u8], brightness: f32, contrast: f32, bg_brightness: f32) {
+    fn apply_studio(
+        img: &mut [u8],
+        lut: &[u8],
+        brightness: f32,
+        contrast: f32,
+        bg_brightness: f32,
+    ) {
         let has_bg = bg_brightness != 0.0;
         let mut adj_fg = [0u8; 256];
         let mut adj_bg = [0u8; 256];
@@ -1217,7 +1380,14 @@ mod imp {
     /// Separable box blur (two passes ≈ triangle kernel) in place, ping-ponging
     /// through `tmp`. Per-row/column prefix sums keep cost independent of
     /// radius; only RGB is blurred (alpha is never read back).
-    fn box_blur(buf: &mut [u8], tmp: &mut Vec<u8>, prefix: &mut Vec<i32>, w: usize, h: usize, radius: usize) {
+    fn box_blur(
+        buf: &mut [u8],
+        tmp: &mut Vec<u8>,
+        prefix: &mut Vec<i32>,
+        w: usize,
+        h: usize,
+        radius: usize,
+    ) {
         if radius == 0 {
             return;
         }

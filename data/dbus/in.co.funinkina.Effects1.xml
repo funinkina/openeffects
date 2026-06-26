@@ -1,44 +1,43 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
-  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
 <node name="/in/co/funinkina/Daemon">
   <interface name="in.co.funinkina.Effects1">
 
     <!-- Returns ["center_stage","portrait_blur","bg_replace","studio_light","reactions"] -->
     <method name="ListEffects">
-      <arg name="effect_ids" type="as" direction="out"/>
+      <arg name="effect_ids" type="as" direction="out" />
     </method>
 
     <method name="SetEnabled">
-      <arg name="id" type="s" direction="in"/>
-      <arg name="on" type="b" direction="in"/>
+      <arg name="id" type="s" direction="in" />
+      <arg name="on" type="b" direction="in" />
     </method>
 
     <method name="SetParam">
-      <arg name="id"    type="s" direction="in"/>
-      <arg name="key"   type="s" direction="in"/>
-      <arg name="value" type="v" direction="in"/>
+      <arg name="id" type="s" direction="in" />
+      <arg name="key" type="s" direction="in" />
+      <arg name="value" type="v" direction="in" />
     </method>
 
     <!-- Play a one-shot emoji burst; id is one of shared::dbus::REACTION_IDS -->
     <method name="TriggerReaction">
-      <arg name="id" type="s" direction="in"/>
+      <arg name="id" type="s" direction="in" />
     </method>
 
     <!-- Returns a{sv} of current params for this effect -->
     <method name="GetParams">
-      <arg name="id"     type="s"     direction="in"/>
-      <arg name="params" type="a{sv}" direction="out"/>
+      <arg name="id" type="s" direction="in" />
+      <arg name="params" type="a{sv}" direction="out" />
     </method>
 
     <!-- Returns all effects and their enabled state + params in one call -->
     <method name="GetAllState">
-      <arg name="state" type="a{sv}" direction="out"/>
+      <arg name="state" type="a{sv}" direction="out" />
     </method>
 
     <signal name="EffectChanged">
-      <arg name="id"     type="s"     direction="out"/>
-      <arg name="params" type="a{sv}" direction="out"/>
+      <arg name="id" type="s" direction="out" />
+      <arg name="params" type="a{sv}" direction="out" />
     </signal>
 
   </interface>
