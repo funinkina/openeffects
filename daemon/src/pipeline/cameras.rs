@@ -205,7 +205,9 @@ fn better_fps(a: i32, b: i32) -> bool {
 pub fn build_source_for(info: &CameraInfo) -> Result<gst::Element> {
     // In the Flatpak sandbox /dev/videoN is not accessible: physical cameras are
     // only reachable through the camera portal's PipeWire remote, even when a
-    // node still carries v4l2 path metadata. Always capture via the portal fd.
+    // node still carries v4l2 path metadata. Always capture via the portal fd,
+    // acquiring it now if the grant only landed after the GUI prompted.
+    crate::portal::ensure_camera_blocking();
     if crate::portal::in_sandbox()
         && let Some(fd) = crate::portal::dup_camera_fd()
     {

@@ -15,40 +15,55 @@
 //! back to talking to PipeWire / V4L2 directly, exactly as before.
 
 use std::os::fd::OwnedFd;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 
 use tracing::{info, warn};
 
 /// The camera PipeWire remote fd obtained from the portal, kept alive for the
-/// whole process. `Some(None)` means we asked and got nothing (no camera or
-/// access denied); `None` means we never asked (not sandboxed).
-static CAMERA_FD: OnceLock<Option<OwnedFd>> = OnceLock::new();
+/// whole process. `None` means not yet granted — unlike a one-shot cache we keep
+/// retrying, because the grant may only land after the GUI prompts the user.
+static CAMERA_FD: Mutex<Option<OwnedFd>> = Mutex::new(None);
+
+/// Runtime handle so the sync GStreamer pipeline thread can drive the async
+/// portal request on the daemon's tokio runtime.
+static RT: OnceLock<tokio::runtime::Handle> = OnceLock::new();
 
 /// Whether we are running inside a Flatpak sandbox.
 pub fn in_sandbox() -> bool {
     std::env::var_os("FLATPAK_ID").is_some()
 }
 
-/// Request camera access through the portal and cache the resulting PipeWire
-/// remote fd. Safe to call when not sandboxed (does nothing). Call once, early,
-/// before the first capture — the first call may show a permission dialog.
-pub async fn init_camera() {
-    if !in_sandbox() {
+/// Record the tokio runtime handle (call once from `#[tokio::main]`).
+pub fn set_runtime_handle(handle: tokio::runtime::Handle) {
+    let _ = RT.set(handle);
+}
+
+/// Acquire the camera PipeWire remote fd through the portal if we don't have it
+/// yet. No-op when not sandboxed or already granted. The first successful call
+/// may show a permission dialog — but a windowless daemon can't host one, so in
+/// practice the grant is primed by the GUI and this just picks it up.
+pub async fn ensure_camera() {
+    if !in_sandbox() || CAMERA_FD.lock().unwrap().is_some() {
         return;
     }
     match ashpd::desktop::camera::request().await {
         Ok(Some(fd)) => {
             info!("camera portal granted a PipeWire remote");
-            let _ = CAMERA_FD.set(Some(fd));
+            *CAMERA_FD.lock().unwrap() = Some(fd);
         }
-        Ok(None) => {
-            warn!("camera portal returned no camera (denied or none present)");
-            let _ = CAMERA_FD.set(None);
-        }
-        Err(err) => {
-            warn!(%err, "camera portal request failed; falling back to direct capture");
-            let _ = CAMERA_FD.set(None);
-        }
+        Ok(None) => warn!("camera portal returned no camera (denied or none present)"),
+        Err(err) => warn!(%err, "camera portal request failed; falling back to direct capture"),
+    }
+}
+
+/// Blocking [`ensure_camera`] for the sync pipeline thread, driven on the tokio
+/// runtime. Safe to call repeatedly; returns immediately once the fd is held.
+pub fn ensure_camera_blocking() {
+    if !in_sandbox() || CAMERA_FD.lock().unwrap().is_some() {
+        return;
+    }
+    if let Some(rt) = RT.get() {
+        rt.block_on(ensure_camera());
     }
 }
 
@@ -57,7 +72,7 @@ pub async fn init_camera() {
 /// GStreamer, which closes it). Duplicating per source keeps the cached fd valid
 /// across pipeline restarts.
 pub fn dup_camera_fd() -> Option<OwnedFd> {
-    match CAMERA_FD.get()?.as_ref()?.try_clone() {
+    match CAMERA_FD.lock().unwrap().as_ref()?.try_clone() {
         Ok(fd) => Some(fd),
         Err(err) => {
             warn!(%err, "failed to dup camera portal fd");

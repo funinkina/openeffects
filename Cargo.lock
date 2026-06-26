@@ -1716,6 +1716,7 @@ name = "openeffects"
 version = "0.1.3"
 dependencies = [
  "anyhow",
+ "ashpd",
  "async-channel",
  "dirs",
  "futures-util",

@@ -79,10 +79,25 @@ pub fn spawn(
     });
 }
 
+/// Prime the camera portal grant from the GUI, which (unlike the windowless
+/// daemon) can host the permission dialog. The grant is stored per app id, so the
+/// daemon's own `AccessCamera` then succeeds without a prompt. The returned fd is
+/// unused here — the daemon opens its own.
+async fn prime_camera_access() {
+    if std::env::var_os("FLATPAK_ID").is_none() {
+        return;
+    }
+    match ashpd::desktop::camera::request().await {
+        Ok(_) => tracing::info!("camera portal grant primed by GUI"),
+        Err(err) => tracing::warn!(%err, "GUI camera portal request failed"),
+    }
+}
+
 async fn run(
     mut cmd_rx: mpsc::UnboundedReceiver<GuiCommand>,
     update_tx: async_channel::Sender<UiUpdate>,
 ) {
+    prime_camera_access().await;
     loop {
         match run_once(&mut cmd_rx, &update_tx).await {
             // Quit requested (or the GUI dropped the command channel): stop the

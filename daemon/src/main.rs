@@ -138,10 +138,11 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
-    // Flatpak: grab the camera portal grant once (may prompt) before any capture,
-    // and tell the shell we're a background app so we show up sensibly once the
-    // GUI window is closed.
-    portal::init_camera().await;
+    // Flatpak: let the sync pipeline thread reach the portal, try an early camera
+    // grab (lands only if already granted — the GUI prompts the user otherwise),
+    // and tell the shell we're a background app.
+    portal::set_runtime_handle(tokio::runtime::Handle::current());
+    portal::ensure_camera().await;
     portal::set_background_status("Ready to apply webcam effects").await;
 
     if start_pipeline {
