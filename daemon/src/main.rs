@@ -21,8 +21,17 @@ use crate::{
     state::{DaemonState, DaemonStatus},
 };
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
+    unsafe { libc::mallopt(libc::M_ARENA_MAX, 2) };
+
+    tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .enable_all()
+        .build()?
+        .block_on(run())
+}
+
+async fn run() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
@@ -48,11 +57,6 @@ async fn main() -> anyhow::Result<()> {
         }
     }
     let ep = inference::probe_ep();
-    if inference::init_runtime() {
-        info!(ep = ep.as_str(), "ONNX Runtime environment initialized");
-    } else {
-        warn!("ONNX Runtime environment was already configured");
-    }
     let tier = inference::Tier::from_override(&app.pipeline.tier_override)
         .unwrap_or_else(inference::detect_tier);
     info!(tier = tier.as_str(), "hardware tier");

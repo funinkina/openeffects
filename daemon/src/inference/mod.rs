@@ -45,35 +45,27 @@ pub fn probe_ep() -> EpKind {
     EpKind::Cpu
 }
 
-/// Initialize the ONNX Runtime environment once at daemon startup, before any
-/// model session is created. Returns `true` if this call configured the
-/// environment, `false` if one was already committed (e.g. by a prior call).
-pub fn init_runtime() -> bool {
-    ort::init().with_name("openeffectsd").commit()
-}
-
-/// Intra-op thread cap for the bundled models. They are sub-MB nets that run at
-/// ~10 Hz with long idle gaps between calls; ORT's default (one intra-op thread
-/// per logical core) over-subscribes for models this small, and those threads
-/// spin-wait when idle — pegging every core in the gaps between inferences.
 const INTRA_THREADS: usize = 2;
 
-/// Build an ORT session builder configured for the daemon's low-rate inference:
-/// a small intra-op thread cap and **spinning disabled**, so idle worker threads
-/// block instead of busy-waiting (the cause of the constant CPU burn when an
-/// effect is active). Every model `load()` goes through this instead of
-/// `Session::builder()` so the policy is applied uniformly.
-///
-/// `with_intra_threads`/`with_intra_op_spinning` return `Error<SessionBuilder>`,
-/// which isn't `Send + Sync` and so can't ride `?` into `anyhow::Result`; each
-/// step is mapped to a formatted message instead.
 pub fn build_session() -> anyhow::Result<ort::session::builder::SessionBuilder> {
+    use ort::memory::{AllocationDevice, AllocatorType, MemoryInfo, MemoryType};
+    let cpu = MemoryInfo::new(
+        AllocationDevice::CPU,
+        0,
+        AllocatorType::Device,
+        MemoryType::Default,
+    )
+    .map_err(|e| anyhow::anyhow!("create CPU memory info: {e}"))?;
     let builder = ort::session::Session::builder()
         .map_err(|e| anyhow::anyhow!("create ORT session builder: {e}"))?
         .with_intra_threads(INTRA_THREADS)
         .map_err(|e| anyhow::anyhow!("set intra-op threads: {e}"))?
         .with_intra_op_spinning(false)
-        .map_err(|e| anyhow::anyhow!("disable intra-op spinning: {e}"))?;
+        .map_err(|e| anyhow::anyhow!("disable intra-op spinning: {e}"))?
+        .with_memory_pattern(false)
+        .map_err(|e| anyhow::anyhow!("disable memory pattern: {e}"))?
+        .with_allocator(cpu)
+        .map_err(|e| anyhow::anyhow!("set non-arena CPU allocator: {e}"))?;
     Ok(builder)
 }
 
@@ -112,11 +104,6 @@ impl Tier {
     }
 }
 
-/// Detect the hardware tier from the DRM render nodes (PRD §10.1). A discrete
-/// GPU (NVIDIA `nvidia*` node, or a non-Intel/non-virtual render node) maps to
-/// T1; an Intel/AMD integrated render node to T2; anything else to T4. This is
-/// a coarse heuristic independent of the ONNX EP; it exists so the GUI About
-/// page and degradation logic can report a tier.
 pub fn detect_tier() -> Tier {
     // Discrete NVIDIA GPU.
     if std::path::Path::new("/proc/driver/nvidia/gpus").exists() {
@@ -132,12 +119,5 @@ pub fn detect_tier() -> Tier {
             has_render_node = true;
         }
     }
-    if has_render_node {
-        // A render node exists (Intel/AMD iGPU or discrete). We can't cheaply
-        // tell discrete from integrated here, so treat as a modern iGPU (T2);
-        // the user can force T1 via `pipeline.tier_override`.
-        Tier::T2
-    } else {
-        Tier::T4
-    }
+    if has_render_node { Tier::T2 } else { Tier::T4 }
 }

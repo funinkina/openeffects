@@ -46,6 +46,7 @@ tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 
 clap = { version = "4", features = ["derive"] }
 futures-util = "0.3.32"
+libc = "0.2"
 
 # xdg-desktop-portal client (Camera + Background portals). Only exercised inside
 # the Flatpak sandbox (gated on FLATPAK_ID); dormant on native installs.

@@ -1779,6 +1779,7 @@ dependencies = [
  "gstreamer-base",
  "gstreamer-video",
  "image",
+ "libc",
  "ort",
  "pipewire",
  "serde",

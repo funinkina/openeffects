@@ -19,18 +19,10 @@ use tracing::{error, info};
 use crate::pipeline::bridge::Bridge;
 use crate::pipeline::probe::PIPEWIRE_NODE_NAME;
 
-/// Default virtual-camera format, used when the camera's native modes can't be
-/// probed (e.g. `videotestsrc` fallback).
 pub const WIDTH: u32 = 1280;
 pub const HEIGHT: u32 = 720;
 pub const FPS: i32 = 30;
 
-/// The I420 format shared by the capture appsink and the native provide node so
-/// frames are byte-compatible without per-frame conversion. The dimensions are
-/// taken from the physical camera's preferred native mode
-/// (`cameras::preferred_format`) and pinned on the *source* too, so the capture
-/// pipeline never rescales — rescaling a 4:3 camera mode into a fixed 16:9
-/// output is what made the feed look horizontally stretched.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PipelineFormat {
     pub width: u32,
@@ -261,6 +253,7 @@ fn worker_loop(
             {
                 c.stop();
                 bridge.clear();
+                unsafe { libc::malloc_trim(0) };
                 info!("capture stopped: no consumer, camera released");
                 let _ = events.blocking_send(PipelineEvent::Idle);
             }
