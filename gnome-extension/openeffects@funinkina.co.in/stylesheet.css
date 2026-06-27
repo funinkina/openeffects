@@ -1,0 +1,297 @@
+/* OpenEffects control center — mirrors the GTK app: #56A7EA accent, dark
+ * rounded cards, grey segmented pills, blue circular effect toggles. */
+
+.oe-popup {
+    min-width: 360px;
+    spacing: 10px;
+    padding: 4px 6px 6px 6px;
+}
+
+/* Header ------------------------------------------------------------------ */
+.oe-header {
+    spacing: 12px;
+    padding: 6px 6px 10px 6px;
+}
+
+.oe-header-icon {
+    border-radius: 12px;
+}
+
+.oe-titlebox {
+    spacing: 1px;
+}
+
+.oe-title {
+    font-size: 17px;
+    font-weight: 800;
+    color: #ffffff;
+}
+
+.oe-subtitle {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.oe-master-switch {
+    padding: 0;
+}
+
+.oe-notice {
+    padding: 18px 10px;
+    color: rgba(255, 255, 255, 0.6);
+    text-align: center;
+}
+
+/* Sections ---------------------------------------------------------------- */
+.oe-sections {
+    spacing: 8px;
+}
+
+.oe-section {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 14px;
+    padding: 6px 10px;
+}
+
+.oe-row {
+    spacing: 12px;
+    min-height: 40px;
+}
+
+.oe-effect-toggle {
+    min-width: 34px;
+    min-height: 34px;
+    padding: 9px;
+    border-radius: 99px;
+    background-color: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+}
+
+.oe-effect-toggle:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.oe-effect-toggle.on {
+    background-color: #56a7ea;
+    color: #ffffff;
+}
+
+.oe-effect-toggle.on:hover {
+    background-color: #6cb4ee;
+}
+
+.oe-effect-toggle-icon {
+    color: inherit;
+}
+
+.oe-row-main {
+    padding: 6px 4px;
+    border-radius: 8px;
+    color: #ffffff;
+}
+
+.oe-row-main:hover {
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+.oe-row-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #ffffff;
+}
+
+.oe-chevron {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.oe-body {
+    spacing: 12px;
+    padding: 6px 2px 10px 2px;
+}
+
+/* Segmented pill group ---------------------------------------------------- */
+.oe-segmented {
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    padding: 3px;
+}
+
+.oe-segment {
+    padding: 7px 10px;
+    border-radius: 8px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.oe-segment:hover {
+    color: #ffffff;
+}
+
+.oe-segment.selected {
+    background-color: rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+}
+
+/* Two-up cards ------------------------------------------------------------ */
+.oe-cards {
+    spacing: 8px;
+}
+
+.oe-card {
+    padding: 14px 8px;
+    border-radius: 12px;
+    background-color: rgba(255, 255, 255, 0.06);
+    border: 1px solid transparent;
+}
+
+.oe-card:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.oe-card.selected {
+    background-color: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.oe-card-content {
+    spacing: 6px;
+}
+
+.oe-card-icon {
+    color: #ffffff;
+}
+
+.oe-card-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+/* Sliders ----------------------------------------------------------------- */
+.oe-slider-row {
+    spacing: 6px;
+    padding: 2px 0;
+}
+
+.oe-slider-label {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.oe-slider-value {
+    font-size: 13px;
+    font-weight: 600;
+    color: #56a7ea;
+    min-width: 34px;
+    text-align: right;
+}
+
+.oe-subgroup {
+    padding-top: 2px;
+}
+
+/* Background swatches ------------------------------------------------------ */
+.oe-swatches {
+    spacing: 8px;
+}
+
+.oe-swatch-row {
+    spacing: 8px;
+}
+
+.oe-swatch {
+    min-height: 32px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.oe-swatch.selected {
+    border: 2px solid #56a7ea;
+}
+
+.oe-bg-thumb {
+    min-height: 46px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.oe-bg-thumb.selected {
+    border: 2px solid #56a7ea;
+}
+
+/* Reactions --------------------------------------------------------------- */
+.oe-hint {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.oe-emoji-grid {
+    spacing: 6px;
+}
+
+.oe-emoji-row {
+    spacing: 6px;
+}
+
+.oe-emoji-btn {
+    font-size: 22px;
+    padding: 6px 0;
+    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+.oe-emoji-btn:hover {
+    background-color: rgba(255, 255, 255, 0.14);
+}
+
+/* Camera ------------------------------------------------------------------ */
+.oe-camera-main {
+    spacing: 12px;
+    min-height: 36px;
+}
+
+.oe-camera-icon {
+    color: #56a7ea;
+}
+
+.oe-camera-list {
+    spacing: 2px;
+    padding: 4px 0 2px 0;
+}
+
+.oe-camera-item {
+    padding: 7px 8px;
+    border-radius: 8px;
+    color: #ffffff;
+}
+
+.oe-camera-item:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.oe-camera-check {
+    color: #56a7ea;
+    margin-right: 8px;
+}
+
+/* Footer ------------------------------------------------------------------ */
+.oe-footer {
+    padding: 6px 2px 2px 2px;
+}
+
+.oe-open-btn {
+    padding: 9px;
+    border-radius: 10px;
+    font-weight: 600;
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.oe-open-btn:hover {
+    background-color: rgba(86, 167, 234, 0.25);
+}
+
+/* Panel ------------------------------------------------------------------- */
+.oe-panel-icon {
+    padding: 0 2px;
+}

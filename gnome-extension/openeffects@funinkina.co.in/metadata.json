@@ -1,0 +1,9 @@
+{
+  "uuid": "openeffects@funinkina.co.in",
+  "name": "OpenEffects Control Center",
+  "description": "Top-bar control center for the OpenEffects webcam daemon. Toggle the global bypass, enable Center Stage / Background / Studio Light / Reactions, tune their settings and fire reactions — all over D-Bus, with no app window. Requires the openeffectsd daemon (in.co.funinkina.Daemon).",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "url": "https://github.com/funinkina/openeffects",
+  "version": 1,
+  "version-name": "0.1.0"
+}
