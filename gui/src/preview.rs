@@ -33,7 +33,7 @@ pub struct Preview {
 /// return the shared `Preview`. The caller puts `preview.split` into the window
 /// and `preview.toggle` into the header bar.
 pub fn build(content: &impl IsA<gtk::Widget>) -> Rc<Preview> {
-    // ── Pane body: the live preview surface ─────────────────────────────────
+    // Pane body: the live preview surface
     let picture = gtk::Picture::builder()
         .content_fit(gtk::ContentFit::Contain)
         .hexpand(true)
@@ -62,7 +62,7 @@ pub fn build(content: &impl IsA<gtk::Widget>) -> Rc<Preview> {
     pane.add_top_bar(&pane_header);
     pane.set_content(Some(&overlay));
 
-    // ── Split view: page content + collapsible left sidebar ─────────────────
+    // split view: page content + collapsible left sidebar
     let split = adw::OverlaySplitView::builder()
         .content(content)
         .sidebar(&pane)
@@ -73,7 +73,7 @@ pub fn build(content: &impl IsA<gtk::Widget>) -> Rc<Preview> {
         .sidebar_width_fraction(0.4)
         .build();
 
-    // ── Header toggle that reveals the pane ─────────────────────────────────
+    // header toggle that reveals the pane
     let toggle = gtk::ToggleButton::builder()
         .icon_name("camera-photo-symbolic")
         .tooltip_text("Toggle live preview")

@@ -19,14 +19,13 @@ pub struct Widgets {
     brightness: SliderCtl,
     contrast: SliderCtl,
     bg_brightness: SliderCtl,
-    /// Group dimmed while Studio Light is off.
     controls: adw::PreferencesGroup,
 }
 
 pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     let page = adw::PreferencesPage::new();
 
-    // ── Master switch ────────────────────────────────────────────────────────
+    // master switch
     let main = pref_group("Studio Light", "Subtly brighten and separate the subject");
     let switch = adw::SwitchRow::builder()
         .title("Studio Light")
@@ -44,7 +43,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     main.add(&switch);
     page.add(&main);
 
-    // ── Adjustments ──────────────────────────────────────────────────────────
+    // adjustments
     let controls = pref_group("Adjustments", "");
     let intensity = add_slider_u32(
         &controls,

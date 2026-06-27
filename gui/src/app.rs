@@ -1,10 +1,3 @@
-//! Top-level window. Follows the GNOME HIG multi-view pattern: an
-//! `AdwViewStack` of `AdwPreferencesPage`s driven by an `AdwViewSwitcher` in
-//! the header (wide) and an `AdwViewSwitcherBar` at the bottom (narrow,
-//! revealed by a breakpoint). The primary menu (Preferences / About) lives on
-//! the right of the header bar; daemon connection trouble surfaces in an
-//! `AdwBanner`. Camera selection lives in the Preferences dialog.
-
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -44,7 +37,7 @@ pub fn build_window(
 ) {
     let gui_config = Rc::new(RefCell::new(config));
 
-    // ── Pages (each an AdwPreferencesPage) added to the view stack ───────────
+    // Pages (each an AdwPreferencesPage) added to the view stack
     let stack = adw::ViewStack::new();
 
     let mut switches = HashMap::new();
@@ -64,7 +57,7 @@ pub fn build_window(
         stack.add_titled_with_icon(widget, Some(name), title, icon);
     }
 
-    // ── View switchers: header (wide) + bottom bar (narrow) ──────────────────
+    // View switchers: header (wide) + bottom bar (narrow)
     let switcher = adw::ViewSwitcher::builder()
         .stack(&stack)
         .policy(adw::ViewSwitcherPolicy::Wide)
@@ -72,10 +65,10 @@ pub fn build_window(
 
     let switcher_bar = adw::ViewSwitcherBar::builder().stack(&stack).build();
 
-    // ── Preferences dialog (camera, engine info, model library, startup) ─────
+    // Preferences dialog (camera, engine info, model library, startup)
     let (prefs_dialog, prefs_widgets) = preferences::build(&cmd_tx, Rc::clone(&gui_config));
 
-    // ── Primary menu (Preferences / About), right side of the header ─────────
+    // Primary menu (Preferences / About), right side of the header
     let menu = gio::Menu::new();
     menu.append(Some("Preferences"), Some("win.preferences"));
     menu.append(Some("About OpenEffects"), Some("win.about"));
@@ -86,9 +79,10 @@ pub fn build_window(
         .tooltip_text("Main Menu")
         .build();
 
-    // ── Master effects switch (right of header): off = passthrough camera ────
+    // Master effects switch (right of header): off = passthrough camera
     let bypass_switch = gtk::Switch::builder()
         .valign(gtk::Align::Center)
+        .active(true)
         .tooltip_text("Toggle all effects. Off passes the camera through untouched.")
         .build();
     let bypass_handler = {
@@ -114,8 +108,6 @@ pub fn build_window(
     toolbar.set_content(Some(&stack));
     toolbar.add_bottom_bar(&switcher_bar);
 
-    // Global live-preview side pane wraps the whole content; its header toggle
-    // reveals it without covering the page controls or the narrow switcher bar.
     let preview = preview::build(&toolbar);
     header.pack_start(&preview.toggle);
 
@@ -127,11 +119,6 @@ pub fn build_window(
         .content(&preview.split)
         .build();
 
-    // Adaptive: switch to the bottom bar exactly when the window gets too narrow
-    // to show the header at its natural width (where the wide switcher's labels
-    // would otherwise start to ellipsize). The threshold is measured from the
-    // header itself on realize, so there's no hardcoded breakpoint value to keep
-    // in sync with the switcher contents.
     {
         let switcher = switcher.clone();
         let switcher_bar = switcher_bar.clone();
@@ -155,7 +142,7 @@ pub fn build_window(
         });
     }
 
-    // ── Primary menu actions ──────────────────────────────────────────────────
+    // Primary menu actions
     let action_preferences = gio::SimpleAction::new("preferences", None);
     {
         let window = window.clone();
@@ -182,13 +169,6 @@ pub fn build_window(
         content_stack: stack,
     });
 
-    // ── Window close → optionally stop the daemon ────────────────────────────
-    // Default behaviour (boot-autostart off, keep-running off): closing the
-    // window quits the daemon so the camera is released. We keep the window
-    // (and therefore the app) alive via Propagation::Stop until the client
-    // confirms the Quit call landed (`UiUpdate::DaemonQuit`), then quit the app.
-    // Returning here without waiting would let the app exit and kill the client
-    // thread before the Quit was delivered.
     let quitting = Rc::new(Cell::new(false));
     {
         let cmd_tx = cmd_tx.clone();
@@ -224,7 +204,7 @@ pub fn build_window(
     window.present();
 }
 
-// ── Apply daemon state updates ───────────────────────────────────────────────
+// Apply daemon state updates
 
 fn apply_update(w: &Widgets, update: UiUpdate) {
     match update {

@@ -32,7 +32,7 @@ pub fn build(cmd_tx: &CmdTx, switches: &mut Switches) -> adw::PreferencesPage {
     install_css();
     let page = adw::PreferencesPage::new();
 
-    // ── Manual burst picker (always visible, always sensitive) ────────────────
+    // Manual burst picker (always visible, always sensitive)
     let send_group = pref_group(
         "Send a Reaction",
         "Play a one-shot emoji burst in the video",
@@ -60,7 +60,7 @@ pub fn build(cmd_tx: &CmdTx, switches: &mut Switches) -> adw::PreferencesPage {
     send_group.add(&emoji_box);
     page.add(&send_group);
 
-    // ── Gesture auto-trigger toggle ───────────────────────────────────────────
+    // gesture auto-trigger toggle
     let group = pref_group(
         "Automatic Reactions",
         "Trigger reactions with hand gestures",

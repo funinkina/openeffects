@@ -59,7 +59,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     let page = adw::PreferencesPage::new();
     let applying = Rc::new(Cell::new(false));
 
-    // ── Mode toggle: Blur / Replace ──────────────────────────────────────────
+    // mode toggle: blur / replace
     // Built before the master switch so its closure can capture the group.
     let mode_group = pref_group("Mode", "Blur or replace everything behind the subject");
     let mode = {
@@ -74,7 +74,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     };
     mode_group.add(&mode.group);
 
-    // ── Master switch ─────────────────────────────────────────────────────────
+    // master switch
     let main = pref_group(
         "Background",
         "Blur or replace everything behind the subject",
@@ -110,7 +110,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     page.add(&main);
     page.add(&mode_group);
 
-    // ── Blur strength: Low / Medium / High ───────────────────────────────────
+    //blur strenght: low / medium/ high
     let blur_group = pref_group("Blur", "How strongly to blur the background");
     let blur_strength = {
         let cmd_tx = cmd_tx.clone();
@@ -134,7 +134,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     // either kind of background visually deselects the other.
     let mut group_leader: Option<gtk::ToggleButton> = None;
 
-    // ── Replace: image presets ───────────────────────────────────────────────
+    // replace: image presets
     let image_group = pref_group("Image", "Use a built-in image or pick your own");
     let image_box = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
@@ -190,7 +190,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     image_group.add(&image_row);
     page.add(&image_group);
 
-    // ── Replace: color swatches ──────────────────────────────────────────────
+    // replace: color swatches
     let color_group = pref_group("Color", "Pick a solid background color");
     let swatch_box = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
@@ -442,8 +442,7 @@ fn rgba_to_hex(rgba: &RGBA) -> String {
     )
 }
 
-// ── Swatch widgets & CSS ─────────────────────────────────────────────────────
-
+// swatch widgets & CSS
 fn swatch_button(class: &str, tooltip: &str) -> gtk::ToggleButton {
     let button = gtk::ToggleButton::builder()
         .tooltip_text(tooltip)

@@ -3,8 +3,6 @@ use std::path::PathBuf;
 
 use crate::error::ConfigError;
 
-// ── Top-level state persisted to ~/.config/openeffects/state.toml ─────────────
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppState {
     /// Master passthrough switch. When true, every effect is bypassed and the
@@ -18,7 +16,7 @@ pub struct AppState {
     pub camera: CameraConfig,
 }
 
-// ── Effects ────────────────────────────────────────────────────────────────────
+// effects
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EffectsConfig {
@@ -106,15 +104,13 @@ impl Default for StudioLightState {
     }
 }
 
-// ── Camera ─────────────────────────────────────────────────────────────────────
+// camera
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CameraConfig {
     /// PipeWire node ID or /dev/videoN path; empty = auto-select
     pub selected: String,
 }
-
-// ── Crop config for manual rectangular crop (Phase 1 Center Stage placeholder) ─
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CropConfig {
@@ -133,7 +129,7 @@ fn phase1_default_crop() -> CropConfig {
     }
 }
 
-// ── I/O helpers ───────────────────────────────────────────────────────────────
+// io helpers
 
 impl AppState {
     pub fn config_path() -> Result<PathBuf, ConfigError> {
@@ -180,7 +176,7 @@ impl AppState {
     }
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
+// tests
 
 #[cfg(test)]
 mod tests {

@@ -39,7 +39,7 @@ pub fn build(
         .icon_name("preferences-system-symbolic")
         .build();
 
-    // ── Camera ───────────────────────────────────────────────────────────────
+    // Camera
     let camera_group = pref_group(
         "Camera",
         "Choose the physical camera OpenEffects captures from",
@@ -68,7 +68,7 @@ pub fn build(
     camera_group.add(&virtual_cam_row);
     page.add(&camera_group);
 
-    // ── Bundled models ───────────────────────────────────────────────────────
+    // Bundled models
     let models_group = pref_group(
         "Bundled Models",
         "Run scripts/fetch-models.sh to install missing models",
@@ -90,7 +90,7 @@ pub fn build(
     }
     page.add(&models_group);
 
-    // ── Startup ──────────────────────────────────────────────────────────────
+    // Startup
     let startup = pref_group("Startup", "Control when the OpenEffects daemon runs");
 
     // No systemd unit inside the sandbox, so the boot-autostart row is desktop-only.

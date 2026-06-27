@@ -22,7 +22,7 @@ pub struct Widgets {
 pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     let page = adw::PreferencesPage::new();
 
-    // ── Master switch ────────────────────────────────────────────────────────
+    // master switch
     let main = pref_group(
         "Center Stage",
         "Keep the subject framed and centered as they move",
@@ -43,7 +43,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     main.add(&switch);
     page.add(&main);
 
-    // ── Framing (zoom) ───────────────────────────────────────────────────────
+    // framing - zoom
     let framing_group = pref_group("Framing", "How tightly to crop around the subject");
     let framing = {
         let cmd_tx = cmd_tx.clone();
@@ -58,7 +58,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     framing_group.add(&framing.group);
     page.add(&framing_group);
 
-    // ── Tracking mode ────────────────────────────────────────────────────────
+    // tracking mode
     let mode_group = pref_group("Mode", "Track one face or frame the whole group");
     let mode = {
         let cmd_tx = cmd_tx.clone();
