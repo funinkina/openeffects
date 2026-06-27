@@ -31,6 +31,9 @@ struct Widgets {
     background: background::Widgets,
     studio_light: studio_light::Widgets,
     prefs: preferences::Widgets,
+    bypass_switch: gtk::Switch,
+    bypass_handler: glib::SignalHandlerId,
+    content_stack: adw::ViewStack,
 }
 
 pub fn build_window(
@@ -83,8 +86,24 @@ pub fn build_window(
         .tooltip_text("Main Menu")
         .build();
 
+    // ── Master effects switch (right of header): off = passthrough camera ────
+    let bypass_switch = gtk::Switch::builder()
+        .valign(gtk::Align::Center)
+        .tooltip_text("Toggle all effects. Off passes the camera through untouched.")
+        .build();
+    let bypass_handler = {
+        let cmd_tx = cmd_tx.clone();
+        bypass_switch.connect_active_notify(move |sw| {
+            // Switch on = effects active = bypass off.
+            let _ = cmd_tx.send(GuiCommand::SetBypass {
+                on: !sw.is_active(),
+            });
+        })
+    };
+
     let header = adw::HeaderBar::builder().title_widget(&switcher).build();
     header.pack_end(&menu_button);
+    header.pack_end(&bypass_switch);
 
     // Connection-trouble banner, sits just under the header.
     let banner = adw::Banner::builder().revealed(false).build();
@@ -108,14 +127,32 @@ pub fn build_window(
         .content(&preview.split)
         .build();
 
-    // Adaptive: hide the header switcher and reveal the bottom bar when narrow.
-    if let Ok(condition) = adw::BreakpointCondition::parse("max-width: 850sp") {
-        let breakpoint = adw::Breakpoint::new(condition);
-        breakpoint.add_setter(&switcher, "visible", Some(&false.to_value()));
-        breakpoint.add_setter(&switcher_bar, "reveal", Some(&true.to_value()));
-        // Narrow: overlay the preview pane instead of squeezing the page.
-        // breakpoint.add_setter(&preview.split, "collapsed", Some(&true.to_value()));
-        window.add_breakpoint(breakpoint);
+    // Adaptive: switch to the bottom bar exactly when the window gets too narrow
+    // to show the header at its natural width (where the wide switcher's labels
+    // would otherwise start to ellipsize). The threshold is measured from the
+    // header itself on realize, so there's no hardcoded breakpoint value to keep
+    // in sync with the switcher contents.
+    {
+        let switcher = switcher.clone();
+        let switcher_bar = switcher_bar.clone();
+        let header = header.clone();
+        window.connect_realize(move |window| {
+            // Header natural width with the wide switcher visible = the smallest
+            // window width that fits every label uncut. Below it, collapse.
+            let natural = header.measure(gtk::Orientation::Horizontal, -1).1;
+            if natural <= 0 {
+                return;
+            }
+            let Ok(condition) =
+                adw::BreakpointCondition::parse(&format!("max-width: {}px", natural - 1))
+            else {
+                return;
+            };
+            let breakpoint = adw::Breakpoint::new(condition);
+            breakpoint.add_setter(&switcher, "visible", Some(&false.to_value()));
+            breakpoint.add_setter(&switcher_bar, "reveal", Some(&true.to_value()));
+            window.add_breakpoint(breakpoint);
+        });
     }
 
     // ── Primary menu actions ──────────────────────────────────────────────────
@@ -140,6 +177,9 @@ pub fn build_window(
         background: bg_widgets,
         studio_light: sl_widgets,
         prefs: prefs_widgets,
+        bypass_switch,
+        bypass_handler,
+        content_stack: stack,
     });
 
     // ── Window close → optionally stop the daemon ────────────────────────────
@@ -159,11 +199,6 @@ pub fn build_window(
             if quitting.get() {
                 return glib::Propagation::Proceed;
             }
-            // Keep the daemon alive on close when the user opted in, or (desktop
-            // only) when systemd boot-autostart manages its lifecycle. Otherwise
-            // quit it so the camera is released. In the Flatpak sandbox the daemon
-            // already holds the shell's background-app status via the Background
-            // portal, so leaving it running is enough to appear as a background app.
             let in_flatpak = std::env::var_os("FLATPAK_ID").is_some();
             let keep_running = gui_config.borrow().keep_running_in_background;
             if keep_running || (!in_flatpak && shared::systemd::is_enabled()) {
@@ -198,8 +233,12 @@ fn apply_update(w: &Widgets, update: UiUpdate) {
                 let params = extract_effect_params(&state, id);
                 apply_effect(w, id, &params);
             }
+            if let Some(on) = state.get("bypass").and_then(value_as_bool) {
+                apply_bypass(w, on);
+            }
         }
         UiUpdate::EffectChanged { id, params } => apply_effect(w, &id, &params),
+        UiUpdate::Bypass(on) => apply_bypass(w, on),
         UiUpdate::Status(status) => apply_status_banner(w, &status),
         UiUpdate::Capabilities(caps) => apply_capabilities(w, &caps),
         UiUpdate::Cameras { cameras, active } => apply_cameras(w, &cameras, &active),
@@ -285,6 +324,13 @@ fn extract_effect_params(state: &VariantMap, id: &str) -> VariantMap {
                 .and_then(|key| v.try_clone().ok().map(|v| (key.to_string(), v)))
         })
         .collect()
+}
+
+fn apply_bypass(w: &Widgets, on: bool) {
+    w.bypass_switch.block_signal(&w.bypass_handler);
+    w.bypass_switch.set_active(!on);
+    w.bypass_switch.unblock_signal(&w.bypass_handler);
+    w.content_stack.set_sensitive(!on);
 }
 
 fn apply_enabled(w: &Widgets, id: &str, params: &VariantMap) {

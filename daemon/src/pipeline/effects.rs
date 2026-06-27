@@ -74,13 +74,12 @@ pub fn build_effects_bin(app: &AppState) -> Result<gst::Bin> {
     Ok(bin)
 }
 
-/// Push the current config into the live `oe_effects` element. Studio Light's
-/// brightness/contrast are computed here (the same mapping the old
-/// `videobalance` used) and pushed as `oe_effects` properties, where the lift
-/// is masked to the person.
 pub fn apply_app_state_to_elements(effects: &gst::Element, app: &AppState) {
+    let active = !app.bypass;
+
     let studio = &app.effects.studio_light;
-    let intensity = if studio.enabled {
+    let studio_enabled = studio.enabled && active;
+    let intensity = if studio_enabled {
         studio.intensity as f64 / 100.0
     } else {
         0.0
@@ -88,7 +87,7 @@ pub fn apply_app_state_to_elements(effects: &gst::Element, app: &AppState) {
     let brightness = (studio.brightness as f64 / 100.0) * intensity;
     let contrast_delta = (studio.contrast as f64 - 50.0) / 50.0;
     let contrast = 1.0 + contrast_delta * intensity;
-    effects.set_property("studio-light-enabled", studio.enabled);
+    effects.set_property("studio-light-enabled", studio_enabled);
     effects.set_property(
         "studio-light-brightness",
         brightness.clamp(-1.0, 1.0) as f32,
@@ -101,19 +100,19 @@ pub fn apply_app_state_to_elements(effects: &gst::Element, app: &AppState) {
     );
 
     let blur = &app.effects.portrait_blur;
-    effects.set_property("portrait-blur-enabled", blur.enabled);
+    effects.set_property("portrait-blur-enabled", blur.enabled && active);
     effects.set_property("portrait-blur-strength", blur.strength as u32);
 
     let bg = &app.effects.bg_replace;
-    effects.set_property("bg-replace-enabled", bg.enabled);
+    effects.set_property("bg-replace-enabled", bg.enabled && active);
     effects.set_property("bg-replace-path", &bg.background);
 
     let center = &app.effects.center_stage;
-    effects.set_property("center-stage-enabled", center.enabled);
+    effects.set_property("center-stage-enabled", center.enabled && active);
     effects.set_property("center-stage-zoom", &center.zoom);
     effects.set_property("center-stage-mode", &center.mode);
 
-    effects.set_property("reactions-enabled", app.effects.reactions.enabled);
+    effects.set_property("reactions-enabled", app.effects.reactions.enabled && active);
 }
 
 #[cfg(test)]
@@ -192,6 +191,39 @@ mod tests {
         app.effects.reactions.enabled = true;
         apply_app_state_to_elements(&effects, &app);
         assert!(effects.property::<bool>("reactions-enabled"));
+    }
+
+    /// Master bypass forces every effect's `enabled` property false even when the
+    /// stored per-effect config has them on — the element becomes a passthrough.
+    #[test]
+    fn bypass_forces_all_effects_off() {
+        gst::init().unwrap();
+        super::super::filters::register().unwrap();
+        let effects = gst::ElementFactory::make("oe_effects").build().unwrap();
+        let mut app = AppState::default();
+        app.effects.studio_light.enabled = true;
+        app.effects.portrait_blur.enabled = true;
+        app.effects.bg_replace.enabled = true;
+        app.effects.center_stage.enabled = true;
+        app.effects.reactions.enabled = true;
+        app.bypass = true;
+
+        apply_app_state_to_elements(&effects, &app);
+        assert!(!effects.property::<bool>("studio-light-enabled"));
+        assert!(!effects.property::<bool>("portrait-blur-enabled"));
+        assert!(!effects.property::<bool>("bg-replace-enabled"));
+        assert!(!effects.property::<bool>("center-stage-enabled"));
+        assert!(!effects.property::<bool>("reactions-enabled"));
+        // Studio light's derived brightness/contrast collapse to neutral too.
+        assert_eq!(effects.property::<f32>("studio-light-brightness"), 0.0);
+        assert_eq!(effects.property::<f32>("studio-light-contrast"), 1.0);
+
+        // Clearing bypass restores the enabled effects.
+        app.bypass = false;
+        apply_app_state_to_elements(&effects, &app);
+        assert!(effects.property::<bool>("studio-light-enabled"));
+        assert!(effects.property::<bool>("portrait-blur-enabled"));
+        assert!(effects.property::<bool>("center-stage-enabled"));
     }
 
     /// A manual `trigger-reaction` must process frames even with every effect

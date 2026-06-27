@@ -80,6 +80,23 @@ openeffectsctl disable studio-light
 openeffectsctl toggle reactions
 ```
 
+### Master passthrough
+
+One switch over everything. When on, all effects are bypassed and the virtual
+camera passes the real camera through untouched. Per-effect settings are
+preserved, so turning it back off restores exactly what was on before.
+
+```bash
+openeffectsctl passthrough --on    # bypass all effects (raw camera)
+openeffectsctl passthrough --off   # re-enable effects
+openeffectsctl passthrough         # print current state
+```
+
+| Flag    | Notes                                          |
+| ------- | ---------------------------------------------- |
+| `--on`  | Bypass all effects — raw camera passthrough.   |
+| `--off` | Re-enable effects (turn passthrough off).      |
+
 ## Per-effect commands
 
 Each effect subcommand shares the `--on` / `--off` toggle and adds its own

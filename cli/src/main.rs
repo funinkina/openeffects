@@ -129,6 +129,15 @@ enum Command {
         reaction: Reaction,
     },
 
+    Passthrough {
+        /// Bypass all effects — raw camera passthrough.
+        #[arg(long)]
+        on: bool,
+        /// Re-enable effects (turn passthrough off).
+        #[arg(long, conflicts_with = "on")]
+        off: bool,
+    },
+
     /// Low-level: set any effect param directly (EFFECT.KEY VALUE).
     Set {
         /// e.g. studio_light.brightness
@@ -434,6 +443,7 @@ async fn main() -> anyhow::Result<()> {
             println!("fired {}", reaction.id());
         }
 
+        Command::Passthrough { on, off } => passthrough(&conn, on, off).await?,
         Command::Set { assignment, value } => set_param(&conn, &assignment, &value).await?,
         Command::Camera { command } => camera(&conn, command).await?,
         // Handled before the daemon connection above.
@@ -604,6 +614,32 @@ async fn set_param_str(effects: &Proxy<'_>, id: &str, key: &str, v: &str) -> any
     Ok(())
 }
 
+/// Master passthrough. `--on` bypasses all effects, `--off` re-enables them; no
+/// flag just reports the current state.
+async fn passthrough(conn: &Connection, on: bool, off: bool) -> anyhow::Result<()> {
+    let effects = effects_proxy(conn).await?;
+    let target = if on {
+        Some(true)
+    } else if off {
+        Some(false)
+    } else {
+        None
+    };
+    if let Some(value) = target {
+        effects.call::<_, _, ()>("SetBypass", &(value)).await?;
+    }
+    let state: bool = effects.call("GetBypass", &()).await?;
+    println!(
+        "passthrough {}",
+        if state {
+            "on (all effects bypassed)"
+        } else {
+            "off (effects active)"
+        }
+    );
+    Ok(())
+}
+
 async fn set_param(conn: &Connection, assignment: &str, raw_value: &str) -> anyhow::Result<()> {
     let (effect, key) = assignment
         .split_once('.')
@@ -651,11 +687,23 @@ async fn camera(conn: &Connection, command: CameraCommand) -> anyhow::Result<()>
 
 async fn watch(conn: &Connection) -> anyhow::Result<()> {
     let proxy = Proxy::new(conn, SERVICE_NAME, OBJECT_PATH, EFFECTS_INTERFACE).await?;
-    let mut stream = proxy.receive_signal("EffectChanged").await?;
+    let effect_changed = proxy.receive_signal("EffectChanged").await?;
+    let bypass_changed = proxy.receive_signal("BypassChanged").await?;
+    let mut stream = futures_util::stream::select(effect_changed, bypass_changed);
     while let Some(message) = stream.next().await {
+        let member = message
+            .header()
+            .member()
+            .map(|m| m.to_string())
+            .unwrap_or_default();
         let body = message.body();
-        let (id, params): (String, VariantMap) = body.deserialize()?;
-        println!("{id}\t{}", format_params(&params));
+        if member == "BypassChanged" {
+            let on: bool = body.deserialize()?;
+            println!("passthrough\t{}", if on { "on" } else { "off" });
+        } else {
+            let (id, params): (String, VariantMap) = body.deserialize()?;
+            println!("{id}\t{}", format_params(&params));
+        }
     }
     Ok(())
 }

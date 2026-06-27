@@ -31,6 +31,10 @@ pub enum GuiCommand {
         key: String,
         value: OwnedValue,
     },
+    /// Master passthrough: bypass all effects (`on = true`) or restore them.
+    SetBypass {
+        on: bool,
+    },
     SelectCamera {
         id: String,
     },
@@ -57,6 +61,8 @@ pub enum UiUpdate {
         id: String,
         params: VariantMap,
     },
+    /// Master passthrough state changed.
+    Bypass(bool),
     Status(String),
     Capabilities(VariantMap),
     Cameras {
@@ -130,6 +136,10 @@ async fn run_once(
         .await
         .ok();
     update_tx
+        .send(UiUpdate::Bypass(effects.get_bypass().await?))
+        .await
+        .ok();
+    update_tx
         .send(UiUpdate::Status(daemon.status().await?))
         .await
         .ok();
@@ -137,6 +147,7 @@ async fn run_once(
     push_cameras(&devices, update_tx).await;
 
     let mut effect_changed = effects.receive_effect_changed().await?;
+    let mut bypass_changed = effects.receive_bypass_changed().await?;
     let mut status_changed = daemon.receive_daemon_status_changed().await?;
     let mut caps_changed = daemon.receive_capabilities_changed().await;
     let mut active_cam_changed = devices.receive_active_camera_changed().await;
@@ -158,6 +169,11 @@ async fn run_once(
                         let value: Value<'_> = value.into();
                         if let Err(err) = effects.set_param(&id, &key, &value).await {
                             tracing::warn!(%err, id, key, "SetParam failed");
+                        }
+                    }
+                    Some(GuiCommand::SetBypass { on }) => {
+                        if let Err(err) = effects.set_bypass(on).await {
+                            tracing::warn!(%err, on, "SetBypass failed");
                         }
                     }
                     Some(GuiCommand::SelectCamera { id }) => {
@@ -196,6 +212,13 @@ async fn run_once(
                     .send(UiUpdate::EffectChanged { id: args.id.to_string(), params })
                     .await
                     .ok();
+            }
+            signal = bypass_changed.next() => {
+                let Some(signal) = signal else {
+                    return Err(anyhow::anyhow!("BypassChanged signal stream closed"));
+                };
+                let args = signal.args()?;
+                update_tx.send(UiUpdate::Bypass(args.on)).await.ok();
             }
             signal = status_changed.next() => {
                 let Some(signal) = signal else {

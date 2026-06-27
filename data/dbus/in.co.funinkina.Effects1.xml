@@ -19,6 +19,14 @@
       <arg name="value" type="v" direction="in" />
     </method>
 
+    <method name="SetBypass">
+      <arg name="on" type="b" direction="in" />
+    </method>
+
+    <method name="GetBypass">
+      <arg name="on" type="b" direction="out" />
+    </method>
+
     <!-- Play a one-shot emoji burst; id is one of shared::dbus::REACTION_IDS -->
     <method name="TriggerReaction">
       <arg name="id" type="s" direction="in" />
@@ -38,6 +46,10 @@
     <signal name="EffectChanged">
       <arg name="id" type="s" direction="out" />
       <arg name="params" type="a{sv}" direction="out" />
+    </signal>
+
+    <signal name="BypassChanged">
+      <arg name="on" type="b" direction="out" />
     </signal>
 
   </interface>

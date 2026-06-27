@@ -184,6 +184,7 @@ impl DaemonState {
 
     pub fn all_effect_state(&self) -> VariantMap {
         let mut values = VariantMap::new();
+        values.insert("bypass".into(), bool_value(self.app.bypass));
         for id in shared::dbus::EFFECT_IDS {
             if let Some(params) = self.effect_params(id) {
                 for (key, value) in params {
@@ -192,6 +193,14 @@ impl DaemonState {
             }
         }
         values
+    }
+
+    pub fn bypass(&self) -> bool {
+        self.app.bypass
+    }
+
+    pub fn set_bypass(&mut self, on: bool) {
+        self.app.bypass = on;
     }
 
     pub fn set_enabled(&mut self, id: &str, on: bool) -> bool {
@@ -314,6 +323,29 @@ mod tests {
         assert_eq!(params.get("enabled").and_then(value_as_bool), Some(true));
         assert_eq!(params.get("crop_left").and_then(value_as_u32), Some(44));
         assert_eq!(params.get("crop_top").and_then(value_as_u32), Some(12));
+    }
+
+    #[test]
+    fn bypass_round_trips_through_state_and_all_state() {
+        let mut state = DaemonState::new(shared::config::AppState::default(), false);
+        assert!(!state.bypass());
+        assert_eq!(
+            state
+                .all_effect_state()
+                .get("bypass")
+                .and_then(value_as_bool),
+            Some(false)
+        );
+
+        state.set_bypass(true);
+        assert!(state.bypass());
+        assert_eq!(
+            state
+                .all_effect_state()
+                .get("bypass")
+                .and_then(value_as_bool),
+            Some(true)
+        );
     }
 
     #[test]

@@ -7,6 +7,11 @@ use crate::error::ConfigError;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppState {
+    /// Master passthrough switch. When true, every effect is bypassed and the
+    /// camera passes through untouched, regardless of per-effect `enabled`
+    /// flags (which are preserved so flipping this back off restores them).
+    #[serde(default)]
+    pub bypass: bool,
     #[serde(default)]
     pub effects: EffectsConfig,
     #[serde(default)]
@@ -249,6 +254,21 @@ selected = ""
         let loaded: AppState =
             toml::from_str(&std::fs::read_to_string(&config_path).unwrap()).unwrap();
         assert!(!loaded.effects.reactions.enabled);
+    }
+
+    #[test]
+    fn bypass_defaults_off_and_round_trips() {
+        let state = AppState::default();
+        assert!(!state.bypass);
+
+        let mut on = AppState::default();
+        on.bypass = true;
+        on.effects.portrait_blur.enabled = true;
+        let text = toml::to_string_pretty(&on).unwrap();
+        let reparsed: AppState = toml::from_str(&text).unwrap();
+        assert!(reparsed.bypass);
+        // Per-effect state is preserved alongside bypass.
+        assert!(reparsed.effects.portrait_blur.enabled);
     }
 
     #[test]

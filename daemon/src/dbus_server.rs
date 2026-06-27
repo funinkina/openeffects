@@ -182,6 +182,38 @@ impl Effects1Iface {
         Ok(())
     }
 
+    async fn set_bypass(
+        &self,
+        on: bool,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> fdo::Result<()> {
+        let app = {
+            let mut state = self.state.write().await;
+            if state.bypass() == on {
+                return Ok(());
+            }
+            state.set_bypass(on);
+            state
+                .app
+                .save()
+                .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+            state.app.clone()
+        };
+
+        let _ = self
+            .pipeline_tx
+            .send(PipelineCommand::ApplyEffects(app))
+            .await;
+        Self::bypass_changed(&emitter, on)
+            .await
+            .map_err(to_fdo_error)?;
+        Ok(())
+    }
+
+    async fn get_bypass(&self) -> bool {
+        self.state.read().await.bypass()
+    }
+
     /// Fire a one-shot reaction burst. Stateless: no config is changed and no
     /// signal is emitted — it just hands the pipeline a trigger.
     async fn trigger_reaction(&self, id: &str) -> fdo::Result<()> {
@@ -213,6 +245,9 @@ impl Effects1Iface {
         id: &str,
         params: VariantMap,
     ) -> zbus::Result<()>;
+
+    #[zbus(signal)]
+    async fn bypass_changed(emitter: &SignalEmitter<'_>, on: bool) -> zbus::Result<()>;
 }
 
 #[derive(Clone)]
