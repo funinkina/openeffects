@@ -83,9 +83,15 @@ mod imp {
     /// Guided-filter subsample factor: coefficients are computed at 1/s² the
     /// pixels, then applied against full-res luma (which carries the sharp edge).
     const GF_SUBSAMPLE: usize = 4;
-    /// Guided-filter regularization. Lower = sharper/snappier to image edges
-    /// (and noisier); the primary edge-sharpness knob.
-    const GF_EPS: f32 = 4e-4;
+    /// Guided-filter regularization. Lower = snappier to image edges (and
+    /// noisier). Kept small so the matte hugs real luma boundaries.
+    const GF_EPS: f32 = 1e-4;
+    /// Half-width of the final alpha transition band, in mask units (0..1).
+    /// After the guided filter localizes the edge onto the real outline, the
+    /// alpha is steepened with a smoothstep across `0.5 ± GF_EDGE_WIDTH`, so the
+    /// subject/background boundary is a thin (~1px) anti-aliased line instead of
+    /// a soft halo. Smaller = sharper/harder; larger = softer.
+    const GF_EDGE_WIDTH: f32 = 0.06;
     /// Run YuNet face detection every Nth frame. The comfort zone below absorbs
     /// detection jitter, so framing tolerates a slower (cheaper) detect cadence.
     const FACE_INTERVAL: u64 = 4;
@@ -843,7 +849,9 @@ mod imp {
                 }
             }
 
-            let r = (lw.min(lh) / 32).max(2);
+            // Tight window: a small radius keeps the linear fit local so the
+            // matte stays crisp (a wide box smears the edge into a halo).
+            let r = (lw.min(lh) / 96).max(1);
             let mut mean_i = vec![0f32; n];
             let mut mean_p = vec![0f32; n];
             let mut corr_i = vec![0f32; n];
@@ -941,8 +949,11 @@ mod imp {
                 let lum = (77 * img[p] as u32 + 150 * img[p + 1] as u32 + 29 * img[p + 2] as u32)
                     as f32
                     / 65280.0;
-                let q = (a * lum + b).clamp(0.0, 1.0);
-                state.mask_lut[y * w + x] = (q * 255.0) as u8;
+                let q = a * lum + b;
+                // Steepen the localized edge into a thin anti-aliased outline.
+                let t = ((q - (0.5 - GF_EDGE_WIDTH)) / (2.0 * GF_EDGE_WIDTH)).clamp(0.0, 1.0);
+                let alpha = t * t * (3.0 - 2.0 * t);
+                state.mask_lut[y * w + x] = (alpha * 255.0) as u8;
             }
         }
         state.lut_gen = state.mask_gen;

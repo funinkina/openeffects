@@ -105,11 +105,11 @@ fn finish_toggle_group(group: adw::ToggleGroup, on_change: impl Fn(&str) + 'stat
     ToggleCtl { group, handler }
 }
 
-/// A `GtkScale` paired with the signal handler for its `value-changed`
-/// signal. State sync goes through [`SliderCtl::set_value`], which blocks the
-/// handler so it doesn't echo back to the daemon.
+/// A slider row paired with the signal handler for its adjustment's
+/// `value-changed` signal. State sync goes through [`SliderCtl::set_value`],
+/// which blocks the handler so daemon echoes don't loop back as new commands.
 pub struct SliderCtl {
-    pub scale: gtk::Scale,
+    adjustment: gtk::Adjustment,
     handler: glib::SignalHandlerId,
     /// When the user last moved this slider (drives the echo holdoff).
     last_input: Rc<Cell<Option<Instant>>>,
@@ -122,46 +122,24 @@ impl SliderCtl {
         {
             return;
         }
-        if (self.scale.value() - value).abs() < 0.5 {
+        if (self.adjustment.value() - value).abs() < 0.5 {
             return;
         }
-        self.scale.block_signal(&self.handler);
-        self.scale.set_value(value);
-        self.scale.unblock_signal(&self.handler);
+        self.adjustment.block_signal(&self.handler);
+        self.adjustment.set_value(value);
+        self.adjustment.unblock_signal(&self.handler);
     }
 }
 
-fn slider_row(
-    group: &adw::PreferencesGroup,
-    title: &str,
-    subtitle: &str,
-    min: f64,
-    max: f64,
-    step: f64,
-) -> gtk::Scale {
-    let adjustment = gtk::Adjustment::new(min, min, max, step, step * 10.0, 0.0);
-    let scale = gtk::Scale::builder()
-        .orientation(gtk::Orientation::Horizontal)
-        .adjustment(&adjustment)
-        .digits(0)
-        .draw_value(true)
-        .value_pos(gtk::PositionType::Right)
-        .hexpand(true)
-        .valign(gtk::Align::Center)
-        .width_request(160)
-        .build();
-    let row = adw::ActionRow::builder()
-        .title(title)
-        .subtitle(subtitle)
-        .build();
-    row.add_suffix(&scale);
-    group.add(&row);
-    scale
-}
-
-/// Shared slider plumbing: a drag re-arms a trailing debounce timer, so only
-/// the last value of a burst is sent as a `SetParam`; the input timestamp
-/// feeds [`SliderCtl::set_value`]'s echo holdoff.
+/// Build a full-width slider row: title + an exact-value spin button on the top
+/// line, subtitle below, and a scale spanning the row underneath. The scale and
+/// spin button share one adjustment, so dragging, scrolling, typing an exact
+/// number, or stepping with the spin arrows all stay in sync. Every row is the
+/// same width regardless of title length (the scale hexpands), and bipolar
+/// ranges get a center tick at 0 so "neutral" is easy to find.
+///
+/// A drag/step re-arms a trailing debounce timer, so only the last value of a
+/// burst is sent as a `SetParam`; the input timestamp feeds the echo holdoff.
 #[allow(clippy::too_many_arguments)]
 fn add_slider(
     group: &adw::PreferencesGroup,
@@ -175,18 +153,71 @@ fn add_slider(
     cmd_tx: &CmdTx,
     to_value: impl Fn(f64) -> zvariant::OwnedValue + 'static,
 ) -> SliderCtl {
-    let scale = slider_row(group, title, subtitle, min, max, step);
+    let adjustment = gtk::Adjustment::new(min, min, max, step, step * 10.0, 0.0);
+
+    let title_label = gtk::Label::builder()
+        .label(title)
+        .xalign(0.0)
+        .hexpand(true)
+        .build();
+    let spin = gtk::SpinButton::builder()
+        .adjustment(&adjustment)
+        .climb_rate(step)
+        .digits(0)
+        .numeric(true)
+        .valign(gtk::Align::Center)
+        .build();
+    let header = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(8)
+        .build();
+    header.append(&title_label);
+    header.append(&spin);
+
+    let scale = gtk::Scale::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .adjustment(&adjustment)
+        .digits(0)
+        .draw_value(false)
+        .hexpand(true)
+        .build();
+    // Center detent on bipolar ranges (e.g. -100..100): a visual zero anchor.
+    if min < 0.0 && max > 0.0 {
+        scale.add_mark(0.0, gtk::PositionType::Bottom, None);
+    }
+
+    let row = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(4)
+        .margin_top(12)
+        .margin_bottom(12)
+        .margin_start(12)
+        .margin_end(12)
+        .build();
+    row.append(&header);
+    if !subtitle.is_empty() {
+        let sub = gtk::Label::builder()
+            .label(subtitle)
+            .xalign(0.0)
+            .wrap(true)
+            .css_classes(["caption", "dim-label"])
+            .build();
+        row.append(&sub);
+    }
+    row.append(&scale);
+    group.add(&row);
+
     let cmd_tx = cmd_tx.clone();
     let last_input: Rc<Cell<Option<Instant>>> = Rc::new(Cell::new(None));
     let pending: Rc<Cell<Option<glib::SourceId>>> = Rc::new(Cell::new(None));
     let handler = {
         let last_input = last_input.clone();
-        scale.connect_value_changed(move |s| {
+        adjustment.connect_value_changed(move |adj| {
             last_input.set(Some(Instant::now()));
             if let Some(source) = pending.take() {
                 source.remove();
             }
-            let value = to_value(s.value());
+            let value = to_value(adj.value());
             let cmd_tx = cmd_tx.clone();
             let pending_done = pending.clone();
             pending.set(Some(glib::timeout_add_local_once(
@@ -202,8 +233,9 @@ fn add_slider(
             )));
         })
     };
+
     SliderCtl {
-        scale,
+        adjustment,
         handler,
         last_input,
     }
