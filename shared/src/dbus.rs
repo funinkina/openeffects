@@ -17,9 +17,22 @@ pub const EFFECT_IDS: [&str; 5] = [
     "reactions",
 ];
 
-/// Canonical reaction emoji ids: the three gesture-mapped ones first
-/// (thumbs_up, thumbs_down, heart), then extras shown only in the manual picker.
-pub const REACTION_IDS: [&str; 6] = ["thumbs_up", "thumbs_down", "heart", "joy", "tada", "clap"];
+/// Canonical reaction emoji ids. The gesture-mapped ones (heart, thumbs_up,
+/// thumbs_down, wave) are recognized by the hand-gesture pipeline; the rest are
+/// shown only in the manual picker. Order is parallel to the GUI buttons and the
+/// embedded emoji PNGs.
+pub const REACTION_IDS: [&str; 10] = [
+    "heart",
+    "thumbs_up",
+    "thumbs_down",
+    "tada",
+    "clap",
+    "wave",
+    "joy",
+    "open_mouth",
+    "cry",
+    "thinking",
+];
 
 pub type VariantMap = HashMap<String, OwnedValue>;
 

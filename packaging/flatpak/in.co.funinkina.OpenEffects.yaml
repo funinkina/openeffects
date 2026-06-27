@@ -132,7 +132,7 @@ modules:
           - packaging/.flatpak-builder
           - packaging/flatpak/.flatpak-builder
           - packaging/flatpak/build-dir
-      # Vendored crates + cargo config (writes cargo/config -> cargo/vendor).
+      # Vendored crates + cargo config (writes cargo/config.toml -> cargo/vendor).
       - cargo-sources.json
 
       # --- Bundled ML models (sha256 from data/models/*/manifest.toml) ---

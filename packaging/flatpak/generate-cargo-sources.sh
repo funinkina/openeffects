@@ -41,4 +41,17 @@ cp Cargo.lock "$here/Cargo.lock"
 echo "==> Generating cargo-sources.json"
 "${PYTHON:-python3}" "$gen" "$here/Cargo.lock" -o "$here/cargo-sources.json"
 
+# Old generator versions emit the cargo config as `cargo/config`, which cargo
+# now deprecates in favor of `config.toml`. Force the modern name.
+"${PYTHON:-python3}" - "$here/cargo-sources.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+for x in d:
+    if x.get("type") == "inline" and x.get("dest") == "cargo" and x.get("dest-filename") == "config":
+        x["dest-filename"] = "config.toml"
+json.dump(d, open(p, "w"), indent=4)
+open(p, "a").write("\n")
+PY
+
 echo "==> Done. Repo Cargo.toml / Cargo.lock restored."

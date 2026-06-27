@@ -77,12 +77,16 @@ pub const BG_IMAGE_PRESETS: &[(&str, &str, &[u8])] = &[
 /// tooltip), in the same order as `shared::dbus::REACTION_IDS`. Clicking one
 /// fires a one-shot reverse-rain burst, independent of the gesture toggle.
 pub const REACTION_BUTTONS: &[(&str, &str, &str)] = &[
+    ("heart", "\u{1F496}", "Heart"),
     ("thumbs_up", "\u{1F44D}", "Thumbs up"),
     ("thumbs_down", "\u{1F44E}", "Thumbs down"),
-    ("heart", "\u{2764}\u{FE0F}", "Heart"),
-    ("joy", "\u{1F602}", "Laughing"),
     ("tada", "\u{1F389}", "Celebrate"),
     ("clap", "\u{1F44F}", "Applause"),
+    ("wave", "\u{1F44B}", "Wave"),
+    ("joy", "\u{1F602}", "Laughing"),
+    ("open_mouth", "\u{1F62E}", "Wow"),
+    ("cry", "\u{1F622}", "Crying"),
+    ("thinking", "\u{1F914}", "Thinking"),
 ];
 
 /// Bundled models listed in Preferences (id, display name, purpose).

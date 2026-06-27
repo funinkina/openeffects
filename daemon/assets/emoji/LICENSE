@@ -9,9 +9,13 @@ https://www.apache.org/licenses/LICENSE-2.0
 
 Bundled files map to shared::dbus::REACTION_IDS:
 
+  emoji_u1f496.png  U+1F496  💖  heart
   emoji_u1f44d.png  U+1F44D  👍  thumbs_up
   emoji_u1f44e.png  U+1F44E  👎  thumbs_down
-  emoji_u2764.png   U+2764   ❤   heart
-  emoji_u1f602.png  U+1F602  😂  joy
   emoji_u1f389.png  U+1F389  🎉  tada
   emoji_u1f44f.png  U+1F44F  👏  clap
+  emoji_u1f44b.png  U+1F44B  👋  wave
+  emoji_u1f602.png  U+1F602  😂  joy
+  emoji_u1f62e.png  U+1F62E  😮  open_mouth
+  emoji_u1f622.png  U+1F622  😢  cry
+  emoji_u1f914.png  U+1F914  🤔  thinking

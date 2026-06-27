@@ -230,23 +230,31 @@ impl Mode {
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
 enum Reaction {
+    Heart,
     ThumbsUp,
     ThumbsDown,
-    Heart,
-    Joy,
     Tada,
     Clap,
+    Wave,
+    Joy,
+    OpenMouth,
+    Cry,
+    Thinking,
 }
 
 impl Reaction {
     fn id(self) -> &'static str {
         match self {
+            Self::Heart => "heart",
             Self::ThumbsUp => "thumbs_up",
             Self::ThumbsDown => "thumbs_down",
-            Self::Heart => "heart",
-            Self::Joy => "joy",
             Self::Tada => "tada",
             Self::Clap => "clap",
+            Self::Wave => "wave",
+            Self::Joy => "joy",
+            Self::OpenMouth => "open_mouth",
+            Self::Cry => "cry",
+            Self::Thinking => "thinking",
         }
     }
 }

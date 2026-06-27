@@ -1,7 +1,9 @@
 //! Rule-based hand-gesture classifier — pure geometry on the 21 MediaPipe hand
-//! landmarks, no model. Recognizes the three reaction gestures: thumbs up,
-//! thumbs down, and a two-hand heart. Operating on landmarks (not pixels) makes
-//! this lighting- and background-invariant and trivially unit-testable.
+//! landmarks, no model. Recognizes the reaction gestures: thumbs up, thumbs
+//! down, a two-hand heart, and an open-palm wave. Operating on landmarks (not
+//! pixels) makes this lighting- and background-invariant and trivially
+//! unit-testable. A wave is keyed off a single open-palm frame; the pipeline's
+//! hold-to-confirm debounce supplies the temporal gate.
 //!
 //! Landmark indices (MediaPipe): 0 wrist; 1-4 thumb (CMC,MCP,IP,TIP);
 //! 5-8 index; 9-12 middle; 13-16 ring; 17-20 pinky. Coordinates are normalized
@@ -14,6 +16,7 @@ pub enum Gesture {
     ThumbsUp,
     ThumbsDown,
     Heart,
+    Wave,
 }
 
 impl Gesture {
@@ -23,6 +26,7 @@ impl Gesture {
             Gesture::ThumbsUp => "thumbs_up",
             Gesture::ThumbsDown => "thumbs_down",
             Gesture::Heart => "heart",
+            Gesture::Wave => "wave",
         }
     }
 }
@@ -38,7 +42,25 @@ pub fn classify(hands: &[HandLandmarks]) -> Option<Gesture> {
     if hands.len() >= 2 && is_heart(&hands[0].points, &hands[1].points) {
         return Some(Gesture::Heart);
     }
-    hands.iter().find_map(|h| thumb_gesture(&h.points))
+    hands
+        .iter()
+        .find_map(|h| thumb_gesture(&h.points).or_else(|| open_palm(&h.points)))
+}
+
+/// An open palm (all four fingers and the thumb extended) → wave. Direction is
+/// irrelevant; the pipeline debounce turns a held open hand into one reaction.
+fn open_palm(p: &[P; 21]) -> Option<Gesture> {
+    if palm_width(p) < 1e-4 {
+        return None;
+    }
+    if !FINGERS.iter().all(|&(m, pi, t)| !curled(p, m, pi, t)) {
+        return None;
+    }
+    // Thumb extended: tip farther from the wrist than its IP joint.
+    if dist(p[4], p[0]) <= dist(p[3], p[0]) {
+        return None;
+    }
+    Some(Gesture::Wave)
 }
 
 fn thumb_gesture(p: &[P; 21]) -> Option<Gesture> {
@@ -170,8 +192,8 @@ mod tests {
     }
 
     #[test]
-    fn open_palm_is_none() {
-        // All fingers extended (tips far from the wrist) → not a gesture.
+    fn classifies_wave() {
+        // All fingers and the thumb extended (tips far from the wrist) → wave.
         let mut p = [[0.0f32; 3]; 21];
         p[0] = [0.5, 0.9, 0.0];
         p[1] = [0.4, 0.85, 0.0];
@@ -185,6 +207,27 @@ mod tests {
             p[base + 1] = [cx, 0.5, 0.0];
             p[base + 2] = [cx, 0.4, 0.0];
             p[base + 3] = [cx, 0.3, 0.0]; // tip far from wrist → extended
+        }
+        assert_eq!(classify(&[hand(p)]), Some(Gesture::Wave));
+    }
+
+    #[test]
+    fn half_open_hand_is_none() {
+        // Fingers extended but thumb folded across the palm → neither wave nor
+        // thumb gesture.
+        let mut p = [[0.0f32; 3]; 21];
+        p[0] = [0.5, 0.9, 0.0];
+        p[1] = [0.46, 0.86, 0.0];
+        p[2] = [0.44, 0.83, 0.0];
+        p[3] = [0.45, 0.82, 0.0];
+        p[4] = [0.47, 0.84, 0.0]; // thumb tip near wrist → folded
+        let cols = [0.55, 0.52, 0.49, 0.46];
+        for (i, &cx) in cols.iter().enumerate() {
+            let base = 5 + i * 4;
+            p[base] = [cx, 0.65, 0.0];
+            p[base + 1] = [cx, 0.5, 0.0];
+            p[base + 2] = [cx, 0.4, 0.0];
+            p[base + 3] = [cx, 0.3, 0.0]; // extended
         }
         assert_eq!(classify(&[hand(p)]), None);
     }
@@ -234,5 +277,6 @@ mod tests {
         assert_eq!(Gesture::ThumbsUp.reaction_id(), "thumbs_up");
         assert_eq!(Gesture::ThumbsDown.reaction_id(), "thumbs_down");
         assert_eq!(Gesture::Heart.reaction_id(), "heart");
+        assert_eq!(Gesture::Wave.reaction_id(), "wave");
     }
 }
