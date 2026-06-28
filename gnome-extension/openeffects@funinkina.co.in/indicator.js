@@ -51,7 +51,7 @@ class OpenEffectsIndicator extends PanelMenu.Button {
         const header = new St.BoxLayout({ style_class: 'oe-header', x_expand: true });
         header.add_child(new St.Icon({
             gicon: new Gio.FileIcon({ file: this._iconFile }),
-            icon_size: 44, style_class: 'oe-header-icon',
+            icon_size: 46, style_class: 'oe-header-icon',
         }));
         const titleBox = new St.BoxLayout({
             vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'oe-titlebox',
@@ -61,14 +61,24 @@ class OpenEffectsIndicator extends PanelMenu.Button {
         titleBox.add_child(this._subtitle);
         header.add_child(titleBox);
 
-        this._masterSwitch = new PopupMenu.Switch(false);
-        const swBtn = new St.Button({
-            child: this._masterSwitch, style_class: 'oe-master-switch',
-            y_align: Clutter.ActorAlign.CENTER, can_focus: true,
-        });
-        swBtn.connect('clicked', () => this._onMasterToggled());
-        header.add_child(swBtn);
+        this._masterSwitch = Sections.ToggleSwitch(on => this._onMasterToggled(on));
+        const swWrap = new St.Bin({ child: this._masterSwitch.actor, y_align: Clutter.ActorAlign.CENTER });
+        header.add_child(swWrap);
         root.add_child(header);
+
+        // Camera preview pane (static placeholder — a live feed needs a video sink).
+        const preview = new St.Bin({ style_class: 'oe-preview', x_expand: true });
+        const pv = new St.BoxLayout({ vertical: true, x_align: Clutter.ActorAlign.CENTER });
+        pv.add_child(new St.Icon({
+            icon_name: 'camera-video-symbolic', icon_size: 46,
+            style_class: 'oe-preview-icon', x_align: Clutter.ActorAlign.CENTER,
+        }));
+        pv.add_child(new St.Label({
+            text: 'Camera preview in the app', style_class: 'oe-preview-label',
+            x_align: Clutter.ActorAlign.CENTER,
+        }));
+        preview.set_child(pv);
+        root.add_child(preview);
 
         // Daemon-down notice (replaces the controls when unavailable).
         this._notice = new St.Label({
@@ -85,32 +95,22 @@ class OpenEffectsIndicator extends PanelMenu.Button {
 
         this._camera = Sections.CameraRow(this._client);
         this._sectionsBox.add_child(this._camera.actor);
+        this._sectionsBox.add_child(new St.Widget({ style_class: 'oe-divider' }));
 
         this._sections = [
             Sections.CenterStageSection(this._client),
-            Sections.BackgroundSection(this._client, this._extension.path),
+            Sections.BackgroundSection(this._client, this._extension.path, () => {
+                this.menu.close();
+                this._launchApp();
+            }),
             Sections.StudioLightSection(this._client),
             Sections.ReactionsSection(this._client),
         ];
         for (const s of this._sections)
             this._sectionsBox.add_child(s.actor);
-
-        // Footer: launch the full GTK app.
-        const footer = new St.BoxLayout({ style_class: 'oe-footer', x_expand: true });
-        const openBtn = new St.Button({
-            label: 'Open OpenEffects', style_class: 'oe-open-btn', x_expand: true, can_focus: true,
-        });
-        openBtn.connect('clicked', () => {
-            this.menu.close();
-            this._launchApp();
-        });
-        footer.add_child(openBtn);
-        root.add_child(footer);
     }
 
-    _onMasterToggled() {
-        const newOn = !this._masterSwitch.state;
-        this._masterSwitch.setToggleState(newOn);
+    _onMasterToggled(newOn) {
         if (!this._client.available) {
             if (newOn)
                 this._client.start();
@@ -159,7 +159,7 @@ class OpenEffectsIndicator extends PanelMenu.Button {
 
         const active = available && !state.bypass;
         this._subtitle.text = !available ? 'Inactive' : (state.bypass ? 'Bypassed' : 'Active');
-        this._masterSwitch.setToggleState(active);
+        this._masterSwitch.setState(active);
 
         if (!available)
             return;
