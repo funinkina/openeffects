@@ -72,7 +72,9 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
       <div class="grid gap-10 lg:grid-cols-[13rem_1fr] lg:gap-14">
         <!-- Sidebar -->
         <aside class="lg:sticky lg:top-24 lg:h-max">
-          <p class="text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-accent">
+          <p
+            class="text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-accent"
+          >
             CLI reference
           </p>
           <nav class="doc-toc mt-4 flex flex-col gap-1 text-[0.9rem]">
@@ -84,7 +86,9 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
               ))
             }
           </nav>
-          <div class="mt-6 border-t border-line pt-5 text-[0.8rem] leading-relaxed text-muted">
+          <div
+            class="mt-6 border-t border-line pt-5 text-[0.8rem] leading-relaxed text-muted"
+          >
             Everything here drives a running daemon over the session bus.
           </div>
         </aside>
@@ -92,7 +96,7 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
         <!-- Content -->
         <article class="doc min-w-0">
           <h1>
-            <code class="!bg-transparent !p-0 !text-fg">openeffectsctl</code>
+            <code class="bg-transparent! p-0! text-fg!">openeffectsctl</code>
           </h1>
           <p class="lead">
             The command-line control surface for the OpenEffects daemon. Every
@@ -120,7 +124,10 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
               <tbody>
                 <tr>
                   <td><code>openeffectsctl start</code></td>
-                  <td>Arm the virtual camera. The real camera opens on demand when a consumer (browser, OBS, …) connects.</td>
+                  <td
+                    >Arm the virtual camera. The real camera opens on demand
+                    when a consumer (browser, OBS, …) connects.</td
+                  >
                 </tr>
                 <tr>
                   <td><code>openeffectsctl stop</code></td>
@@ -128,7 +135,10 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
                 </tr>
                 <tr>
                   <td><code>openeffectsctl status</code></td>
-                  <td>Print status plus capabilities (execution provider, model readiness, output sink).</td>
+                  <td
+                    >Print status plus capabilities (execution provider, model
+                    readiness, output sink).</td
+                  >
                 </tr>
                 <tr>
                   <td><code>openeffectsctl status --short</code></td>
@@ -140,7 +150,9 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
                 </tr>
                 <tr>
                   <td><code>openeffectsctl watch</code></td>
-                  <td>Stream <code>EffectChanged</code> signals until interrupted (Ctrl-C).</td>
+                  <td
+                    >Stream <code>EffectChanged</code> signals until interrupted (Ctrl-C).</td
+                  >
                 </tr>
               </tbody>
             </table>
@@ -164,7 +176,10 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
               <tbody>
                 <tr>
                   <td><code>openeffectsctl autostart enable</code></td>
-                  <td>Start the daemon automatically when the graphical session begins.</td>
+                  <td
+                    >Start the daemon automatically when the graphical session
+                    begins.</td
+                  >
                 </tr>
                 <tr>
                   <td><code>openeffectsctl autostart disable</code></td>
@@ -172,7 +187,10 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
                 </tr>
                 <tr>
                   <td><code>openeffectsctl autostart status</code></td>
-                  <td>Show whether autostart is enabled and whether the daemon is running.</td>
+                  <td
+                    >Show whether autostart is enabled and whether the daemon is
+                    running.</td
+                  >
                 </tr>
               </tbody>
             </table>
@@ -185,11 +203,30 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
                 <tr><th>Command</th><th>Effect id</th><th>What it does</th></tr>
               </thead>
               <tbody>
-                <tr><td><code>center-stage</code></td><td><code>center_stage</code></td><td>Auto crop + zoom that keeps you framed.</td></tr>
-                <tr><td><code>portrait-blur</code></td><td><code>portrait_blur</code></td><td>Blurs the background behind you.</td></tr>
-                <tr><td><code>background</code></td><td><code>bg_replace</code></td><td>Replaces the background with a color or image.</td></tr>
-                <tr><td><code>studio-light</code></td><td><code>studio_light</code></td><td>Brightens and adds contrast to your face.</td></tr>
-                <tr><td><code>reactions</code></td><td><code>reactions</code></td><td>Gesture / emoji overlay.</td></tr>
+                <tr
+                  ><td><code>center-stage</code></td><td
+                    ><code>center_stage</code></td
+                  ><td>Auto crop + zoom that keeps you framed.</td></tr
+                >
+                <tr
+                  ><td><code>portrait-blur</code></td><td
+                    ><code>portrait_blur</code></td
+                  ><td>Blurs the background behind you.</td></tr
+                >
+                <tr
+                  ><td><code>background</code></td><td
+                    ><code>bg_replace</code></td
+                  ><td>Replaces the background with a color or image.</td></tr
+                >
+                <tr
+                  ><td><code>studio-light</code></td><td
+                    ><code>studio_light</code></td
+                  ><td>Brightens and adds contrast to your face.</td></tr
+                >
+                <tr
+                  ><td><code>reactions</code></td><td><code>reactions</code></td
+                  ><td>Gesture / emoji overlay.</td></tr
+                >
               </tbody>
             </table>
           </div>
@@ -212,8 +249,16 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
             <table>
               <thead><tr><th>Flag</th><th>Notes</th></tr></thead>
               <tbody>
-                <tr><td><code>--on</code></td><td>Bypass all effects — raw camera passthrough.</td></tr>
-                <tr><td><code>--off</code></td><td>Re-enable effects (turn passthrough off).</td></tr>
+                <tr
+                  ><td><code>--on</code></td><td
+                    >Bypass all effects — raw camera passthrough.</td
+                  ></tr
+                >
+                <tr
+                  ><td><code>--off</code></td><td
+                    >Re-enable effects (turn passthrough off).</td
+                  ></tr
+                >
               </tbody>
             </table>
           </div>
@@ -232,13 +277,43 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
             <table>
               <thead><tr><th>Flag</th><th>Values</th><th>Notes</th></tr></thead>
               <tbody>
-                <tr><td><code>--on</code> / <code>--off</code></td><td>—</td><td>Enable / disable.</td></tr>
-                <tr><td><code>--zoom</code></td><td><code>subtle</code> <code>normal</code> <code>tight</code></td><td>Zoom level.</td></tr>
-                <tr><td><code>--mode</code></td><td><code>single</code> <code>group</code></td><td>Framing mode.</td></tr>
-                <tr><td><code>--crop-top</code></td><td><code>0</code>–<code>512</code></td><td>Manual crop inset (px) from the top edge.</td></tr>
-                <tr><td><code>--crop-bottom</code></td><td><code>0</code>–<code>512</code></td><td>Manual crop inset (px) from the bottom edge.</td></tr>
-                <tr><td><code>--crop-left</code></td><td><code>0</code>–<code>512</code></td><td>Manual crop inset (px) from the left edge.</td></tr>
-                <tr><td><code>--crop-right</code></td><td><code>0</code>–<code>512</code></td><td>Manual crop inset (px) from the right edge.</td></tr>
+                <tr
+                  ><td><code>--on</code> / <code>--off</code></td><td>—</td><td
+                    >Enable / disable.</td
+                  ></tr
+                >
+                <tr
+                  ><td><code>--zoom</code></td><td
+                    ><code>subtle</code>
+                    <code>normal</code>
+                    <code>tight</code></td
+                  ><td>Zoom level.</td></tr
+                >
+                <tr
+                  ><td><code>--mode</code></td><td
+                    ><code>single</code> <code>group</code></td
+                  ><td>Framing mode.</td></tr
+                >
+                <tr
+                  ><td><code>--crop-top</code></td><td
+                    ><code>0</code>–<code>512</code></td
+                  ><td>Manual crop inset (px) from the top edge.</td></tr
+                >
+                <tr
+                  ><td><code>--crop-bottom</code></td><td
+                    ><code>0</code>–<code>512</code></td
+                  ><td>Manual crop inset (px) from the bottom edge.</td></tr
+                >
+                <tr
+                  ><td><code>--crop-left</code></td><td
+                    ><code>0</code>–<code>512</code></td
+                  ><td>Manual crop inset (px) from the left edge.</td></tr
+                >
+                <tr
+                  ><td><code>--crop-right</code></td><td
+                    ><code>0</code>–<code>512</code></td
+                  ><td>Manual crop inset (px) from the right edge.</td></tr
+                >
               </tbody>
             </table>
           </div>
@@ -249,8 +324,16 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
             <table>
               <thead><tr><th>Flag</th><th>Values</th><th>Notes</th></tr></thead>
               <tbody>
-                <tr><td><code>--on</code> / <code>--off</code></td><td>—</td><td>Enable / disable.</td></tr>
-                <tr><td><code>--strength</code></td><td><code>0</code>–<code>100</code></td><td>Blur strength.</td></tr>
+                <tr
+                  ><td><code>--on</code> / <code>--off</code></td><td>—</td><td
+                    >Enable / disable.</td
+                  ></tr
+                >
+                <tr
+                  ><td><code>--strength</code></td><td
+                    ><code>0</code>–<code>100</code></td
+                  ><td>Blur strength.</td></tr
+                >
               </tbody>
             </table>
           </div>
@@ -259,10 +342,24 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
           <CodeBlock code={background} label="shell" class="my-6" />
           <div class="doc-table">
             <table>
-              <thead><tr><th>Argument / flag</th><th>Values</th><th>Notes</th></tr></thead>
+              <thead
+                ><tr><th>Argument / flag</th><th>Values</th><th>Notes</th></tr
+                ></thead
+              >
               <tbody>
-                <tr><td><code>VALUE</code></td><td><code>none</code>, <code>#RRGGBB</code>, or an image path</td><td><code>none</code> clears and disables; any other value sets the background and enables the effect.</td></tr>
-                <tr><td><code>--off</code></td><td>—</td><td>Disable without changing the stored background.</td></tr>
+                <tr
+                  ><td><code>VALUE</code></td><td
+                    ><code>none</code>, <code>#RRGGBB</code>, or an image path</td
+                  ><td
+                    ><code>none</code> clears and disables; any other value sets the
+                    background and enables the effect.</td
+                  ></tr
+                >
+                <tr
+                  ><td><code>--off</code></td><td>—</td><td
+                    >Disable without changing the stored background.</td
+                  ></tr
+                >
               </tbody>
             </table>
           </div>
@@ -273,10 +370,26 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
             <table>
               <thead><tr><th>Flag</th><th>Values</th><th>Notes</th></tr></thead>
               <tbody>
-                <tr><td><code>--on</code> / <code>--off</code></td><td>—</td><td>Enable / disable.</td></tr>
-                <tr><td><code>--intensity</code></td><td><code>0</code>–<code>100</code></td><td>Overall intensity.</td></tr>
-                <tr><td><code>--brightness</code></td><td><code>-100</code>–<code>100</code></td><td>Brightness lift.</td></tr>
-                <tr><td><code>--contrast</code></td><td><code>0</code>–<code>100</code></td><td>Contrast.</td></tr>
+                <tr
+                  ><td><code>--on</code> / <code>--off</code></td><td>—</td><td
+                    >Enable / disable.</td
+                  ></tr
+                >
+                <tr
+                  ><td><code>--intensity</code></td><td
+                    ><code>0</code>–<code>100</code></td
+                  ><td>Overall intensity.</td></tr
+                >
+                <tr
+                  ><td><code>--brightness</code></td><td
+                    ><code>-100</code>–<code>100</code></td
+                  ><td>Brightness lift.</td></tr
+                >
+                <tr
+                  ><td><code>--contrast</code></td><td
+                    ><code>0</code>–<code>100</code></td
+                  ><td>Contrast.</td></tr
+                >
               </tbody>
             </table>
           </div>
@@ -289,10 +402,13 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
           </p>
           <CodeBlock code={reactions} label="shell" class="my-6" />
           <p>
-            Reaction ids: <code>thumbs-up</code> <code>thumbs-down</code>
-            <code>heart</code> <code>joy</code> <code>tada</code> <code>clap</code
-            >. (<code>thumbs-up</code>, <code>thumbs-down</code>, <code>heart</code
-            > are also the three gesture-mapped reactions.)
+            Reaction ids: <code>thumbs-up</code>
+            <code>thumbs-down</code>
+            <code>heart</code>
+            <code>joy</code>
+            <code>tada</code>
+            <code>clap</code>. (<code>thumbs-up</code>, <code>thumbs-down</code
+            >, <code>heart</code> are also the three gesture-mapped reactions.)
           </p>
 
           <h2 id="camera">Camera</h2>
@@ -301,9 +417,23 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
             <table>
               <thead><tr><th>Command</th><th>Description</th></tr></thead>
               <tbody>
-                <tr><td><code>camera list</code></td><td>List available cameras; the active one is prefixed with <code>*</code>.</td></tr>
-                <tr><td><code>camera select &lt;id&gt;</code></td><td>Select a camera by id or <code>/dev/videoN</code> path.</td></tr>
-                <tr><td><code>camera info</code></td><td>Print the virtual-camera node info.</td></tr>
+                <tr
+                  ><td><code>camera list</code></td><td
+                    >List available cameras; the active one is prefixed with <code
+                      >*</code
+                    >.</td
+                  ></tr
+                >
+                <tr
+                  ><td><code>camera select &lt;id&gt;</code></td><td
+                    >Select a camera by id or <code>/dev/videoN</code> path.</td
+                  ></tr
+                >
+                <tr
+                  ><td><code>camera info</code></td><td
+                    >Print the virtual-camera node info.</td
+                  ></tr
+                >
               </tbody>
             </table>
           </div>
@@ -313,13 +443,12 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
             <code>set</code> writes any effect parameter directly using <code
               >EFFECT.KEY VALUE</code
             >, where <code>EFFECT</code> is the underscore effect id. It bypasses
-            CLI-side validation and is mainly an escape hatch / scripting
-            primitive.
+            CLI-side validation and is mainly an escape hatch / scripting primitive.
           </p>
           <CodeBlock code={lowLevelSet} label="shell" class="my-6" />
           <p class="note">
-            Values are parsed as <code>true</code>/<code>false</code> → bool,
-            integers → number, everything else → string.
+            Values are parsed as <code>true</code>/<code>false</code> → bool, integers
+            → number, everything else → string.
           </p>
 
           <h2 id="scripting">Scripting</h2>

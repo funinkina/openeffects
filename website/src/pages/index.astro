@@ -237,7 +237,7 @@ openeffectsctl toggle reactions`;
         <ol class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {
             pipeline.map((step) => (
-              <li class="card relative p-6">
+              <li class="card relative rounded p-6">
                 <span class="text-sm font-semibold text-accent">{step.n}</span>
                 <h3 class="mt-3 text-xl font-semibold text-fg">{step.title}</h3>
                 <p class="mt-1.5 text-[0.92rem] leading-relaxed text-muted">
@@ -251,7 +251,7 @@ openeffectsctl toggle reactions`;
         <div class="mt-4 grid gap-4 md:grid-cols-3">
           {
             components.map((c) => (
-              <div class="card flex flex-col p-6">
+              <div class="card flex flex-col p-6 rounded">
                 <div class="flex items-baseline justify-between gap-3">
                   <span class="text-sm font-semibold text-accent">
                     {c.name}
@@ -355,25 +355,25 @@ openeffectsctl toggle reactions`;
               <button
                 role="tab"
                 aria-selected="true"
-                class="tab is-active rounded"
+                class="tab is-active rounded-full"
                 data-tab="flatpak">Flatpak</button
               >
               <button
                 role="tab"
                 aria-selected="false"
-                class="tab rounded"
+                class="tab rounded-full"
                 data-tab="arch">Arch</button
               >
               <button
                 role="tab"
                 aria-selected="false"
-                class="tab rounded"
+                class="tab rounded-full"
                 data-tab="fedora">Fedora / RHEL</button
               >
               <button
                 role="tab"
                 aria-selected="false"
-                class="tab rounded"
+                class="tab rounded-full"
                 data-tab="ubuntu">Ubuntu / Debian</button
               >
             </div>
