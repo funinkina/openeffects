@@ -155,7 +155,8 @@ async fn run() -> anyhow::Result<()> {
     }
 
     info!("openeffectsd is running on the session bus");
-    // SIGTERM is how GNOME Shell's "Background Apps -> Quit" stops us.
+    // SIGTERM covers systemd and manual kills; GNOME Shell's "Background Apps
+    // -> Quit" ends up as `flatpak kill` (SIGKILL), which needs no handler.
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .context("install SIGTERM handler")?;
     tokio::select! {

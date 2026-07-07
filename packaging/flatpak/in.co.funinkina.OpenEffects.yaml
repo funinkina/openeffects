@@ -1,8 +1,10 @@
 # Flatpak manifest for OpenEffects (GUI + daemon + CLI in one sandboxed app).
 #
 # Notes on the design (see README.md in this directory for the full rationale):
-#   * One app id ships all three binaries. `command` is a launcher that starts
-#     the daemon (no systemd in the sandbox) and then runs the GUI.
+#   * One app id ships all three binaries. `command` is a launcher that runs
+#     the GUI in the background and execs the daemon as the sandbox's main
+#     process — the order is load-bearing for GNOME's Background Apps menu,
+#     see openeffects-launcher.sh.
 #   * ONNX Runtime is dlopen'd at runtime (ort `load-dynamic`), NOT downloaded at
 #     build time — Flathub builds are offline. We ship Microsoft's prebuilt
 #     libonnxruntime.so and point ort at it via ORT_DYLIB_PATH. CPU EP only;

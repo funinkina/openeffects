@@ -84,11 +84,12 @@ pub fn dup_camera_fd() -> Option<OwnedFd> {
 /// Register the daemon as a background app and set its status message. No-op when
 /// not sandboxed; best-effort otherwise.
 ///
-/// `SetStatus` alone only updates the message of an app the shell already tracks;
-/// it does not make the app appear in GNOME's "Background Apps" menu. The app must
-/// first hold the background permission via `RequestBackground` (autostart off — we
-/// are already running, just asking to keep running window-less). Only then does
-/// `SetStatus` light up the menu entry.
+/// The "Background Apps" menu entry comes from xdg-desktop-portal listing running
+/// window-less instances; "running" means the host-side `flatpak run` pid is alive,
+/// which is why the flatpak launcher execs this daemon as the sandbox's main
+/// process. `RequestBackground` (autostart off — we are already running) stores the
+/// background permission so the portal doesn't kill a window-less instance;
+/// `SetStatus` attaches the message shown under the menu entry.
 pub async fn set_background_status(message: &str) {
     if !in_sandbox() {
         return;

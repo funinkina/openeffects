@@ -1,15 +1,21 @@
 #!/bin/sh
 # Flatpak entry point for OpenEffects.
 #
-# There is no systemd inside the sandbox, so the daemon is not started by a user
-# unit or D-Bus activation. This launcher starts openeffectsd in the background
-# (if its session-bus name is unowned), then hands the foreground to the GUI.
+# No systemd inside the sandbox, so this launcher starts both binaries. The
+# process layout is load-bearing: libflatpak's flatpak_instance_is_running()
+# checks the host-side `flatpak run` pid, and `flatpak run` exits when the
+# sandbox's MAIN child exits. xdg-desktop-portal drops "not running" instances
+# from GNOME's Background Apps menu (src/background.c, check_background_apps),
+# even though bwrap keeps orphaned children alive until the namespace empties.
+# So the daemon — the process meant to outlive the window — must be the main
+# child, and the GUI runs as the background child. The obvious
+# `daemon & exec gui` layout makes the app vanish from Background Apps the
+# moment the window closes, while the daemon silently keeps running.
 #
-# The daemon is deliberately NOT killed when the GUI window closes: it keeps
-# running as a background app (visible in GNOME Shell's "Background Apps" menu via
-# the Background portal) and continues applying effects to the virtual camera.
-# It exits on SIGTERM — which is what the shell's "Quit" action sends — tearing
-# down the sandbox with it.
+# Quit paths: with "keep running in the background" off, the GUI sends Quit
+# over D-Bus and the daemon exits cleanly. GNOME Shell's Background Apps ->
+# Quit tries the org.freedesktop.Application `quit` action (not exported) and
+# falls back to `flatpak kill`, i.e. SIGKILL.
 #
 # To run the daemon headless (no GUI):
 #   flatpak run --command=openeffectsd in.co.funinkina.OpenEffects --start
@@ -25,10 +31,10 @@ owned() {
         | grep -q true
 }
 
-if ! owned; then
-    openeffectsd --start &
+if owned; then
+    # Daemon already running in another instance: GUI-only launch.
+    exec openeffects "$@"
 fi
 
-# Replace the shell with the GUI. The backgrounded daemon reparents to the
-# sandbox init and keeps running after the GUI exits.
-exec openeffects "$@"
+openeffects "$@" &
+exec openeffectsd --start
