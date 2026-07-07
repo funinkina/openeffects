@@ -1,0 +1,198 @@
+---
+// Coverflow-style hero carousel: the active card sits in front, the previous
+// and next cards peek out behind it on the left and right. No arrows — tap a
+// side card or a dot to advance. Placeholder art for now; swap `from`/`to`
+// (or drop in an <img>) once real screenshots exist.
+const slides = [
+  {
+    title: "Portrait Mode",
+    caption: "Blurred room, sharp you",
+    from: "#f5b301",
+    to: "#e08a00",
+  },
+  {
+    title: "Center Stage",
+    caption: "Stay framed as you move",
+    from: "#2f6df6",
+    to: "#1146c8",
+  },
+  {
+    title: "Background",
+    caption: "Swap your room for anything",
+    from: "#ef5350",
+    to: "#c62828",
+  },
+  {
+    title: "Studio Light",
+    caption: "Soft, even lighting",
+    from: "#14a37f",
+    to: "#0b6e56",
+  },
+];
+---
+
+<div class="relative w-full overflow-visible" data-carousel>
+  <div class="relative mx-auto" data-stage>
+    <!-- sizer: keeps the stage the same height as the front card, responsively -->
+    <div class="invisible mx-auto aspect-16/10 w-[82vw] max-w-155"></div>
+
+    {
+      slides.map((s, i) => (
+        <figure
+          class="carousel-slide absolute left-1/2 top-0 aspect-16/10 w-[82vw] max-w-155 cursor-pointer overflow-hidden rounded-3xl shadow-2xl"
+          style={`background: radial-gradient(120% 100% at 30% 20%, ${s.from} 0%, ${s.to} 100%);`}
+          data-slide={i}
+        >
+          <div
+            class="absolute inset-0"
+            style="background: radial-gradient(70% 60% at 50% 40%, rgba(255,255,255,0.14), transparent 70%);"
+          />
+          <figcaption class="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-6 text-left sm:p-8">
+            <div>
+              <p class="text-xl font-bold text-white sm:text-2xl">{s.title}</p>
+              <p class="mt-1 text-sm text-white/80">{s.caption}</p>
+            </div>
+            <span class="shrink-0 rounded-full border border-white/30 bg-white/15 px-2.5 py-1 text-[10px] uppercase tracking-wider text-white/90">
+              Preview
+            </span>
+          </figcaption>
+        </figure>
+      ))
+    }
+  </div>
+
+  <div class="mt-8 flex justify-center gap-2" data-dots>
+    {
+      slides.map((_, i) => (
+        <button
+          type="button"
+          class="carousel-dot"
+          data-dot={i}
+          aria-label={`Go to slide ${i + 1}`}
+        />
+      ))
+    }
+  </div>
+</div>
+
+<style>
+  .carousel-slide {
+    transform: translate(-50%, 0);
+    transform-origin: center center;
+    will-change: transform, opacity;
+    transition:
+      transform 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.5s ease,
+      filter 0.5s ease;
+  }
+  .carousel-dot {
+    height: 0.5rem;
+    width: 0.5rem;
+    border-radius: 9999px;
+    background: var(--color-line-strong);
+    transition:
+      background-color 0.15s ease,
+      width 0.15s ease;
+    cursor: pointer;
+  }
+  .carousel-dot.is-active {
+    width: 1.4rem;
+    background: var(--color-accent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .carousel-slide {
+      transition: none;
+    }
+  }
+</style>
+
+<script>
+  document.querySelectorAll<HTMLElement>("[data-carousel]").forEach((root) => {
+    const slides = Array.from(
+      root.querySelectorAll<HTMLElement>("[data-slide]"),
+    );
+    const dots = Array.from(
+      root.querySelectorAll<HTMLButtonElement>("[data-dot]"),
+    );
+    const n = slides.length;
+    if (!n) return;
+
+    let current = 0;
+
+    const layout = () => {
+      slides.forEach((el, i) => {
+        let rel = i - current;
+        if (rel > n / 2) rel -= n;
+        if (rel < -n / 2) rel += n;
+
+        let x = 0,
+          scale = 1,
+          opacity = 1,
+          z = 10,
+          brightness = 1;
+        let interactive = false;
+
+        if (rel === 0) {
+          x = 0;
+          scale = 1;
+          opacity = 1;
+          z = 30;
+          brightness = 1;
+        } else if (rel === -1) {
+          x = -42;
+          scale = 0.85;
+          opacity = 1;
+          z = 20;
+          brightness = 0.68;
+          interactive = true;
+        } else if (rel === 1) {
+          x = 42;
+          scale = 0.85;
+          opacity = 1;
+          z = 20;
+          brightness = 0.68;
+          interactive = true;
+        } else {
+          x = rel < 0 ? -60 : 60;
+          scale = 0.7;
+          opacity = 0;
+          z = 10;
+          brightness = 0.5;
+        }
+
+        el.style.transform = `translate(-50%, 0) translateX(${x}%) scale(${scale})`;
+        el.style.opacity = String(opacity);
+        el.style.zIndex = String(z);
+        el.style.filter = `brightness(${brightness})`;
+        el.style.pointerEvents = rel === 0 || interactive ? "auto" : "none";
+      });
+      dots.forEach((d, di) => d.classList.toggle("is-active", di === current));
+    };
+
+    const goTo = (i: number) => {
+      current = ((i % n) + n) % n;
+      layout();
+    };
+
+    slides.forEach((el, i) =>
+      el.addEventListener("click", () => {
+        if (i !== current) goTo(i);
+      }),
+    );
+    dots.forEach((dot, i) => dot.addEventListener("click", () => goTo(i)));
+
+    layout();
+
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (!reduced) {
+      let paused = false;
+      root.addEventListener("pointerenter", () => (paused = true));
+      root.addEventListener("pointerleave", () => (paused = false));
+      window.setInterval(() => {
+        if (!paused) goTo(current + 1);
+      }, 4500);
+    }
+  });
+</script>

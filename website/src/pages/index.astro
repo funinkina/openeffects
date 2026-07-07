@@ -1,6 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import Viewfinder from "../components/Viewfinder.astro";
+import Carousel from "../components/Carousel.astro";
 import FeatureCard from "../components/FeatureCard.astro";
 import CodeBlock from "../components/CodeBlock.astro";
 
@@ -64,48 +64,66 @@ const features: {
   {
     icon: "everywhere",
     title: "Works Everywhere",
-    body: "Any app reading a PipeWire node or /dev/video device sees the processed feed. Set it once and forget it.",
+    body: "Zoom, Meet, Discord, OBS and the rest all see the improved feed. Set it once and forget it.",
   },
 ];
 
 const pipeline = [
-  { n: "01", title: "Capture", body: "Your camera, opened through xdg-desktop-portal." },
-  { n: "02", title: "Infer", body: "Selfie, face and hand models run on the CPU." },
-  { n: "03", title: "Composite", body: "GStreamer blends the effect into each frame." },
-  { n: "04", title: "Publish", body: "Back out over PipeWire and v4l2loopback." },
+  {
+    n: "01",
+    title: "Turn it on",
+    body: "OpenEffects picks up your camera and starts working in the background.",
+  },
+  {
+    n: "02",
+    title: "Pick your look",
+    body: "Blur, framing, lighting and reactions — flip them on and off live.",
+  },
+  {
+    n: "03",
+    title: "Join any call",
+    body: "Every app sees the improved feed automatically. No setup per app.",
+  },
+  {
+    n: "04",
+    title: "Stays private",
+    body: "Everything runs on your device. Nothing is uploaded, ever.",
+  },
 ];
 
 const components = [
   {
-    name: "openeffectsd",
-    role: "Daemon",
-    body: "The headless engine. Captures, runs inference, composites and republishes — no window required.",
+    name: "App",
+    role: "Everyday",
+    body: "A clean window with live toggles, camera settings and background images. Point, click, done.",
   },
   {
-    name: "openeffects",
-    role: "GUI",
-    body: "GTK4 + libadwaita. Live toggles, camera settings, opt-in model downloads and background assets.",
+    name: "Background",
+    role: "Always on",
+    body: "Runs quietly with no window open, so your effects are ready the moment a call starts.",
   },
   {
-    name: "openeffectsctl",
-    role: "CLI",
-    body: "Scriptable control for Hyprland, Sway, keybinds and Waybar. First-class, not an afterthought.",
+    name: "Command line",
+    role: "For tinkerers",
+    body: "Drive every effect from a script or keybind. First-class, not an afterthought.",
   },
 ];
 
 const specs = [
-  ["Platform", "Wayland"],
-  ["Arch", "x86_64"],
-  ["Inference", "ONNX · CPU"],
-  ["Output", "PipeWire · v4l2"],
-  ["License", "GPL-3.0"],
+  ["Platform", "Linux"],
+  ["Speed", "Real-time"],
+  ["Hardware", "No GPU"],
+  ["Privacy", "On-device"],
+  ["License", "Free & open"],
 ];
 
 const install = {
   flatpak: "flatpak install flathub in.co.funinkina.OpenEffects",
   arch: "sudo pacman -U openeffectsd-*-x86_64.pkg.tar.zst openeffects-*-x86_64.pkg.tar.zst",
-  fedora: "sudo dnf install ./openeffectsd-*.x86_64.rpm ./openeffects-*.x86_64.rpm",
-  ubuntu: "sudo apt install ./openeffectsd_*_amd64.deb ./openeffects_*_amd64.deb",
+  fedora:
+    "sudo dnf install ./openeffectsd-*.x86_64.rpm ./openeffects-*.x86_64.rpm",
+  ubuntu:
+    "sudo apt install ./openeffectsd_*_amd64.deb ./openeffects_*_amd64.deb",
 };
 
 const cli = `openeffectsctl portrait-blur --on --strength 70
@@ -121,138 +139,207 @@ const ghPath =
 <Layout>
   <!-- ================= NAV ================= -->
   <header class="sticky top-0 z-40 border-b border-line bg-page">
-    <nav class="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
-      <a href="/" class="flex items-center gap-2.5" aria-label="OpenEffects home">
+    <nav
+      class="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5"
+    >
+      <a
+        href="/"
+        class="flex items-center gap-2.5"
+        aria-label="OpenEffects home"
+      >
         <img src="/openeffects.svg" alt="" width="30" height="30" />
         <span class="text-[1.05rem] font-bold tracking-tight">OpenEffects</span>
       </a>
 
       <div class="hidden items-center gap-8 text-[0.85rem] text-muted md:flex">
-        <a href="#features" class="transition-colors hover:text-fg">Effects</a>
-        <a href="#how" class="transition-colors hover:text-fg">How it works</a>
-        <a href="#install" class="transition-colors hover:text-fg">Install</a>
+        <a href="#overview" class="transition-colors hover:text-fg">Overview</a>
+        <a href="#features" class="transition-colors hover:text-fg">Features</a>
+        <a href="#install" class="transition-colors hover:text-fg"
+          >Installation</a
+        >
         <a href={DOCS} class="transition-colors hover:text-fg">Docs</a>
       </div>
 
       <div class="flex items-center gap-2.5">
-        <a href={GITHUB} class="btn btn-ghost hidden px-3.5 py-2 text-sm sm:inline-flex" aria-label="OpenEffects on GitHub">
-          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d={ghPath}></path></svg>
+        <a
+          href={GITHUB}
+          class="btn btn-ghost hidden px-3.5 py-2 text-sm sm:inline-flex"
+          aria-label="OpenEffects on GitHub"
+        >
+          <svg
+            class="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"><path d={ghPath}></path></svg
+          >
           GitHub
         </a>
-        <a href={FLATHUB} class="btn btn-primary px-3.5 py-2 text-sm">Download</a>
+        <a href={FLATHUB} class="btn btn-primary px-3.5 py-2 text-sm"
+          >Download</a
+        >
       </div>
     </nav>
   </header>
 
   <main id="main">
     <!-- ================= HERO ================= -->
-    <section class="relative">
-      <div class="mx-auto grid max-w-6xl items-center gap-14 px-6 py-16 sm:py-24 lg:grid-cols-[1.05fr_1fr] lg:gap-10">
-        <div>
-          <span class="eyebrow">Linux-native · Wayland · on-device ML</span>
+    <section class="relative w-full overflow-x-hidden">
+      <div class="mx-auto max-w-3xl px-6 pt-16 text-center sm:pt-24">
+        <h1
+          class="mx-auto text-[2.6rem] font-bold leading-[1.05] tracking-tight sm:text-6xl"
+        >
+          Your next video call deserves
+          <span class="text-accent"> the best.</span>
+        </h1>
 
-          <h1 class="mt-6 text-[2.6rem] font-bold leading-[1.05] tracking-tight sm:text-6xl">
-            Portrait mode for your <span class="text-accent">Linux webcam.</span>
-          </h1>
+        <p class="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-muted">
+          Background blur, auto-framing, studio light and fun reactions — added
+          to <span class="font-medium text-fg"
+            >any app that uses your camera.</span
+          > Set it once and Zoom, Meet, Discord and OBS all get the upgrade.
+        </p>
+      </div>
 
-          <p class="mt-5 max-w-xl text-lg leading-relaxed text-muted">
-            Auto-framing, background replacement, studio light and gesture reactions — added to
-            <span class="font-medium text-fg"> any app that reads your camera.</span> Processed on-device and
-            republished to PipeWire, so Zoom, OBS, Meet and Discord all see the enhanced feed.
-          </p>
+      <div class="mt-14 sm:mt-16">
+        <Carousel />
+      </div>
 
-          <div class="mt-8 flex flex-wrap items-center gap-3">
-            <a href={FLATHUB} class="btn btn-primary">
-              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>
-              Get it on Flathub
-            </a>
-            <a href={RELEASES} class="btn btn-ghost">
-              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
-              Download packages
-            </a>
-            <a href={GITHUB} class="btn btn-ghost">
-              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d={ghPath}></path></svg>
-              Star on GitHub
-            </a>
-          </div>
-
-          <p class="mt-6 text-[0.8rem] tracking-wide text-muted">
-            GPL-3.0 · x86_64 · GStreamer + PipeWire · no GPU required
-          </p>
+      <div class="mx-auto max-w-3xl px-6 pb-16 pt-12 text-center sm:pb-24">
+        <div class="flex flex-wrap items-center justify-center gap-3">
+          <a href={FLATHUB} class="btn btn-primary">
+            <svg
+              class="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              ><path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z"></path><path
+                d="M3 7.5 12 12l9-4.5M12 12v9"></path></svg
+            >
+            Get it on Flathub
+          </a>
+          <a href={RELEASES} class="btn btn-ghost">
+            <svg
+              class="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden="true"><path d={ghPath}></path></svg
+            >
+            GitHub releases
+          </a>
         </div>
 
-        <div class="relative">
-          <Viewfinder />
-          <p class="mt-3 text-center text-[11px] tracking-wider text-muted">
-            simulated preview — this is what your call sees
-          </p>
-        </div>
+        <p class="mt-6 text-[0.8rem] tracking-wide text-muted">
+          Free & open source · Works with every app · No GPU required
+        </p>
       </div>
     </section>
 
     <!-- ================= WORKS WITH ================= -->
     <section class="border-y border-line bg-surface">
       <div class="mx-auto max-w-6xl px-6 py-8">
-        <div class="flex flex-col items-start gap-5 lg:flex-row lg:items-center lg:gap-10">
-          <p class="shrink-0 text-[0.72rem] font-medium uppercase leading-relaxed tracking-[0.16em] text-muted">
-            Feeds any app that reads<br class="hidden lg:block" /> a PipeWire node or /dev/video
+        <div
+          class="flex flex-col items-start gap-5 lg:flex-row lg:items-center lg:gap-10"
+        >
+          <p
+            class="shrink-0 text-[0.72rem] font-medium uppercase leading-relaxed tracking-[0.16em] text-muted"
+          >
+            Works with every app<br class="hidden lg:block" /> that uses your camera
           </p>
           <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
-            {apps.map((app) => (
-              <span class="text-[0.95rem] font-semibold text-muted transition-colors hover:text-fg">{app}</span>
-            ))}
+            {
+              apps.map((app) => (
+                <span class="text-[0.95rem] font-semibold text-muted transition-colors hover:text-fg">
+                  {app}
+                </span>
+              ))
+            }
           </div>
         </div>
       </div>
     </section>
 
     <!-- ================= FEATURES ================= -->
-    <section id="features" class="mx-auto max-w-6xl scroll-mt-20 px-6 py-20 sm:py-28">
+    <section
+      id="features"
+      class="mx-auto max-w-6xl scroll-mt-20 px-6 py-20 sm:py-28"
+    >
       <div class="max-w-2xl">
         <span class="eyebrow">The effects</span>
-        <h2 class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]">
-          Everything a modern camera does — <span class="text-muted">without the closed-source camera app.</span>
+        <h2
+          class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]"
+        >
+          Everything a modern camera does — <span class="text-muted"
+            >without the closed-source camera app.</span
+          >
         </h2>
       </div>
 
       <div class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {features.map((f) => <FeatureCard icon={f.icon} title={f.title} body={f.body} badge={f.badge} />)}
+        {
+          features.map((f) => (
+            <FeatureCard
+              icon={f.icon}
+              title={f.title}
+              body={f.body}
+              badge={f.badge}
+            />
+          ))
+        }
       </div>
     </section>
 
-    <!-- ================= HOW IT WORKS ================= -->
-    <section id="how" class="scroll-mt-20 border-y border-line bg-surface">
+    <!-- ================= OVERVIEW ================= -->
+    <section id="overview" class="scroll-mt-20 border-y border-line bg-surface">
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
         <div class="max-w-2xl">
-          <span class="eyebrow">How it works</span>
-          <h2 class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]">
-            One daemon between your camera and everything else.
+          <span class="eyebrow">Overview</span>
+          <h2
+            class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]"
+          >
+            One helper between your camera and everything else.
           </h2>
           <p class="mt-5 text-lg leading-relaxed text-muted">
-            No always-open window. A headless pipeline does the work and republishes a virtual camera the rest of your desktop can pick up.
+            No extra window to keep open. OpenEffects works quietly in the
+            background and hands every app a better version of your camera.
           </p>
         </div>
 
         <ol class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {pipeline.map((step) => (
-            <li class="card relative p-6">
-              <span class="text-sm font-semibold text-accent">{step.n}</span>
-              <h3 class="mt-3 text-xl font-semibold text-fg">{step.title}</h3>
-              <p class="mt-1.5 text-[0.92rem] leading-relaxed text-muted">{step.body}</p>
-            </li>
-          ))}
+          {
+            pipeline.map((step) => (
+              <li class="card relative p-6">
+                <span class="text-sm font-semibold text-accent">{step.n}</span>
+                <h3 class="mt-3 text-xl font-semibold text-fg">{step.title}</h3>
+                <p class="mt-1.5 text-[0.92rem] leading-relaxed text-muted">
+                  {step.body}
+                </p>
+              </li>
+            ))
+          }
         </ol>
 
         <div class="mt-4 grid gap-4 md:grid-cols-3">
-          {components.map((c) => (
-            <div class="card flex flex-col p-6">
-              <div class="flex items-baseline justify-between gap-3">
-                <code class="text-sm font-semibold text-accent">{c.name}</code>
-                <span class="text-[11px] uppercase tracking-wider text-muted">{c.role}</span>
+          {
+            components.map((c) => (
+              <div class="card flex flex-col p-6">
+                <div class="flex items-baseline justify-between gap-3">
+                  <span class="text-sm font-semibold text-accent">
+                    {c.name}
+                  </span>
+                  <span class="text-[11px] uppercase tracking-wider text-muted">
+                    {c.role}
+                  </span>
+                </div>
+                <p class="mt-3 text-[0.92rem] leading-relaxed text-muted">
+                  {c.body}
+                </p>
               </div>
-              <p class="mt-3 text-[0.92rem] leading-relaxed text-muted">{c.body}</p>
-            </div>
-          ))}
+            ))
+          }
         </div>
       </div>
     </section>
@@ -263,31 +350,44 @@ const ghPath =
         <div class="card p-8 sm:p-10">
           <span class="eyebrow">Performance</span>
           <p class="mt-6 text-6xl font-bold tracking-tight text-fg sm:text-7xl">
-            2–5<span class="ml-2 align-baseline text-2xl font-medium text-muted">ms / frame</span>
+            2–5<span class="ml-2 align-baseline text-2xl font-medium text-muted"
+              >ms / frame</span
+            >
           </p>
           <p class="mt-5 max-w-md leading-relaxed text-muted">
-            Inference on a modern x86_64 CPU. The bundled models are MobileNet-class, 256² and 640² — small enough that a discrete GPU would only add latency. None required.
+            Runs smoothly on a normal laptop processor. The effects are light
+            enough that a dedicated graphics card would only slow things down.
+            None required.
           </p>
         </div>
 
         <div class="card p-8 sm:p-10">
           <span class="eyebrow">Privacy</span>
           <p class="mt-6 text-6xl font-bold tracking-tight text-fg sm:text-7xl">
-            0<span class="ml-2 align-baseline text-2xl font-medium text-muted">bytes leave</span>
+            0<span class="ml-2 align-baseline text-2xl font-medium text-muted"
+              >bytes leave</span
+            >
           </p>
           <p class="mt-5 max-w-md leading-relaxed text-muted">
-            No telemetry, no network calls, no cloud inference — all ML runs locally. Cameras open through xdg-desktop-portal and IPC stays on the D-Bus session bus.
+            No tracking, no accounts, no cloud. Every effect is computed on your
+            own machine, and your camera feed never leaves it.
           </p>
         </div>
       </div>
 
-      <dl class="mt-4 grid grid-cols-2 gap-px border border-line bg-line sm:grid-cols-3 lg:grid-cols-5">
-        {specs.map(([k, v]) => (
-          <div class="flex flex-col gap-1 bg-page px-5 py-4">
-            <dt class="text-[10px] uppercase tracking-wider text-muted">{k}</dt>
-            <dd class="text-[0.95rem] font-semibold text-fg">{v}</dd>
-          </div>
-        ))}
+      <dl
+        class="mt-4 grid grid-cols-2 gap-px border border-line bg-line sm:grid-cols-3 lg:grid-cols-5"
+      >
+        {
+          specs.map(([k, v]) => (
+            <div class="flex flex-col gap-1 bg-page px-5 py-4">
+              <dt class="text-[10px] uppercase tracking-wider text-muted">
+                {k}
+              </dt>
+              <dd class="text-[0.95rem] font-semibold text-fg">{v}</dd>
+            </div>
+          ))
+        }
       </dl>
     </section>
 
@@ -297,15 +397,32 @@ const ghPath =
         <div class="grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
           <div>
             <span class="eyebrow">Install</span>
-            <h2 class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]">
+            <h2
+              class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]"
+            >
               Get it from Flathub.
             </h2>
             <p class="mt-5 leading-relaxed text-muted">
-              The Flatpak is the quickest path on any distro. Prefer native packages? Grab the <code class="font-medium text-fg">.pkg</code>, <code class="font-medium text-fg">.rpm</code> or <code class="font-medium text-fg">.deb</code> from the latest release, then install the daemon (<code class="font-medium text-accent">openeffectsd</code>, it bundles the models) alongside the GUI or CLI.
+              The Flatpak is the quickest path on any distro. Prefer native
+              packages? Grab the <code class="font-medium text-fg">.pkg</code>, <code
+                class="font-medium text-fg">.rpm</code
+              > or <code class="font-medium text-fg">.deb</code> from the latest release
+              and install them together.
             </p>
             <div class="mt-7 flex flex-wrap gap-3">
               <a href={FLATHUB} class="btn btn-primary">
-                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>
+                <svg
+                  class="h-4 w-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                  ><path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z"></path><path
+                    d="M3 7.5 12 12l9-4.5M12 12v9"></path></svg
+                >
                 Get it on Flathub
               </a>
               <a href={RELEASES} class="btn btn-ghost">Direct packages</a>
@@ -317,19 +434,55 @@ const ghPath =
           </div>
 
           <div>
-            <div role="tablist" aria-label="Install method" class="mb-3 flex flex-wrap gap-2">
-              <button role="tab" aria-selected="true" class="tab is-active" data-tab="flatpak">Flatpak</button>
-              <button role="tab" aria-selected="false" class="tab" data-tab="arch">Arch</button>
-              <button role="tab" aria-selected="false" class="tab" data-tab="fedora">Fedora / RHEL</button>
-              <button role="tab" aria-selected="false" class="tab" data-tab="ubuntu">Ubuntu / Debian</button>
+            <div
+              role="tablist"
+              aria-label="Install method"
+              class="mb-3 flex flex-wrap gap-2"
+            >
+              <button
+                role="tab"
+                aria-selected="true"
+                class="tab is-active"
+                data-tab="flatpak">Flatpak</button
+              >
+              <button
+                role="tab"
+                aria-selected="false"
+                class="tab"
+                data-tab="arch">Arch</button
+              >
+              <button
+                role="tab"
+                aria-selected="false"
+                class="tab"
+                data-tab="fedora">Fedora / RHEL</button
+              >
+              <button
+                role="tab"
+                aria-selected="false"
+                class="tab"
+                data-tab="ubuntu">Ubuntu / Debian</button
+              >
             </div>
 
-            <div data-panel="flatpak"><CodeBlock code={install.flatpak} label="flatpak" /></div>
-            <div data-panel="arch" class="hidden"><CodeBlock code={install.arch} label="pacman" /></div>
-            <div data-panel="fedora" class="hidden"><CodeBlock code={install.fedora} label="dnf" /></div>
-            <div data-panel="ubuntu" class="hidden"><CodeBlock code={install.ubuntu} label="apt" /></div>
+            <div data-panel="flatpak">
+              <CodeBlock code={install.flatpak} label="flatpak" />
+            </div>
+            <div data-panel="arch" class="hidden">
+              <CodeBlock code={install.arch} label="pacman" />
+            </div>
+            <div data-panel="fedora" class="hidden">
+              <CodeBlock code={install.fedora} label="dnf" />
+            </div>
+            <div data-panel="ubuntu" class="hidden">
+              <CodeBlock code={install.ubuntu} label="apt" />
+            </div>
 
-            <p class="mb-2 mt-8 text-[11px] uppercase tracking-wider text-muted">Then drive it from anywhere</p>
+            <p
+              class="mb-2 mt-8 text-[11px] uppercase tracking-wider text-muted"
+            >
+              Then drive it from anywhere
+            </p>
             <CodeBlock code={cli} label="openeffectsctl" />
           </div>
         </div>
@@ -339,15 +492,29 @@ const ghPath =
     <!-- ================= CTA ================= -->
     <section class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
       <div class="card bg-surface px-8 py-14 text-center sm:px-10 sm:py-20">
-        <h2 class="mx-auto max-w-2xl text-3xl font-bold tracking-tight sm:text-5xl sm:leading-[1.08]">
+        <h2
+          class="mx-auto max-w-2xl text-3xl font-bold tracking-tight sm:text-5xl sm:leading-[1.08]"
+        >
           Your next call deserves a better camera.
         </h2>
         <p class="mx-auto mt-5 max-w-lg leading-relaxed text-muted">
-          Free and open source. Install once and every app on your desktop gets the upgrade.
+          Free and open source. Install once and every app on your desktop gets
+          the upgrade.
         </p>
         <div class="mt-8 flex flex-wrap justify-center gap-3">
           <a href={FLATHUB} class="btn btn-primary">
-            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>
+            <svg
+              class="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+              ><path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z"></path><path
+                d="M3 7.5 12 12l9-4.5M12 12v9"></path></svg
+            >
             Get it on Flathub
           </a>
           <a href={GITHUB} class="btn btn-ghost">View source</a>
@@ -358,15 +525,19 @@ const ghPath =
 
   <!-- ================= FOOTER ================= -->
   <footer class="border-t border-line">
-    <div class="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 px-6 py-10 sm:flex-row sm:items-center">
+    <div
+      class="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 px-6 py-10 sm:flex-row sm:items-center"
+    >
       <div class="flex items-center gap-2.5">
         <img src="/openeffects.svg" alt="" width="26" height="26" />
         <div class="leading-tight">
           <p class="text-sm font-bold">OpenEffects</p>
-          <p class="text-[11px] text-muted">Wayland-native webcam effects</p>
+          <p class="text-[11px] text-muted">Better webcam effects for Linux</p>
         </div>
       </div>
-      <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-[0.85rem] text-muted">
+      <div
+        class="flex flex-wrap items-center gap-x-6 gap-y-2 text-[0.85rem] text-muted"
+      >
         <a href={FLATHUB} class="transition-colors hover:text-fg">Flathub</a>
         <a href={GITHUB} class="transition-colors hover:text-fg">GitHub</a>
         <a href={RELEASES} class="transition-colors hover:text-fg">Releases</a>
@@ -408,7 +579,9 @@ const ghPath =
           t.classList.toggle("is-active", active);
           t.setAttribute("aria-selected", String(active));
         });
-        panels.forEach((p) => p.classList.toggle("hidden", p.dataset.panel !== name));
+        panels.forEach((p) =>
+          p.classList.toggle("hidden", p.dataset.panel !== name),
+        );
       });
     });
   </script>
