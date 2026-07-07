@@ -60,19 +60,6 @@ const slides = [
       ))
     }
   </div>
-
-  <div class="mt-8 flex justify-center gap-2" data-dots>
-    {
-      slides.map((_, i) => (
-        <button
-          type="button"
-          class="carousel-dot"
-          data-dot={i}
-          aria-label={`Go to slide ${i + 1}`}
-        />
-      ))
-    }
-  </div>
 </div>
 
 <style>
@@ -110,9 +97,6 @@ const slides = [
   document.querySelectorAll<HTMLElement>("[data-carousel]").forEach((root) => {
     const slides = Array.from(
       root.querySelectorAll<HTMLElement>("[data-slide]"),
-    );
-    const dots = Array.from(
-      root.querySelectorAll<HTMLButtonElement>("[data-dot]"),
     );
     const n = slides.length;
     if (!n) return;
@@ -166,7 +150,6 @@ const slides = [
         el.style.filter = `brightness(${brightness})`;
         el.style.pointerEvents = rel === 0 || interactive ? "auto" : "none";
       });
-      dots.forEach((d, di) => d.classList.toggle("is-active", di === current));
     };
 
     const goTo = (i: number) => {
@@ -179,8 +162,6 @@ const slides = [
         if (i !== current) goTo(i);
       }),
     );
-    dots.forEach((dot, i) => dot.addEventListener("click", () => goTo(i)));
-
     layout();
 
     const reduced = window.matchMedia(
