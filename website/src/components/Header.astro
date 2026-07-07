@@ -4,7 +4,7 @@ import { GITHUB, FLATHUB, DOCS, ghPath } from "../consts";
 interface Props {
   // "" on the home page (in-page anchors), "/" elsewhere so anchors jump home.
   base?: string;
-  current?: "overview" | "features" | "install" | "docs";
+  current?: "overview" | "features" | "install" | "gnome" | "docs";
 }
 const { base = "", current } = Astro.props;
 
@@ -12,6 +12,7 @@ const nav = [
   { id: "overview", label: "Overview", href: `${base}#overview` },
   { id: "features", label: "Features", href: `${base}#features` },
   { id: "install", label: "Installation", href: `${base}#install` },
+  { id: "gnome", label: "GNOME", href: `${base}#gnome` },
   { id: "docs", label: "Docs", href: DOCS },
 ];
 ---

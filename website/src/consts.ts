@@ -3,8 +3,8 @@ export const RELEASES = `${GITHUB}/releases/latest`;
 export const LICENSE = `${GITHUB}/blob/main/LICENSE`;
 // Local documentation page.
 export const DOCS = "/docs";
-// Placeholder — swap for the real Flathub URL once the app is published.
 export const FLATHUB = "https://flathub.org/apps/in.co.funinkina.OpenEffects";
+export const GNOME_EXTENSION = "https://extensions.gnome.org/";
 
 export const AUTHOR = "Aryan Kushwaha";
 export const AUTHOR_SITE = "https://funinkina.co.in";

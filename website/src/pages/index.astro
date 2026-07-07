@@ -6,7 +6,15 @@ import Carousel from "../components/Carousel.astro";
 import FeatureCard from "../components/FeatureCard.astro";
 import CodeBlock from "../components/CodeBlock.astro";
 import FlathubBadge from "../components/FlathubBadge.astro";
-import { RELEASES, DOCS, FLATHUB, ghPath } from "../consts";
+import GnomeBadge from "../components/GnomeBadge.astro";
+import {
+  GITHUB,
+  RELEASES,
+  DOCS,
+  FLATHUB,
+  GNOME_EXTENSION,
+  ghPath,
+} from "../consts";
 
 // Monochrome brand marks (Simple Icons) for the "works with" strip.
 const appIcons = [
@@ -52,7 +60,7 @@ const features: {
   {
     icon: "centerStage",
     title: "Center Stage",
-    body: "Face- and body-tracking crops and zooms to keep you — or your whole group — centered as you move around.",
+    body: "Face and body-tracking crops and zooms to keep you or your whole group centered as you move around.",
   },
   {
     icon: "background",
@@ -67,7 +75,7 @@ const features: {
   {
     icon: "reactions",
     title: "Reactions",
-    body: "Hand gestures trigger animated overlays — thumbs-up, heart, and more. Or fire them straight from the CLI.",
+    body: "Hand gestures trigger animated overlays: thumbs-up, heart, and more. Or fire them straight from the CLI.",
   },
   {
     icon: "everywhere",
@@ -85,7 +93,7 @@ const pipeline = [
   {
     n: "02",
     title: "Pick your look",
-    body: "Blur, framing, lighting and reactions — flip them on and off live.",
+    body: "Blur, framing, lighting and reactions, easily flip them on and off live.",
   },
   {
     n: "03",
@@ -96,24 +104,6 @@ const pipeline = [
     n: "04",
     title: "Stays private",
     body: "Everything runs on your device. Nothing is uploaded, ever.",
-  },
-];
-
-const components = [
-  {
-    name: "App",
-    role: "Everyday",
-    body: "A clean window with live toggles, camera settings and background images. Point, click, done.",
-  },
-  {
-    name: "Background",
-    role: "Always on",
-    body: "Runs quietly with no window open, so your effects are ready the moment a call starts.",
-  },
-  {
-    name: "Command line",
-    role: "For tinkerers",
-    body: "Drive every effect from a script or keybind. First-class, not an afterthought.",
   },
 ];
 
@@ -247,26 +237,6 @@ openeffectsctl toggle reactions`;
             ))
           }
         </ol>
-
-        <div class="mt-4 grid gap-4 md:grid-cols-3">
-          {
-            components.map((c) => (
-              <div class="card flex flex-col p-6 rounded">
-                <div class="flex items-baseline justify-between gap-3">
-                  <span class="text-sm font-semibold text-accent">
-                    {c.name}
-                  </span>
-                  <span class="text-[11px] uppercase tracking-wider text-muted">
-                    {c.role}
-                  </span>
-                </div>
-                <p class="mt-3 text-[0.92rem] leading-relaxed text-muted">
-                  {c.body}
-                </p>
-              </div>
-            ))
-          }
-        </div>
       </div>
     </section>
 
@@ -397,6 +367,73 @@ openeffectsctl toggle reactions`;
               Then drive it from anywhere
             </p>
             <CodeBlock code={cli} label="openeffectsctl" />
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section
+      id="gnome"
+      class="relative isolate scroll-mt-20 overflow-hidden border-y border-line bg-surface"
+    >
+      <span
+        aria-hidden="true"
+        class="pointer-events-none absolute bottom-28 left-0 -z-10 hidden rotate-180 text-8xl font-black tracking-tight text-accent/10 [writing-mode:vertical-rl] lg:block"
+        >EXTENSION</span
+      >
+      <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
+        <div class="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+          <div class="max-w-xl">
+            <p class="eyebrow">Coming Soon</p>
+            <h2
+              class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]"
+            >
+              Toggle effects from the top bar.
+            </h2>
+            <p class="mt-5 text-lg leading-relaxed text-muted">
+              The companion GNOME extension drops OpenEffects straight into
+              Quick Settings. Flip blur, framing, studio light and reactions on
+              or off mid-call. No window to find, no command to type.
+            </p>
+            <ul class="mt-7 flex flex-col gap-3 text-[0.95rem] text-fg">
+              <li class="flex items-start gap-3">
+                <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
+                ></span>
+                One tap in Quick Settings to switch any effect on or off.
+              </li>
+              <li class="flex items-start gap-3">
+                <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
+                ></span>
+                A live indicator, so you always know what's running.
+              </li>
+              <li class="flex items-start gap-3">
+                <span class="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
+                ></span>
+                Talks to the same background daemon that is always in sync with the
+                app and CLI.
+              </li>
+            </ul>
+            <div class="mt-8 flex flex-wrap items-center gap-3">
+              <GnomeBadge href={GNOME_EXTENSION} />
+              <a
+                href={GITHUB}
+                class="btn btn-ghost h-13 rounded-xl py-0 sm:h-14"
+                >View source</a
+              >
+            </div>
+          </div>
+
+          <div
+            class="mx-auto w-fit overflow-hidden rounded-xl border border-line bg-page"
+          >
+            <img
+              src="/gnome-extension.png"
+              alt="OpenEffects controls in the GNOME Quick Settings panel"
+              width="1022"
+              height="1453"
+              loading="lazy"
+              class="h-125 w-auto"
+            />
           </div>
         </div>
       </div>
