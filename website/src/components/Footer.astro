@@ -1,0 +1,105 @@
+---
+import {
+  GITHUB,
+  RELEASES,
+  DOCS,
+  LICENSE,
+  FLATHUB,
+  AUTHOR,
+  AUTHOR_SITE,
+  AUTHOR_GITHUB,
+  AUTHOR_BMC,
+  AUTHOR_TWITTER,
+  ghPath,
+} from "../consts";
+---
+
+<footer class="border-t border-line">
+  <div
+    class="mx-auto flex max-w-6xl flex-col justify-between gap-10 px-6 py-10 sm:flex-row"
+  >
+    <div>
+      <div class="flex items-center gap-2.5">
+        <img src="/openeffects.svg" alt="" width="40" height="40" />
+        <div class="leading-tight">
+          <p class="text-sm font-bold">OpenEffects</p>
+          <p class="text-[11px] text-muted">Better webcam effects for Linux</p>
+        </div>
+      </div>
+      <div
+        class="mt-5 flex flex-wrap items-center gap-x-6 gap-y-2 text-[0.85rem] text-muted"
+      >
+        <a href={FLATHUB} class="transition-colors hover:text-fg">Flathub</a>
+        <a href={GITHUB} class="transition-colors hover:text-fg">GitHub</a>
+        <a href={RELEASES} class="transition-colors hover:text-fg">Releases</a>
+        <a href={DOCS} class="transition-colors hover:text-fg">CLI Docs</a>
+        <a href={LICENSE} class="transition-colors hover:text-fg">GPL-3.0</a>
+      </div>
+    </div>
+
+    <div class="sm:text-right">
+      <a
+        href={AUTHOR_SITE}
+        class="text-sm font-bold transition-colors hover:text-accent"
+        >{AUTHOR}</a
+      >
+      <p class="text-[11px] text-muted">Creator & maintainer</p>
+      <div
+        class="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[0.85rem] text-muted sm:justify-end"
+      >
+        <a
+          href={AUTHOR_GITHUB}
+          class="inline-flex items-center gap-2 transition-colors hover:text-fg"
+          aria-label="Aryan Kushwaha on GitHub"
+        >
+          <svg
+            class="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"><path d={ghPath}></path></svg
+          >
+          @funinkina
+        </a>
+        <a
+          href={AUTHOR_BMC}
+          class="inline-flex items-center gap-2 transition-colors hover:text-fg"
+          aria-label="Aryan Kushwaha on Buy Me a Coffee"
+        >
+          <svg
+            class="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
+            <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4Z"></path>
+            <line x1="6" y1="1" x2="6" y2="4"></line>
+            <line x1="10" y1="1" x2="10" y2="4"></line>
+            <line x1="14" y1="1" x2="14" y2="4"></line>
+          </svg>
+          @funinkina
+        </a>
+        <a
+          href={AUTHOR_TWITTER}
+          class="inline-flex items-center gap-2 transition-colors hover:text-fg"
+          aria-label="Aryan Kushwaha on Twitter"
+        >
+          <svg
+            class="h-3.5 w-3.5"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+            ><path
+              d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
+            ></path></svg
+          >
+          @funinkina
+        </a>
+      </div>
+    </div>
+  </div>
+</footer>

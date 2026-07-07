@@ -1,0 +1,491 @@
+---
+import Layout from "../layouts/Layout.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import CodeBlock from "../components/CodeBlock.astro";
+
+const toc = [
+  { id: "quick-start", label: "Quick start" },
+  { id: "daemon", label: "Daemon lifecycle" },
+  { id: "autostart", label: "Autostart" },
+  { id: "effects", label: "Effects overview" },
+  { id: "per-effect", label: "Per-effect commands" },
+  { id: "camera", label: "Camera" },
+  { id: "low-level-set", label: "Low-level set" },
+  { id: "scripting", label: "Scripting" },
+];
+
+const startCmd = `systemctl --user start openeffectsd   # or: openeffectsd --start`;
+const helpCmd = `openeffectsctl --help
+openeffectsctl studio-light --help`;
+const quickStart = `openeffectsctl start                       # arm the virtual camera
+openeffectsctl portrait-blur --on --strength 70
+openeffectsctl background ~/Pictures/office.jpg
+openeffectsctl studio-light --on --intensity 60 --brightness 10
+openeffectsctl status`;
+const effectsList = `openeffectsctl effects
+# [on ] center_stage
+# [off] portrait_blur
+# ...`;
+const genericToggle = `openeffectsctl enable portrait-blur
+openeffectsctl disable studio-light
+openeffectsctl toggle reactions`;
+const passthrough = `openeffectsctl passthrough --on    # bypass all effects (raw camera)
+openeffectsctl passthrough --off   # re-enable effects
+openeffectsctl passthrough         # print current state`;
+const centerStage = `openeffectsctl center-stage --on --zoom tight --mode single
+openeffectsctl center-stage --crop-left 40 --crop-right 40
+openeffectsctl center-stage            # print current state`;
+const portraitBlur = `openeffectsctl portrait-blur --on --strength 75`;
+const background = `openeffectsctl background "#1e1e2e"          # solid color, enables the effect
+openeffectsctl background ~/Pictures/bg.jpg  # image, enables the effect
+openeffectsctl background none               # clear background and disable
+openeffectsctl background --off              # disable, keep stored background
+openeffectsctl background                    # print current background`;
+const studioLight = `openeffectsctl studio-light --on --intensity 60 --brightness 10 --contrast 55`;
+const reactions = `openeffectsctl reactions --on
+openeffectsctl react thumbs-up
+openeffectsctl react heart`;
+const camera = `openeffectsctl camera list            # active camera marked with '*'
+openeffectsctl camera select /dev/video0
+openeffectsctl camera info            # virtual-camera node details`;
+const lowLevelSet = `openeffectsctl set studio_light.brightness 10
+openeffectsctl set center_stage.zoom tight
+openeffectsctl set bg_replace.background "#000000"`;
+const waybar = `"custom/openeffects": {
+    "exec": "openeffectsctl status --short",
+    "interval": 5,
+    "on-click": "openeffectsctl toggle portrait-blur"
+}`;
+const keybinds = `bind = $mod, F1, exec, openeffectsctl toggle portrait-blur
+bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
+---
+
+<Layout
+  title="OpenEffects — CLI reference"
+  description="openeffectsctl command-line reference: control the OpenEffects camera daemon, toggle effects and script it into your window manager."
+>
+  <Header base="/" current="docs" />
+
+  <main id="main" class="doc-root">
+    <div class="mx-auto max-w-6xl px-6 py-12 sm:py-16">
+      <div class="grid gap-10 lg:grid-cols-[13rem_1fr] lg:gap-14">
+        <!-- Sidebar -->
+        <aside class="lg:sticky lg:top-24 lg:h-max">
+          <p class="text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-accent">
+            CLI reference
+          </p>
+          <nav class="doc-toc mt-4 flex flex-col gap-1 text-[0.9rem]">
+            {
+              toc.map((t) => (
+                <a href={`#${t.id}`} data-toc={t.id}>
+                  {t.label}
+                </a>
+              ))
+            }
+          </nav>
+          <div class="mt-6 border-t border-line pt-5 text-[0.8rem] leading-relaxed text-muted">
+            Everything here drives a running daemon over the session bus.
+          </div>
+        </aside>
+
+        <!-- Content -->
+        <article class="doc min-w-0">
+          <h1>
+            <code class="!bg-transparent !p-0 !text-fg">openeffectsctl</code>
+          </h1>
+          <p class="lead">
+            The command-line control surface for the OpenEffects daemon. Every
+            command talks to a running <code>openeffectsd</code> over the session
+            bus, so the daemon has to be up first.
+          </p>
+
+          <CodeBlock code={startCmd} label="shell" class="my-6" />
+
+          <p>
+            Every command prints help with <code>--help</code>; effect
+            subcommands print their current state when run with no flags.
+          </p>
+          <CodeBlock code={helpCmd} label="shell" class="my-6" />
+
+          <h2 id="quick-start">Quick start</h2>
+          <CodeBlock code={quickStart} label="shell" class="my-6" />
+
+          <h2 id="daemon">Daemon lifecycle</h2>
+          <div class="doc-table">
+            <table>
+              <thead>
+                <tr><th>Command</th><th>Description</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>openeffectsctl start</code></td>
+                  <td>Arm the virtual camera. The real camera opens on demand when a consumer (browser, OBS, …) connects.</td>
+                </tr>
+                <tr>
+                  <td><code>openeffectsctl stop</code></td>
+                  <td>Tear down the pipeline and release the camera.</td>
+                </tr>
+                <tr>
+                  <td><code>openeffectsctl status</code></td>
+                  <td>Print status plus capabilities (execution provider, model readiness, output sink).</td>
+                </tr>
+                <tr>
+                  <td><code>openeffectsctl status --short</code></td>
+                  <td>One-word status, e.g. for Waybar.</td>
+                </tr>
+                <tr>
+                  <td><code>openeffectsctl status --json</code></td>
+                  <td>Machine-readable status.</td>
+                </tr>
+                <tr>
+                  <td><code>openeffectsctl watch</code></td>
+                  <td>Stream <code>EffectChanged</code> signals until interrupted (Ctrl-C).</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="note">
+            Any command that talks to the daemon starts it first if it isn't
+            already running (via the systemd user unit, falling back to D-Bus
+            activation).
+          </p>
+
+          <h2 id="autostart">Autostart</h2>
+          <p>
+            Control whether the daemon starts automatically with your desktop
+            session.
+          </p>
+          <div class="doc-table">
+            <table>
+              <thead>
+                <tr><th>Command</th><th>Description</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>openeffectsctl autostart enable</code></td>
+                  <td>Start the daemon automatically when the graphical session begins.</td>
+                </tr>
+                <tr>
+                  <td><code>openeffectsctl autostart disable</code></td>
+                  <td>Stop starting it automatically.</td>
+                </tr>
+                <tr>
+                  <td><code>openeffectsctl autostart status</code></td>
+                  <td>Show whether autostart is enabled and whether the daemon is running.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 id="effects">Effects overview</h2>
+          <div class="doc-table">
+            <table>
+              <thead>
+                <tr><th>Command</th><th>Effect id</th><th>What it does</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>center-stage</code></td><td><code>center_stage</code></td><td>Auto crop + zoom that keeps you framed.</td></tr>
+                <tr><td><code>portrait-blur</code></td><td><code>portrait_blur</code></td><td>Blurs the background behind you.</td></tr>
+                <tr><td><code>background</code></td><td><code>bg_replace</code></td><td>Replaces the background with a color or image.</td></tr>
+                <tr><td><code>studio-light</code></td><td><code>studio_light</code></td><td>Brightens and adds contrast to your face.</td></tr>
+                <tr><td><code>reactions</code></td><td><code>reactions</code></td><td>Gesture / emoji overlay.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p>List every effect with its on/off state:</p>
+          <CodeBlock code={effectsList} label="shell" class="my-6" />
+
+          <h3>Generic enable / disable / toggle</h3>
+          <p>Works for any effect (effect names are kebab-case):</p>
+          <CodeBlock code={genericToggle} label="shell" class="my-6" />
+
+          <h3>Master passthrough</h3>
+          <p>
+            One switch over everything. When on, all effects are bypassed and
+            the virtual camera passes the real camera through untouched.
+            Per-effect settings are preserved, so turning it back off restores
+            exactly what was on before.
+          </p>
+          <CodeBlock code={passthrough} label="shell" class="my-6" />
+          <div class="doc-table">
+            <table>
+              <thead><tr><th>Flag</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td><code>--on</code></td><td>Bypass all effects — raw camera passthrough.</td></tr>
+                <tr><td><code>--off</code></td><td>Re-enable effects (turn passthrough off).</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 id="per-effect">Per-effect commands</h2>
+          <p>
+            Each effect subcommand shares the <code>--on</code> / <code
+              >--off</code
+            > toggle and adds its own settings. Pass any combination in one call;
+            run with no flags to print the current state.
+          </p>
+
+          <h3>Center Stage</h3>
+          <CodeBlock code={centerStage} label="shell" class="my-6" />
+          <div class="doc-table">
+            <table>
+              <thead><tr><th>Flag</th><th>Values</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td><code>--on</code> / <code>--off</code></td><td>—</td><td>Enable / disable.</td></tr>
+                <tr><td><code>--zoom</code></td><td><code>subtle</code> <code>normal</code> <code>tight</code></td><td>Zoom level.</td></tr>
+                <tr><td><code>--mode</code></td><td><code>single</code> <code>group</code></td><td>Framing mode.</td></tr>
+                <tr><td><code>--crop-top</code></td><td><code>0</code>–<code>512</code></td><td>Manual crop inset (px) from the top edge.</td></tr>
+                <tr><td><code>--crop-bottom</code></td><td><code>0</code>–<code>512</code></td><td>Manual crop inset (px) from the bottom edge.</td></tr>
+                <tr><td><code>--crop-left</code></td><td><code>0</code>–<code>512</code></td><td>Manual crop inset (px) from the left edge.</td></tr>
+                <tr><td><code>--crop-right</code></td><td><code>0</code>–<code>512</code></td><td>Manual crop inset (px) from the right edge.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Portrait Blur</h3>
+          <CodeBlock code={portraitBlur} label="shell" class="my-6" />
+          <div class="doc-table">
+            <table>
+              <thead><tr><th>Flag</th><th>Values</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td><code>--on</code> / <code>--off</code></td><td>—</td><td>Enable / disable.</td></tr>
+                <tr><td><code>--strength</code></td><td><code>0</code>–<code>100</code></td><td>Blur strength.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Background replace</h3>
+          <CodeBlock code={background} label="shell" class="my-6" />
+          <div class="doc-table">
+            <table>
+              <thead><tr><th>Argument / flag</th><th>Values</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td><code>VALUE</code></td><td><code>none</code>, <code>#RRGGBB</code>, or an image path</td><td><code>none</code> clears and disables; any other value sets the background and enables the effect.</td></tr>
+                <tr><td><code>--off</code></td><td>—</td><td>Disable without changing the stored background.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Studio Light</h3>
+          <CodeBlock code={studioLight} label="shell" class="my-6" />
+          <div class="doc-table">
+            <table>
+              <thead><tr><th>Flag</th><th>Values</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td><code>--on</code> / <code>--off</code></td><td>—</td><td>Enable / disable.</td></tr>
+                <tr><td><code>--intensity</code></td><td><code>0</code>–<code>100</code></td><td>Overall intensity.</td></tr>
+                <tr><td><code>--brightness</code></td><td><code>-100</code>–<code>100</code></td><td>Brightness lift.</td></tr>
+                <tr><td><code>--contrast</code></td><td><code>0</code>–<code>100</code></td><td>Contrast.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Reactions</h3>
+          <p>
+            Toggle the overlay effect, or fire a one-shot emoji burst with <code
+              >react</code
+            >:
+          </p>
+          <CodeBlock code={reactions} label="shell" class="my-6" />
+          <p>
+            Reaction ids: <code>thumbs-up</code> <code>thumbs-down</code>
+            <code>heart</code> <code>joy</code> <code>tada</code> <code>clap</code
+            >. (<code>thumbs-up</code>, <code>thumbs-down</code>, <code>heart</code
+            > are also the three gesture-mapped reactions.)
+          </p>
+
+          <h2 id="camera">Camera</h2>
+          <CodeBlock code={camera} label="shell" class="my-6" />
+          <div class="doc-table">
+            <table>
+              <thead><tr><th>Command</th><th>Description</th></tr></thead>
+              <tbody>
+                <tr><td><code>camera list</code></td><td>List available cameras; the active one is prefixed with <code>*</code>.</td></tr>
+                <tr><td><code>camera select &lt;id&gt;</code></td><td>Select a camera by id or <code>/dev/videoN</code> path.</td></tr>
+                <tr><td><code>camera info</code></td><td>Print the virtual-camera node info.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h2 id="low-level-set">Low-level <code>set</code></h2>
+          <p>
+            <code>set</code> writes any effect parameter directly using <code
+              >EFFECT.KEY VALUE</code
+            >, where <code>EFFECT</code> is the underscore effect id. It bypasses
+            CLI-side validation and is mainly an escape hatch / scripting
+            primitive.
+          </p>
+          <CodeBlock code={lowLevelSet} label="shell" class="my-6" />
+          <p class="note">
+            Values are parsed as <code>true</code>/<code>false</code> → bool,
+            integers → number, everything else → string.
+          </p>
+
+          <h2 id="scripting">Scripting</h2>
+          <p>Waybar module:</p>
+          <CodeBlock code={waybar} label="waybar config" class="my-6" />
+          <p>Bind keys (Hyprland example):</p>
+          <CodeBlock code={keybinds} label="hyprland.conf" class="my-6" />
+        </article>
+      </div>
+    </div>
+  </main>
+
+  <Footer />
+
+  <script>
+    // copy-to-clipboard (shared with the home page CodeBlock component)
+    document.querySelectorAll<HTMLButtonElement>(".copy-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const text = btn.dataset.clipboard ?? "";
+        const label = btn.querySelector(".copy-label");
+        try {
+          await navigator.clipboard.writeText(text);
+          if (label) label.textContent = "Copied";
+          btn.classList.add("text-accent");
+          window.setTimeout(() => {
+            if (label) label.textContent = "Copy";
+            btn.classList.remove("text-accent");
+          }, 1600);
+        } catch {
+          /* clipboard unavailable */
+        }
+      });
+    });
+
+    // scrollspy: highlight the current section in the sidebar
+    const links = new Map<string, HTMLAnchorElement>();
+    document
+      .querySelectorAll<HTMLAnchorElement>("[data-toc]")
+      .forEach((a) => links.set(a.dataset.toc!, a));
+    const headings = Array.from(links.keys())
+      .map((id) => document.getElementById(id))
+      .filter((el): el is HTMLElement => !!el);
+
+    const spy = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            links.forEach((a) => a.classList.remove("is-active"));
+            links.get(e.target.id)?.classList.add("is-active");
+          }
+        }
+      },
+      { rootMargin: "-80px 0px -70% 0px", threshold: 0 },
+    );
+    headings.forEach((h) => spy.observe(h));
+  </script>
+</Layout>
+
+<style>
+  .doc {
+    color: var(--color-fg);
+  }
+  .doc h1 {
+    font-size: 2.4rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+  .doc .lead {
+    margin-top: 0.9rem;
+    font-size: 1.05rem;
+    line-height: 1.7;
+    color: var(--color-muted);
+    max-width: 42rem;
+  }
+  .doc h2 {
+    scroll-margin-top: 6rem;
+    margin-top: 3.25rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--color-line);
+    font-size: 1.55rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .doc h3 {
+    scroll-margin-top: 6rem;
+    margin-top: 2.25rem;
+    font-size: 1.15rem;
+    font-weight: 600;
+  }
+  .doc p {
+    margin-top: 1rem;
+    line-height: 1.7;
+    color: var(--color-muted);
+    max-width: 44rem;
+  }
+  .doc p.note {
+    border-left: 2px solid var(--color-accent);
+    padding: 0.15rem 0 0.15rem 1rem;
+    color: var(--color-muted);
+  }
+  .doc code {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.85em;
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: 4px;
+    padding: 0.1em 0.4em;
+    color: var(--color-accent-deep);
+    white-space: nowrap;
+  }
+  /* table */
+  .doc-table {
+    margin-top: 1.25rem;
+    overflow-x: auto;
+    border: 1px solid var(--color-line);
+  }
+  .doc table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+    min-width: 32rem;
+  }
+  .doc thead th {
+    text-align: left;
+    background: var(--color-surface);
+    color: var(--color-fg);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .doc th,
+  .doc td {
+    padding: 0.6rem 0.9rem;
+    border-bottom: 1px solid var(--color-line);
+    vertical-align: top;
+  }
+  .doc td {
+    color: var(--color-muted);
+  }
+  .doc tbody tr:last-child td {
+    border-bottom: none;
+  }
+  .doc td:not(:last-child),
+  .doc th:not(:last-child) {
+    border-right: 1px solid var(--color-line);
+  }
+  .doc td code {
+    white-space: nowrap;
+  }
+
+  /* sidebar TOC */
+  .doc-toc a {
+    color: var(--color-muted);
+    padding: 0.3rem 0;
+    border-left: 2px solid transparent;
+    padding-left: 0.85rem;
+    margin-left: -0.85rem;
+    transition:
+      color 0.15s ease,
+      border-color 0.15s ease;
+  }
+  .doc-toc a:hover {
+    color: var(--color-fg);
+  }
+  .doc-toc a.is-active {
+    color: var(--color-accent);
+    border-left-color: var(--color-accent);
+  }
+</style>

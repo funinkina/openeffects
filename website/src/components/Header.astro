@@ -1,0 +1,61 @@
+---
+import { GITHUB, FLATHUB, DOCS, ghPath } from "../consts";
+
+interface Props {
+  // "" on the home page (in-page anchors), "/" elsewhere so anchors jump home.
+  base?: string;
+  current?: "overview" | "features" | "install" | "docs";
+}
+const { base = "", current } = Astro.props;
+
+const nav = [
+  { id: "overview", label: "Overview", href: `${base}#overview` },
+  { id: "features", label: "Features", href: `${base}#features` },
+  { id: "install", label: "Installation", href: `${base}#install` },
+  { id: "docs", label: "Docs", href: DOCS },
+];
+---
+
+<header class="sticky top-0 z-40 border-b border-line bg-page">
+  <nav class="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
+    <a href="/" class="flex items-center gap-2.5" aria-label="OpenEffects home">
+      <img src="/openeffects.svg" alt="" width="30" height="30" />
+      <span class="text-[1.05rem] font-bold tracking-tight">OpenEffects</span>
+    </a>
+
+    <div class="hidden items-center gap-8 text-[0.85rem] text-muted md:flex">
+      {
+        nav.map((n) => (
+          <a
+            href={n.href}
+            class:list={[
+              "transition-colors hover:text-fg",
+              current === n.id && "text-fg",
+            ]}
+          >
+            {n.label}
+          </a>
+        ))
+      }
+    </div>
+
+    <div class="flex items-center gap-2.5">
+      <a
+        href={GITHUB}
+        class="btn btn-ghost hidden rounded px-3.5 py-2 text-sm sm:inline-flex"
+        aria-label="OpenEffects on GitHub"
+      >
+        <svg
+          class="h-4 w-4"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          aria-hidden="true"><path d={ghPath}></path></svg
+        >
+        GitHub
+      </a>
+      <a href={FLATHUB} class="btn btn-primary rounded px-3.5 py-2 text-sm"
+        >Download</a
+      >
+    </div>
+  </nav>
+</header>
