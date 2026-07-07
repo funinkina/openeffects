@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* ---- Light, flat theme. Sharp corners, no gradients/shadows, DM Sans only.
+/* ---- Light, flat theme. Sharp corners, no gradients/shadows, Inter only.
    The lens/haze/record/lens-deep tokens exist ONLY for the Viewfinder,
    the single dark, rounded, non-flat element (the simulated screenshot). ---- */
 @theme {
@@ -20,9 +20,9 @@
   --color-record: #ffe94d;
   --color-haze: #91c1e6;
 
-  --font-display: "DM Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Inter", ui-sans-serif, system-ui, sans-serif;
 
   --shadow-lens: 0 24px 60px -28px rgba(20, 24, 29, 0.35);
 }
@@ -60,6 +60,7 @@
 }
 
 @layer components {
+
   /* mono-style eyebrow with a viewfinder focus-bracket tick */
   .eyebrow {
     font-size: 0.72rem;
@@ -70,13 +71,6 @@
     display: inline-flex;
     align-items: center;
     gap: 0.6rem;
-  }
-  .eyebrow::before {
-    content: "";
-    width: 14px;
-    height: 8px;
-    border-left: 2px solid currentColor;
-    border-top: 2px solid currentColor;
   }
 
   .card {
@@ -98,18 +92,22 @@
       border-color 0.15s ease,
       color 0.15s ease;
   }
+
   .btn-primary {
     background: var(--color-accent);
     color: #ffffff;
   }
+
   .btn-primary:hover {
     background: var(--color-accent-deep);
   }
+
   .btn-ghost {
     background: var(--color-page);
     border-color: var(--color-line-strong);
     color: var(--color-fg);
   }
+
   .btn-ghost:hover {
     border-color: var(--color-accent);
     color: var(--color-accent);
@@ -128,9 +126,11 @@
       background-color 0.15s ease,
       border-color 0.15s ease;
   }
+
   .tab:hover {
     color: var(--color-fg);
   }
+
   .tab.is-active {
     color: #ffffff;
     background: var(--color-accent);
@@ -142,56 +142,70 @@
 .reticle-pulse {
   animation: reticle 4.5s ease-in-out infinite;
 }
+
 .rec-dot {
   animation: rec 1.6s steps(1, end) infinite;
 }
+
 .bokeh {
   animation: drift 14s ease-in-out infinite alternate;
 }
+
 .scan {
   animation: scan 6s linear infinite;
 }
 
 @keyframes reticle {
+
   0%,
   100% {
     transform: scale(1);
     opacity: 0.85;
   }
+
   50% {
     transform: scale(0.92);
     opacity: 1;
   }
 }
+
 @keyframes rec {
+
   0%,
   60% {
     opacity: 1;
   }
+
   61%,
   100% {
     opacity: 0.25;
   }
 }
+
 @keyframes drift {
   from {
     transform: translate3d(0, 0, 0);
   }
+
   to {
     transform: translate3d(-18px, 12px, 0);
   }
 }
+
 @keyframes scan {
   0% {
     transform: translateY(-100%);
     opacity: 0;
   }
+
   8% {
     opacity: 1;
   }
+
   92% {
     opacity: 1;
   }
+
   100% {
     transform: translateY(2000%);
     opacity: 0;
@@ -202,6 +216,7 @@
   html {
     scroll-behavior: auto;
   }
+
   .reticle-pulse,
   .rec-dot,
   .bokeh,

@@ -36,7 +36,10 @@ const ogImage = new URL("/og.png", Astro.site).toString();
     <meta property="og:image" content={ogImage} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="OpenEffects — Linux-native webcam effects" />
+    <meta
+      property="og:image:alt"
+      content="OpenEffects — Linux-native webcam effects"
+    />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content={ogImage} />
     <meta name="twitter:title" content={title} />
@@ -45,8 +48,8 @@ const ogImage = new URL("/og.png", Astro.site).toString();
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
+      href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap"
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap"
     />
   </head>
   <body class="min-h-screen antialiased">

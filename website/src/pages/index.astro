@@ -59,7 +59,6 @@ const features: {
   {
     icon: "reactions",
     title: "Reactions",
-    badge: "Off by default",
     body: "Hand gestures trigger animated overlays — thumbs-up, heart, and more. Or fire them straight from the CLI.",
   },
   {
@@ -241,10 +240,17 @@ const ghPath =
       </div>
     </section>
 
-    <section id="overview" class="scroll-mt-20">
+    <section
+      id="overview"
+      class="relative isolate scroll-mt-20 overflow-hidden"
+    >
+      <span
+        aria-hidden="true"
+        class="pointer-events-none absolute bottom-28 left-0 -z-10 hidden rotate-180 text-8xl font-black tracking-tight text-[#dce7f0] [writing-mode:vertical-rl] lg:block"
+        >OVERVIEW</span
+      >
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
         <div class="max-w-2xl">
-          <span class="eyebrow">Overview</span>
           <h2
             class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]"
           >
@@ -292,10 +298,17 @@ const ghPath =
       </div>
     </section>
 
-    <section id="features" class="scroll-mt-20 border-y border-line bg-surface">
+    <section
+      id="features"
+      class="relative isolate scroll-mt-20 overflow-hidden border-y border-line bg-surface"
+    >
+      <span
+        aria-hidden="true"
+        class="pointer-events-none absolute bottom-28 left-0 -z-10 hidden rotate-180 text-8xl font-black tracking-tight text-[#dce7f0] [writing-mode:vertical-rl] lg:block"
+        >FEATURES</span
+      >
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
         <div class="max-w-2xl">
-          <span class="eyebrow">Features</span>
           <h2
             class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]"
           >
@@ -320,11 +333,15 @@ const ghPath =
       </div>
     </section>
 
-    <section id="install" class="scroll-mt-20">
+    <section id="install" class="relative isolate scroll-mt-20 overflow-hidden">
+      <span
+        aria-hidden="true"
+        class="pointer-events-none absolute bottom-28 left-0 -z-10 hidden rotate-180 text-8xl font-black tracking-tight text-[#dce7f0] [writing-mode:vertical-rl] lg:block"
+        >INSTALL</span
+      >
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
-        <div class="flex justify-between flex-row">
-          <div class="max-w-xl">
-            <span class="eyebrow">Install</span>
+        <div class="flex justify-between sm:flex-col md:flex-col lg:flex-row">
+          <div class="max-w-xl md:mx-auto sm:mx-auto">
             <h2
               class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]"
             >
@@ -353,7 +370,9 @@ const ghPath =
             </p>
           </div>
 
-          <div class="justify-end w-xl max-w-xl min-w-xl">
+          <div
+            class="justify-end w-xl max-w-xl min-w-xl md:mx-auto md:pt-6 sm:mx-auto sm-pt-6"
+          >
             <div
               role="tablist"
               aria-label="Install method"
@@ -362,25 +381,25 @@ const ghPath =
               <button
                 role="tab"
                 aria-selected="true"
-                class="tab is-active"
+                class="tab is-active rounded"
                 data-tab="flatpak">Flatpak</button
               >
               <button
                 role="tab"
                 aria-selected="false"
-                class="tab"
+                class="tab rounded"
                 data-tab="arch">Arch</button
               >
               <button
                 role="tab"
                 aria-selected="false"
-                class="tab"
+                class="tab rounded"
                 data-tab="fedora">Fedora / RHEL</button
               >
               <button
                 role="tab"
                 aria-selected="false"
-                class="tab"
+                class="tab rounded"
                 data-tab="ubuntu">Ubuntu / Debian</button
               >
             </div>
@@ -409,7 +428,7 @@ const ghPath =
       </div>
     </section>
 
-    <section class="mx-auto max-w-6xl px-6 sm:py-28">
+    <section class="sm:pt-10">
       <div class="card bg-surface px-8 py-14 text-center sm:px-10 sm:py-20">
         <h2
           class="mx-auto max-w-2xl text-3xl font-bold tracking-tight sm:text-5xl sm:leading-[1.08]"
