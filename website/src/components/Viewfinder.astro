@@ -1,0 +1,201 @@
+---
+// The signature element: a simulated webcam preview showing what OpenEffects does —
+// a sharp subject over a bokeh-blurred room, framed by a viewfinder HUD.
+const chips = [
+  { label: "Portrait", on: true },
+  { label: "Center Stage", on: true },
+  { label: "Studio Light", on: true },
+  { label: "Reactions", on: false },
+];
+---
+
+<div
+  class="relative aspect-16/11 w-full overflow-hidden rounded-2xl border border-haze/15 bg-ink-2 shadow-lens select-none"
+  role="img"
+  aria-label="OpenEffects webcam preview: a subject kept sharp and centered while the background is blurred, with portrait, center stage and studio light effects enabled."
+>
+  <!-- blurred room (background) -->
+  <div class="absolute inset-0 scale-110 blur-2xl">
+    <div
+      class="absolute inset-0"
+      style="background: radial-gradient(120% 90% at 25% 20%, #1f3a54 0%, #12202f 45%, #0b131c 100%);"
+    >
+    </div>
+    <div class="bokeh absolute inset-0">
+      <span
+        class="absolute left-[12%] top-[22%] h-24 w-24 rounded-full bg-lens/40 blur-2xl"
+      ></span>
+      <span
+        class="absolute left-[68%] top-[14%] h-32 w-32 rounded-full bg-haze/30 blur-2xl"
+      ></span>
+      <span
+        class="absolute left-[80%] top-[55%] h-28 w-28 rounded-full bg-record/25 blur-2xl"
+      ></span>
+      <span
+        class="absolute left-[6%] top-[62%] h-24 w-24 rounded-full bg-lens-deep/40 blur-2xl"
+      ></span>
+      <span
+        class="absolute left-[46%] top-[8%] h-20 w-20 rounded-full bg-white/15 blur-2xl"
+      ></span>
+      <span
+        class="absolute left-[38%] top-[70%] h-24 w-24 rounded-full bg-lens/25 blur-2xl"
+      ></span>
+    </div>
+  </div>
+
+  <!-- soft vignette to seat the subject -->
+  <div
+    class="absolute inset-0"
+    style="background: radial-gradient(80% 70% at 50% 62%, transparent 40%, rgba(4,10,18,0.55) 100%);"
+  >
+  </div>
+
+  <!-- subject (sharp) -->
+  <svg
+    class="absolute bottom-0 left-1/2 h-[86%] w-auto -translate-x-1/2"
+    viewBox="0 0 220 190"
+    fill="none"
+    style="filter: drop-shadow(0 6px 22px rgba(86,167,234,0.35)) drop-shadow(0 -1px 0 rgba(255,255,255,0.25));"
+    aria-hidden="true"
+  >
+    <defs>
+      <linearGradient
+        id="vf-subject"
+        x1="110"
+        y1="8"
+        x2="110"
+        y2="190"
+        gradientUnits="userSpaceOnUse"
+      >
+        <stop offset="0" stop-color="#f4f9fe"></stop>
+        <stop offset="0.65" stop-color="#cfe4f6"></stop>
+        <stop offset="1" stop-color="#8fb6d8"></stop>
+      </linearGradient>
+    </defs>
+    <path
+      d="M14 190 C14 138 55 112 110 112 C165 112 206 138 206 190 Z"
+      fill="url(#vf-subject)"></path>
+    <circle cx="110" cy="60" r="44" fill="url(#vf-subject)"></circle>
+    <!-- rim / studio light on the left edge -->
+    <path
+      d="M76 34 A44 44 0 0 0 76 86"
+      stroke="#fff"
+      stroke-opacity="0.5"
+      stroke-width="3"
+      stroke-linecap="round"></path>
+  </svg>
+
+  <!-- rule-of-thirds grid -->
+  <svg
+    class="absolute inset-0 h-full w-full text-haze/15"
+    aria-hidden="true"
+    preserveAspectRatio="none"
+  >
+    <line
+      x1="33.33%"
+      y1="0"
+      x2="33.33%"
+      y2="100%"
+      stroke="currentColor"
+      stroke-width="1"></line>
+    <line
+      x1="66.66%"
+      y1="0"
+      x2="66.66%"
+      y2="100%"
+      stroke="currentColor"
+      stroke-width="1"></line>
+    <line
+      x1="0"
+      y1="33.33%"
+      x2="100%"
+      y2="33.33%"
+      stroke="currentColor"
+      stroke-width="1"></line>
+    <line
+      x1="0"
+      y1="66.66%"
+      x2="100%"
+      y2="66.66%"
+      stroke="currentColor"
+      stroke-width="1"></line>
+  </svg>
+
+  <!-- scan line -->
+  <div
+    class="scan absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-lens/60 to-transparent"
+  >
+  </div>
+
+  <!-- corner focus brackets -->
+  <span
+    class="absolute left-3 top-3 h-5 w-5 border-l-2 border-t-2 border-haze/60"
+  ></span>
+  <span
+    class="absolute right-3 top-3 h-5 w-5 border-r-2 border-t-2 border-haze/60"
+  ></span>
+  <span
+    class="absolute bottom-3 left-3 h-5 w-5 border-b-2 border-l-2 border-haze/60"
+  ></span>
+  <span
+    class="absolute bottom-3 right-3 h-5 w-5 border-b-2 border-r-2 border-haze/60"
+  ></span>
+
+  <!-- autofocus reticle over the face -->
+  <svg
+    class="reticle-pulse absolute left-1/2 top-[26%] h-14 w-14 -translate-x-1/2 text-lens"
+    viewBox="0 0 100 100"
+    fill="none"
+    aria-hidden="true"
+  >
+    <path
+      d="M12 28 V12 H28 M72 12 H88 V28 M88 72 V88 H72 M28 88 H12 V72"
+      stroke="currentColor"
+      stroke-width="3"
+      stroke-linecap="round"></path>
+    <circle cx="50" cy="50" r="2.5" fill="currentColor"></circle>
+  </svg>
+
+  <!-- HUD: record + resolution -->
+  <div
+    class="absolute left-4 top-3.5 flex items-center gap-2 font-mono text-[11px] tracking-wider text-paper/90"
+  >
+    <span
+      class="rec-dot inline-block h-2.5 w-2.5 rounded-full bg-record shadow-[0_0_10px_2px_rgba(255,233,77,0.7)]"
+    ></span>
+    REC
+  </div>
+  <div
+    class="absolute right-4 top-3.5 font-mono text-[11px] tracking-wider text-paper/70"
+  >
+    1080P · 30FPS
+  </div>
+
+  <!-- HUD: effect toggles -->
+  <div
+    class="absolute inset-x-0 bottom-0 flex flex-wrap items-center gap-1.5 p-3 sm:gap-2 sm:p-4"
+  >
+    {
+      chips.map((chip) => (
+        <span
+          class:list={[
+            "inline-flex items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[10px] uppercase tracking-wider sm:text-[11px]",
+            chip.on
+              ? "border-lens/50 bg-lens/15 text-paper"
+              : "border-haze/15 bg-white/5 text-muted",
+          ]}
+        >
+          <span
+            class:list={[
+              "h-1.5 w-1.5 rounded-full",
+              chip.on
+                ? "bg-lens shadow-[0_0_8px_1px_rgba(86,167,234,0.8)]"
+                : "bg-muted/60",
+            ]}
+          />
+          {chip.label}
+        </span>
+      ))
+    }
+  </div>
+</div>

@@ -1,0 +1,47 @@
+---
+interface Props {
+  code: string;
+  label?: string;
+  class?: string;
+}
+const { code, label, class: className } = Astro.props;
+---
+
+<div
+  class:list={[
+    "group relative overflow-hidden rounded-xl border border-line/70 bg-ink-2",
+    className,
+  ]}
+>
+  {
+    label && (
+      <div class="flex items-center gap-2 border-b border-line/60 px-4 py-2 font-mono text-[11px] uppercase tracking-wider text-muted">
+        <span class="h-1.5 w-1.5 rounded-full bg-lens/70" />
+        {label}
+      </div>
+    )
+  }
+  <button
+    class="copy-btn absolute right-2.5 top-2.5 z-10 inline-flex items-center gap-1.5 rounded-md border border-line/70 bg-panel/80 px-2.5 py-1 font-mono text-[11px] text-muted backdrop-blur transition-colors hover:border-lens/50 hover:text-paper"
+    data-clipboard={code}
+    aria-label="Copy to clipboard"
+    style={label ? "top: 2.75rem;" : ""}
+  >
+    <svg
+      class="copy-icon h-3.5 w-3.5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="9" y="9" width="11" height="11" rx="2"></rect><path
+        d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"></path>
+    </svg>
+    <span class="copy-label">Copy</span>
+  </button>
+  <pre
+    class="overflow-x-auto p-4 pr-20 font-mono text-[0.84rem] leading-relaxed text-paper/90"><code>{code}</code></pre>
+</div>

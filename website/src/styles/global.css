@@ -1,0 +1,260 @@
+@import "tailwindcss";
+
+/* ---- Theme tokens (camera-native, pulled from the OpenEffects lens logo) ---- */
+@theme {
+  --color-ink: #0a0e13;
+  --color-ink-2: #0d1219;
+  --color-panel: #10161e;
+  --color-panel-2: #172230;
+  --color-line: #223042;
+  --color-lens: #56a7ea;
+  --color-lens-deep: #1873b5;
+  --color-record: #ffe94d;
+  --color-haze: #91c1e6;
+  --color-paper: #e8eff7;
+  --color-muted: #8697a8;
+
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+
+  --shadow-lens: 0 30px 80px -30px rgba(24, 115, 181, 0.55);
+}
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-ink);
+    color: var(--color-paper);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-lens) 35%, transparent);
+    color: #fff;
+  }
+
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-lens);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+}
+
+/* ---- Reusable pieces ---- */
+@layer components {
+
+  /* mono eyebrow with a viewfinder focus-bracket tick */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--color-lens);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .eyebrow::before {
+    content: "";
+    width: 14px;
+    height: 8px;
+    border-left: 2px solid currentColor;
+    border-top: 2px solid currentColor;
+    opacity: 0.9;
+  }
+
+  /* thin viewfinder hairline */
+  .hairline {
+    border-color: color-mix(in oklab, var(--color-haze) 14%, transparent);
+  }
+
+  .card {
+    background: linear-gradient(180deg, var(--color-panel) 0%, var(--color-ink-2) 100%);
+    border: 1px solid color-mix(in oklab, var(--color-haze) 12%, transparent);
+    border-radius: 1rem;
+  }
+
+  /* focus corner brackets used around the viewfinder + feature glyphs */
+  .brackets::before,
+  .brackets::after {
+    content: "";
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    border: 2px solid color-mix(in oklab, var(--color-haze) 55%, transparent);
+    pointer-events: none;
+  }
+
+  .brackets::before {
+    top: 12px;
+    left: 12px;
+    border-right: 0;
+    border-bottom: 0;
+  }
+
+  .brackets::after {
+    bottom: 12px;
+    right: 12px;
+    border-left: 0;
+    border-top: 0;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    border-radius: 0.75rem;
+    padding: 0.8rem 1.35rem;
+    transition: transform 0.15s ease, background-color 0.2s ease, border-color 0.2s ease;
+  }
+
+  .btn:active {
+    transform: translateY(1px);
+  }
+
+  .btn-primary {
+    background: linear-gradient(180deg, var(--color-lens) 0%, var(--color-lens-deep) 100%);
+    color: #04121f;
+    box-shadow: 0 12px 30px -12px rgba(86, 167, 234, 0.7);
+  }
+
+  .btn-primary:hover {
+    background: linear-gradient(180deg, #6bb4ef 0%, #1d82c9 100%);
+  }
+
+  .btn-ghost {
+    background: color-mix(in oklab, var(--color-haze) 6%, transparent);
+    border: 1px solid color-mix(in oklab, var(--color-haze) 22%, transparent);
+    color: var(--color-paper);
+  }
+
+  .btn-ghost:hover {
+    border-color: color-mix(in oklab, var(--color-lens) 55%, transparent);
+    background: color-mix(in oklab, var(--color-lens) 10%, transparent);
+  }
+
+  .tab {
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.6rem;
+    border: 1px solid transparent;
+    color: var(--color-muted);
+    transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+    cursor: pointer;
+  }
+
+  .tab:hover {
+    color: var(--color-paper);
+  }
+
+  .tab.is-active {
+    color: var(--color-paper);
+    background: color-mix(in oklab, var(--color-lens) 12%, transparent);
+    border-color: color-mix(in oklab, var(--color-lens) 40%, transparent);
+  }
+}
+
+/* ---- Signature: the live viewfinder ---- */
+.reticle-pulse {
+  animation: reticle 4.5s ease-in-out infinite;
+}
+
+.rec-dot {
+  animation: rec 1.6s steps(1, end) infinite;
+}
+
+.bokeh {
+  animation: drift 14s ease-in-out infinite alternate;
+}
+
+.scan {
+  animation: scan 6s linear infinite;
+}
+
+@keyframes reticle {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+
+  50% {
+    transform: scale(0.92);
+    opacity: 1;
+  }
+}
+
+@keyframes rec {
+
+  0%,
+  60% {
+    opacity: 1;
+  }
+
+  61%,
+  100% {
+    opacity: 0.25;
+  }
+}
+
+@keyframes drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+
+  to {
+    transform: translate3d(-18px, 12px, 0);
+  }
+}
+
+@keyframes scan {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+
+  8% {
+    opacity: 1;
+  }
+
+  92% {
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(2000%);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .reticle-pulse,
+  .rec-dot,
+  .bokeh,
+  .scan {
+    animation: none !important;
+  }
+}
