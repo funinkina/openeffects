@@ -6,7 +6,7 @@ import Carousel from "../components/Carousel.astro";
 import FeatureCard from "../components/FeatureCard.astro";
 import CodeBlock from "../components/CodeBlock.astro";
 import FlathubBadge from "../components/FlathubBadge.astro";
-import { GITHUB, RELEASES, DOCS, FLATHUB, ghPath } from "../consts";
+import { RELEASES, DOCS, FLATHUB, ghPath } from "../consts";
 
 // Monochrome brand marks (Simple Icons) for the "works with" strip.
 const appIcons = [
@@ -138,9 +138,9 @@ openeffectsctl toggle reactions`;
 
   <main id="main">
     <section class="relative w-full overflow-x-hidden">
-      <div class="mx-auto max-w-3xl px-6 pt-16 text-center sm:pt-24">
+      <div class="mx-auto max-w-4xl px-6 pt-16 text-center sm:pt-24">
         <h1
-          class="mx-auto text-6xl font-black leading-[1.05] tracking-tight sm:text-6xl"
+          class="mx-auto text-6xl font-black leading-[1.05] tracking-tight sm:text-7xl"
         >
           Your next video call deserves
           <span class="text-accent"> the best.</span>
@@ -218,7 +218,7 @@ openeffectsctl toggle reactions`;
     >
       <span
         aria-hidden="true"
-        class="pointer-events-none absolute bottom-28 left-0 -z-10 hidden rotate-180 text-8xl font-black tracking-tight text-[#dce7f0] [writing-mode:vertical-rl] lg:block"
+        class="pointer-events-none absolute bottom-28 left-0 -z-10 hidden rotate-180 text-8xl font-black tracking-tight text-accent/10 [writing-mode:vertical-rl] lg:block"
         >OVERVIEW</span
       >
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
@@ -276,7 +276,7 @@ openeffectsctl toggle reactions`;
     >
       <span
         aria-hidden="true"
-        class="pointer-events-none absolute bottom-28 left-0 -z-10 hidden rotate-180 text-8xl font-black tracking-tight text-[#dce7f0] [writing-mode:vertical-rl] lg:block"
+        class="pointer-events-none absolute bottom-28 left-0 -z-10 hidden rotate-180 text-8xl font-black tracking-tight text-accent/10 [writing-mode:vertical-rl] lg:block"
         >FEATURES</span
       >
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
@@ -308,7 +308,7 @@ openeffectsctl toggle reactions`;
     <section id="install" class="relative isolate scroll-mt-20 overflow-hidden">
       <span
         aria-hidden="true"
-        class="pointer-events-none absolute bottom-28 left-0 -z-10 hidden rotate-180 text-8xl font-black tracking-tight text-[#dce7f0] [writing-mode:vertical-rl] lg:block"
+        class="pointer-events-none absolute bottom-28 left-0 -z-10 hidden rotate-180 text-8xl font-black tracking-tight text-accent/10 [writing-mode:vertical-rl] lg:block"
         >INSTALL</span
       >
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
@@ -398,26 +398,6 @@ openeffectsctl toggle reactions`;
             </p>
             <CodeBlock code={cli} label="openeffectsctl" />
           </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="sm:pt-10">
-      <div class="card bg-surface px-8 py-14 text-center sm:px-10 sm:py-20">
-        <h2
-          class="mx-auto max-w-2xl text-3xl font-bold tracking-tight sm:text-5xl sm:leading-[1.08]"
-        >
-          Your next call deserves a better camera.
-        </h2>
-        <p class="mx-auto mt-5 max-w-lg leading-relaxed text-muted">
-          Free and open source. Install once and every app on your desktop gets
-          the upgrade.
-        </p>
-        <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <FlathubBadge href={FLATHUB} />
-          <a href={GITHUB} class="btn btn-ghost h-13 rounded-xl py-0 sm:h-14"
-            >View source</a
-          >
         </div>
       </div>
     </section>

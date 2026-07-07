@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
-/* ---- Light, flat theme. Sharp corners, no gradients/shadows, Inter only.
+/* ---- Light, flat theme. Sharp corners, no gradients/shadows. Inter for UI,
+   system monospace for code (<code>/<pre>).
    The lens/haze/record/lens-deep tokens exist ONLY for the Viewfinder,
    the single dark, rounded, non-flat element (the simulated screenshot). ---- */
 @theme {
@@ -22,7 +23,8 @@
 
   --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono",
+    "Fira Code", Menlo, Consolas, "Liberation Mono", monospace;
 
   --shadow-lens: 0 24px 60px -28px rgba(20, 24, 29, 0.35);
 }
