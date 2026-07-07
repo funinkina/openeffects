@@ -5,7 +5,10 @@
 //!    blended by the person mask, so only the subject is lit (the background
 //!    keeps its original exposure).
 //! 2. **Portrait blur** / **Background replace** — `out = fg·mask + bg·(1-mask)`
-//!    where `bg` is either a box-blurred copy of the frame or a user image/color.
+//!    where `bg` is a user image/color, or — for blur — a box blur of the
+//!    frame *weighted by the background mask* so the subject's own pixels are
+//!    excluded from it (otherwise the person's colors bleed outward under the
+//!    blur and leave a halo ring around the composited subject).
 //! 3. **Center Stage** — a YuNet face box drives an EMA-smoothed, deadzoned
 //!    crop+zoom that keeps the face centered without distorting the aspect ratio.
 //!
@@ -786,11 +789,27 @@ mod imp {
             // background is low-frequency by construction, so the result is
             // visually identical at a fraction of the full-resolution cost
             // (the dominant per-frame load when blur is on).
+            //
+            // The blur is *background-weighted*: each pixel is premultiplied by
+            // its background weight `255-mask` before the box passes, and the
+            // weight is carried in alpha and blurred alongside, so the composite
+            // can normalize (`rgb·255/alpha`) to a weighted mean that ignores
+            // the subject. Blurring the raw frame instead would smear the
+            // person's colors into the background and halo the edge (#1).
             let radius = blur_radius(state.settings.blur_strength);
             let scale = blur_scale(radius);
             let lw = w.div_ceil(scale).max(1);
             let lh = h.div_ceil(scale).max(1);
-            downsample(img, w, h, scale, &mut state.blur_low, lw, lh);
+            downsample_masked(
+                img,
+                &state.mask_lut,
+                w,
+                h,
+                scale,
+                &mut state.blur_low,
+                lw,
+                lh,
+            );
             box_blur(
                 &mut state.blur_low,
                 &mut state.blur_tmp,
@@ -1300,8 +1319,15 @@ mod imp {
         }
     }
 
-    /// Composite the low-res blurred background behind the subject, bilinearly
-    /// upsampling it on the fly (no full-resolution intermediate buffer).
+    /// Composite the low-res, background-weighted blurred background behind the
+    /// subject, bilinearly upsampling it on the fly (no full-resolution
+    /// intermediate buffer). The `low` buffer holds premultiplied color in RGB
+    /// and the summed background weight in alpha (see `downsample_masked`); the
+    /// true background color is recovered as `rgb·255/alpha` — a weighted mean
+    /// that excludes the subject, so no person color halos the edge. Where the
+    /// blur neighborhood was entirely subject (alpha ≈ 0) there is no
+    /// background to show, but such pixels are deep inside the person (mask ≈
+    /// 255) and contribute almost nothing to the blend.
     #[allow(clippy::too_many_arguments)]
     fn composite_low(
         fg: &mut [u8],
@@ -1322,13 +1348,20 @@ mod imp {
                     continue;
                 }
                 let su = (x as f32 + 0.5) * inv - 0.5;
-                let mut bg = [0u8; 4];
-                sample_bilinear(low, lw, lh, su, sv, &mut bg);
+                let mut s = [0u8; 4];
+                sample_bilinear(low, lw, lh, su, sv, &mut s);
+                let wbg = s[3] as u32;
                 let p = (y * w + x) * 4;
                 let m = m as u32;
                 for c in 0..3 {
-                    fg[p + c] =
-                        ((fg[p + c] as u32 * m + bg[c] as u32 * (255 - m) + 127) / 255) as u8;
+                    // Un-premultiply: bg = premul·255 / weight. Fall back to the
+                    // foreground when the neighborhood had no background weight.
+                    let bg = if wbg > 0 {
+                        (s[c] as u32 * 255 / wbg).min(255)
+                    } else {
+                        fg[p + c] as u32
+                    };
+                    fg[p + c] = ((fg[p + c] as u32 * m + bg * (255 - m) + 127) / 255) as u8;
                 }
             }
         }
@@ -1350,10 +1383,17 @@ mod imp {
         }
     }
 
-    /// Box-average the frame down by `scale` into `dst` (RGB only; the
-    /// composite never reads background alpha).
-    fn downsample(
+    /// Box-average the frame down by `scale` into `dst`, weighting every pixel
+    /// by its background weight `wbg = 255 - mask` so the subject's pixels are
+    /// kept out of the blurred background (the fix for the edge halo). RGB holds
+    /// the premultiplied average `mean(color · wbg/255)`; alpha holds the mean
+    /// weight `mean(wbg)`. Downstream the background color is recovered as
+    /// `rgb·255/alpha`, i.e. the weighted mean of the background pixels alone —
+    /// person pixels (wbg ≈ 0) drop out. `box_blur` then blurs all four channels
+    /// so premul and weight stay consistent under the blur.
+    fn downsample_masked(
         src: &[u8],
+        lut: &[u8],
         w: usize,
         h: usize,
         scale: usize,
@@ -1369,28 +1409,36 @@ mod imp {
                 let x0 = x * scale;
                 let x1 = (x0 + scale).min(w);
                 let mut acc = [0u32; 3];
+                let mut wsum = 0u32;
                 for sy in y0..y1 {
                     let row = sy * w;
                     for sx in x0..x1 {
-                        let p = (row + sx) * 4;
-                        acc[0] += src[p] as u32;
-                        acc[1] += src[p + 1] as u32;
-                        acc[2] += src[p + 2] as u32;
+                        let idx = row + sx;
+                        let wbg = 255 - lut[idx] as u32;
+                        let p = idx * 4;
+                        acc[0] += src[p] as u32 * wbg;
+                        acc[1] += src[p + 1] as u32 * wbg;
+                        acc[2] += src[p + 2] as u32 * wbg;
+                        wsum += wbg;
                     }
                 }
                 let n = ((y1 - y0) * (x1 - x0)) as u32;
                 let d = (y * lw + x) * 4;
-                dst[d] = (acc[0] / n) as u8;
-                dst[d + 1] = (acc[1] / n) as u8;
-                dst[d + 2] = (acc[2] / n) as u8;
-                dst[d + 3] = 255;
+                // Premultiplied color in 0..255: mean over the block of
+                // color·(wbg/255). Alpha carries the mean background weight.
+                dst[d] = (acc[0] / n / 255) as u8;
+                dst[d + 1] = (acc[1] / n / 255) as u8;
+                dst[d + 2] = (acc[2] / n / 255) as u8;
+                dst[d + 3] = (wsum / n) as u8;
             }
         }
     }
 
     /// Separable box blur (two passes ≈ triangle kernel) in place, ping-ponging
     /// through `tmp`. Per-row/column prefix sums keep cost independent of
-    /// radius; only RGB is blurred (alpha is never read back).
+    /// radius. All four channels are blurred: RGB carries premultiplied color
+    /// and alpha carries the background weight, and both must see the same blur
+    /// so the composite's un-premultiply stays correct (see `downsample_masked`).
     fn box_blur(
         buf: &mut [u8],
         tmp: &mut Vec<u8>,
@@ -1418,7 +1466,7 @@ mod imp {
         // every (row, channel) to avoid per-iteration allocation on the hot path.
         for y in 0..h {
             let base = y * w * 4;
-            for c in 0..3 {
+            for c in 0..4 {
                 for x in 0..w {
                     prefix[x + 1] = prefix[x] + src[base + x * 4 + c] as i32;
                 }
@@ -1435,7 +1483,7 @@ mod imp {
     fn box_blur_v(src: &[u8], dst: &mut [u8], prefix: &mut [i32], w: usize, h: usize, r: usize) {
         let row = w * 4;
         for x in 0..w {
-            for c in 0..3 {
+            for c in 0..4 {
                 for y in 0..h {
                     prefix[y + 1] = prefix[y] + src[y * row + x * 4 + c] as i32;
                 }
@@ -1603,6 +1651,57 @@ mod imp {
             let top = a + (b - a) * tx;
             let bot = cc + (d - cc) * tx;
             out[c] = (top + (bot - top) * ty).round() as u8;
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        /// Regression for #1: portrait blur must not bleed the subject's color
+        /// into the blurred background (the halo). A red subject on a blue
+        /// background, blurred with the background-weighted path, leaves the
+        /// background pure blue right up to the subject edge — a plain blur of
+        /// the whole frame would smear red into that band.
+        #[test]
+        fn blurred_background_excludes_subject() {
+            let (w, h) = (16usize, 16usize);
+            let mut img = vec![0u8; w * h * 4];
+            let mut lut = vec![0u8; w * h];
+            for y in 0..h {
+                for x in 0..w {
+                    let person = (5..11).contains(&x) && (5..11).contains(&y);
+                    let p = (y * w + x) * 4;
+                    if person {
+                        img[p] = 255; // red subject
+                        lut[y * w + x] = 255;
+                    } else {
+                        img[p + 2] = 255; // blue background
+                    }
+                    img[p + 3] = 255;
+                }
+            }
+
+            let mut low = Vec::new();
+            let mut tmp = Vec::new();
+            let mut prefix = Vec::new();
+            downsample_masked(&img, &lut, w, h, 1, &mut low, w, h);
+            box_blur(&mut low, &mut tmp, &mut prefix, w, h, 4);
+
+            let mut out = img.clone();
+            composite_low(&mut out, &low, w, h, 1, &lut, w, h);
+
+            // Background pixel hugging the subject's left edge: no red leak.
+            let edge = (8 * w + 4) * 4;
+            assert_eq!(
+                out[edge], 0,
+                "subject color bled into the background (halo)"
+            );
+            assert!(out[edge + 2] >= 250, "background color was lost");
+
+            // Subject interior is untouched (fully foreground).
+            let inside = (8 * w + 8) * 4;
+            assert_eq!(&out[inside..inside + 3], &[255, 0, 0]);
         }
     }
 }
