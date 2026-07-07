@@ -1,38 +1,29 @@
 ---
-// Coverflow-style hero carousel: the active card sits in front, the previous
-// and next cards peek out behind it on the left and right. No arrows — tap a
-// side card or a dot to advance. Placeholder art for now; swap `from`/`to`
-// (or drop in an <img>) once real screenshots exist.
 const slides = [
   {
     title: "Portrait Mode",
     caption: "Blurred room, sharp you",
-    from: "#f5b301",
-    to: "#e08a00",
+    image: "/hero/sample.webp",
   },
   {
     title: "Center Stage",
     caption: "Stay framed as you move",
-    from: "#2f6df6",
-    to: "#1146c8",
+    image: "/hero/sample-2.webp",
   },
   {
-    title: "Background",
+    title: "Background Replacement",
     caption: "Swap your room for anything",
-    from: "#ef5350",
-    to: "#c62828",
+    image: "/hero/backgrounds.webp",
   },
   {
     title: "Studio Light",
     caption: "Soft, even lighting",
-    from: "#14a37f",
-    to: "#0b6e56",
+    image: "/hero/studio.webp",
   },
   {
     title: "Reactions",
     caption: "Wave, thumbs-up, heart, whatever your hands desire!",
-    from: "#a855f7",
-    to: "#6b21a8",
+    image: "/hero/reactions.webp",
   },
 ];
 ---
@@ -45,14 +36,20 @@ const slides = [
     {
       slides.map((s, i) => (
         <figure
-          class="carousel-slide absolute left-1/2 top-0 aspect-16/10 w-[82vw] max-w-155 cursor-pointer overflow-hidden rounded-3xl shadow-2xl"
-          style={`background: radial-gradient(120% 100% at 30% 20%, ${s.from} 0%, ${s.to} 100%);`}
+          class="carousel-slide absolute left-1/2 top-0 aspect-16/10 w-[82vw] max-w-155 cursor-pointer overflow-hidden rounded-3xl bg-surface shadow-2xl"
           data-slide={i}
         >
-          <div
-            class="absolute inset-0"
-            style="background: radial-gradient(70% 60% at 50% 40%, rgba(255,255,255,0.14), transparent 70%);"
+          <img
+            src={s.image}
+            alt={s.title}
+            width="640"
+            height="360"
+            loading={i === 0 ? "eager" : "lazy"}
+            decoding="async"
+            fetchpriority={i === 0 ? "high" : "auto"}
+            class="absolute inset-0 h-full w-full object-cover"
           />
+          <div class="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-linear-to-t from-black/70 via-black/25 to-transparent" />
           <figcaption class="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-6 text-left sm:p-8">
             <div>
               <p class="text-xl font-bold text-white sm:text-2xl">{s.title}</p>
@@ -115,6 +112,13 @@ const slides = [
         if (rel > n / 2) rel -= n;
         if (rel < -n / 2) rel += n;
 
+        const depth = Math.abs(rel);
+        const dir = Math.sign(rel);
+        const offset = [0, 24, 44];
+        const scaleAt = [1, 0.85, 0.72];
+        const brightAt = [1, 0.72, 0.52];
+        const zAt = [30, 20, 10];
+
         let x = 0,
           scale = 1,
           opacity = 1,
@@ -122,31 +126,18 @@ const slides = [
           brightness = 1;
         let interactive = false;
 
-        if (rel === 0) {
-          x = 0;
-          scale = 1;
+        if (depth <= 2) {
+          x = dir * offset[depth];
+          scale = scaleAt[depth];
+          brightness = brightAt[depth];
+          z = zAt[depth];
           opacity = 1;
-          z = 30;
-          brightness = 1;
-        } else if (rel === -1) {
-          x = -42;
-          scale = 0.85;
-          opacity = 1;
-          z = 20;
-          brightness = 0.68;
-          interactive = true;
-        } else if (rel === 1) {
-          x = 42;
-          scale = 0.85;
-          opacity = 1;
-          z = 20;
-          brightness = 0.68;
-          interactive = true;
+          interactive = depth !== 0;
         } else {
-          x = rel < 0 ? -60 : 60;
-          scale = 0.7;
+          x = dir * 52;
+          scale = 0.62;
           opacity = 0;
-          z = 10;
+          z = 5;
           brightness = 0.5;
         }
 
