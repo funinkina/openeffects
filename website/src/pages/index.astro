@@ -109,14 +109,6 @@ const components = [
   },
 ];
 
-const specs = [
-  ["Platform", "Linux"],
-  ["Speed", "Real-time"],
-  ["Hardware", "No GPU"],
-  ["Privacy", "On-device"],
-  ["License", "Free & open"],
-];
-
 const install = {
   flatpak: "flatpak install flathub in.co.funinkina.OpenEffects",
   arch: "sudo pacman -U openeffectsd-*-x86_64.pkg.tar.zst openeffects-*-x86_64.pkg.tar.zst",
@@ -262,38 +254,8 @@ const ghPath =
       </div>
     </section>
 
-    <!-- ================= FEATURES ================= -->
-    <section
-      id="features"
-      class="mx-auto max-w-6xl scroll-mt-20 px-6 py-20 sm:py-28"
-    >
-      <div class="max-w-2xl">
-        <span class="eyebrow">The effects</span>
-        <h2
-          class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]"
-        >
-          Everything a modern camera does — <span class="text-muted"
-            >without the closed-source camera app.</span
-          >
-        </h2>
-      </div>
-
-      <div class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {
-          features.map((f) => (
-            <FeatureCard
-              icon={f.icon}
-              title={f.title}
-              body={f.body}
-              badge={f.badge}
-            />
-          ))
-        }
-      </div>
-    </section>
-
     <!-- ================= OVERVIEW ================= -->
-    <section id="overview" class="scroll-mt-20 border-y border-line bg-surface">
+    <section id="overview" class="scroll-mt-20">
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
         <div class="max-w-2xl">
           <span class="eyebrow">Overview</span>
@@ -344,55 +306,40 @@ const ghPath =
       </div>
     </section>
 
-    <!-- ================= PERFORMANCE / PRIVACY ================= -->
-    <section class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
-      <div class="grid gap-4 lg:grid-cols-2">
-        <div class="card p-8 sm:p-10">
-          <span class="eyebrow">Performance</span>
-          <p class="mt-6 text-6xl font-bold tracking-tight text-fg sm:text-7xl">
-            2–5<span class="ml-2 align-baseline text-2xl font-medium text-muted"
-              >ms / frame</span
+    <!-- ================= FEATURES ================= -->
+    <section
+      id="features"
+      class="scroll-mt-20 border-y border-line bg-surface"
+    >
+      <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
+        <div class="max-w-2xl">
+          <span class="eyebrow">Features</span>
+          <h2
+            class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]"
+          >
+            Everything a modern camera does — <span class="text-muted"
+              >without the closed-source camera app.</span
             >
-          </p>
-          <p class="mt-5 max-w-md leading-relaxed text-muted">
-            Runs smoothly on a normal laptop processor. The effects are light
-            enough that a dedicated graphics card would only slow things down.
-            None required.
-          </p>
+          </h2>
         </div>
 
-        <div class="card p-8 sm:p-10">
-          <span class="eyebrow">Privacy</span>
-          <p class="mt-6 text-6xl font-bold tracking-tight text-fg sm:text-7xl">
-            0<span class="ml-2 align-baseline text-2xl font-medium text-muted"
-              >bytes leave</span
-            >
-          </p>
-          <p class="mt-5 max-w-md leading-relaxed text-muted">
-            No tracking, no accounts, no cloud. Every effect is computed on your
-            own machine, and your camera feed never leaves it.
-          </p>
+        <div class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {
+            features.map((f) => (
+              <FeatureCard
+                icon={f.icon}
+                title={f.title}
+                body={f.body}
+                badge={f.badge}
+              />
+            ))
+          }
         </div>
       </div>
-
-      <dl
-        class="mt-4 grid grid-cols-2 gap-px border border-line bg-line sm:grid-cols-3 lg:grid-cols-5"
-      >
-        {
-          specs.map(([k, v]) => (
-            <div class="flex flex-col gap-1 bg-page px-5 py-4">
-              <dt class="text-[10px] uppercase tracking-wider text-muted">
-                {k}
-              </dt>
-              <dd class="text-[0.95rem] font-semibold text-fg">{v}</dd>
-            </div>
-          ))
-        }
-      </dl>
     </section>
 
     <!-- ================= INSTALL ================= -->
-    <section id="install" class="scroll-mt-20 border-t border-line bg-surface">
+    <section id="install" class="scroll-mt-20">
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
         <div class="grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
           <div>
