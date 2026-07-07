@@ -8,6 +8,8 @@ const GITHUB = "https://github.com/funinkina/openeffects";
 const RELEASES = `${GITHUB}/releases/latest`;
 const DOCS = `${GITHUB}/blob/main/docs/cli.md`;
 const LICENSE = `${GITHUB}/blob/main/LICENSE`;
+// Placeholder — swap for the real Flathub URL once the app is published.
+const FLATHUB = "https://flathub.org/apps/in.co.funinkina.OpenEffects";
 
 const apps = [
   "Zoom",
@@ -67,26 +69,10 @@ const features: {
 ];
 
 const pipeline = [
-  {
-    n: "01",
-    title: "Capture",
-    body: "Your camera, opened through xdg-desktop-portal.",
-  },
-  {
-    n: "02",
-    title: "Infer",
-    body: "Selfie, face and hand models run on the CPU.",
-  },
-  {
-    n: "03",
-    title: "Composite",
-    body: "GStreamer blends the effect into each frame.",
-  },
-  {
-    n: "04",
-    title: "Publish",
-    body: "Back out over PipeWire and v4l2loopback.",
-  },
+  { n: "01", title: "Capture", body: "Your camera, opened through xdg-desktop-portal." },
+  { n: "02", title: "Infer", body: "Selfie, face and hand models run on the CPU." },
+  { n: "03", title: "Composite", body: "GStreamer blends the effect into each frame." },
+  { n: "04", title: "Publish", body: "Back out over PipeWire and v4l2loopback." },
 ];
 
 const components = [
@@ -116,11 +102,10 @@ const specs = [
 ];
 
 const install = {
+  flatpak: "flatpak install flathub in.co.funinkina.OpenEffects",
   arch: "sudo pacman -U openeffectsd-*-x86_64.pkg.tar.zst openeffects-*-x86_64.pkg.tar.zst",
-  fedora:
-    "sudo dnf install ./openeffectsd-*.x86_64.rpm ./openeffects-*.x86_64.rpm",
-  ubuntu:
-    "sudo apt install ./openeffectsd_*_amd64.deb ./openeffects_*_amd64.deb",
+  fedora: "sudo dnf install ./openeffectsd-*.x86_64.rpm ./openeffects-*.x86_64.rpm",
+  ubuntu: "sudo apt install ./openeffectsd_*_amd64.deb ./openeffects_*_amd64.deb",
 };
 
 const cli = `openeffectsctl portrait-blur --on --strength 70
@@ -128,150 +113,77 @@ openeffectsctl center-stage --zoom tight
 openeffectsctl background ~/Pictures/office.jpg
 openeffectsctl react thumbs-up
 openeffectsctl toggle reactions`;
+
+const ghPath =
+  "M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05a9.36 9.36 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z";
 ---
 
 <Layout>
   <!-- ================= NAV ================= -->
-  <header
-    class="sticky top-0 z-40 border-b border-haze/10 bg-ink/80 backdrop-blur-md"
-  >
-    <nav
-      class="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5"
-    >
-      <a
-        href="/"
-        class="flex items-center gap-2.5"
-        aria-label="OpenEffects home"
-      >
-        <img
-          src="/openeffects.svg"
-          alt=""
-          width="30"
-          height="30"
-          class="rounded-md"
-        />
-        <span class="font-display text-[1.05rem] font-semibold tracking-tight"
-          >OpenEffects</span
-        >
+  <header class="sticky top-0 z-40 border-b border-line bg-page">
+    <nav class="mx-auto flex max-w-6xl items-center justify-between px-6 py-3.5">
+      <a href="/" class="flex items-center gap-2.5" aria-label="OpenEffects home">
+        <img src="/openeffects.svg" alt="" width="30" height="30" />
+        <span class="text-[1.05rem] font-bold tracking-tight">OpenEffects</span>
       </a>
 
-      <div
-        class="hidden items-center gap-8 font-mono text-[0.8rem] text-muted md:flex"
-      >
-        <a href="#features" class="transition-colors hover:text-paper"
-          >Effects</a
-        >
-        <a href="#how" class="transition-colors hover:text-paper"
-          >How it works</a
-        >
-        <a href="#install" class="transition-colors hover:text-paper">Install</a
-        >
-        <a href={DOCS} class="transition-colors hover:text-paper">Docs</a>
+      <div class="hidden items-center gap-8 text-[0.85rem] text-muted md:flex">
+        <a href="#features" class="transition-colors hover:text-fg">Effects</a>
+        <a href="#how" class="transition-colors hover:text-fg">How it works</a>
+        <a href="#install" class="transition-colors hover:text-fg">Install</a>
+        <a href={DOCS} class="transition-colors hover:text-fg">Docs</a>
       </div>
 
       <div class="flex items-center gap-2.5">
-        <a
-          href={GITHUB}
-          class="btn btn-ghost hidden px-3.5 py-2 text-sm sm:inline-flex"
-          aria-label="OpenEffects on GitHub"
-        >
-          <svg
-            class="h-4 w-4"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            aria-hidden="true"
-            ><path
-              d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05a9.36 9.36 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"
-            ></path></svg
-          >
+        <a href={GITHUB} class="btn btn-ghost hidden px-3.5 py-2 text-sm sm:inline-flex" aria-label="OpenEffects on GitHub">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d={ghPath}></path></svg>
           GitHub
         </a>
-        <a href={RELEASES} class="btn btn-primary px-3.5 py-2 text-sm"
-          >Download</a
-        >
+        <a href={FLATHUB} class="btn btn-primary px-3.5 py-2 text-sm">Download</a>
       </div>
     </nav>
   </header>
 
   <main id="main">
     <!-- ================= HERO ================= -->
-    <section class="relative overflow-hidden">
-      <!-- ambient lens glow -->
-      <div
-        aria-hidden="true"
-        class="pointer-events-none absolute inset-0 -z-10"
-      >
-        <div
-          class="absolute -top-40 left-1/2 h-152 w-152 -translate-x-1/2 rounded-full bg-lens/10 blur-[120px]"
-        >
-        </div>
-        <div
-          class="absolute right-0 top-40 h-96 w-96 rounded-full bg-lens-deep/10 blur-[120px]"
-        >
-        </div>
-      </div>
-
-      <div
-        class="mx-auto grid max-w-6xl items-center gap-14 px-6 py-16 sm:py-24 lg:grid-cols-[1.05fr_1fr] lg:gap-10"
-      >
+    <section class="relative">
+      <div class="mx-auto grid max-w-6xl items-center gap-14 px-6 py-16 sm:py-24 lg:grid-cols-[1.05fr_1fr] lg:gap-10">
         <div>
           <span class="eyebrow">Linux-native · Wayland · on-device ML</span>
 
-          <h1
-            class="mt-6 font-display text-[2.6rem] font-semibold leading-[1.05] tracking-tight sm:text-6xl"
-          >
-            Portrait mode for your <span class="text-lens">Linux webcam.</span>
+          <h1 class="mt-6 text-[2.6rem] font-bold leading-[1.05] tracking-tight sm:text-6xl">
+            Portrait mode for your <span class="text-accent">Linux webcam.</span>
           </h1>
 
           <p class="mt-5 max-w-xl text-lg leading-relaxed text-muted">
-            Auto-framing, background replacement, studio light and gesture
-            reactions — added to
-            <span class="text-paper"> any app that reads your camera.</span> Processed
-            on-device and republished to PipeWire, so Zoom, OBS, Meet and Discord
-            all see the enhanced feed.
+            Auto-framing, background replacement, studio light and gesture reactions — added to
+            <span class="font-medium text-fg"> any app that reads your camera.</span> Processed on-device and
+            republished to PipeWire, so Zoom, OBS, Meet and Discord all see the enhanced feed.
           </p>
 
           <div class="mt-8 flex flex-wrap items-center gap-3">
-            <a href={RELEASES} class="btn btn-primary">
-              <svg
-                class="h-4 w-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                aria-hidden="true"
-                ><path
-                  d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"
-                ></path></svg
-              >
-              Download for Linux
+            <a href={FLATHUB} class="btn btn-primary">
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>
+              Get it on Flathub
+            </a>
+            <a href={RELEASES} class="btn btn-ghost">
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+              Download packages
             </a>
             <a href={GITHUB} class="btn btn-ghost">
-              <svg
-                class="h-4 w-4"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                aria-hidden="true"
-                ><path
-                  d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49 0-.24-.01-.87-.01-1.71-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.64.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05a9.36 9.36 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.81-4.57 5.06.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.81 0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"
-                ></path></svg
-              >
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d={ghPath}></path></svg>
               Star on GitHub
             </a>
           </div>
 
-          <p class="mt-6 font-mono text-[0.78rem] tracking-wide text-muted/80">
+          <p class="mt-6 text-[0.8rem] tracking-wide text-muted">
             GPL-3.0 · x86_64 · GStreamer + PipeWire · no GPU required
           </p>
         </div>
 
         <div class="relative">
           <Viewfinder />
-          <p
-            class="mt-3 text-center font-mono text-[11px] tracking-wider text-muted/70"
-          >
+          <p class="mt-3 text-center text-[11px] tracking-wider text-muted">
             simulated preview — this is what your call sees
           </p>
         </div>
@@ -279,110 +191,68 @@ openeffectsctl toggle reactions`;
     </section>
 
     <!-- ================= WORKS WITH ================= -->
-    <section class="border-y border-haze/10 bg-ink-2/50">
+    <section class="border-y border-line bg-surface">
       <div class="mx-auto max-w-6xl px-6 py-8">
-        <div
-          class="flex flex-col items-start gap-5 lg:flex-row lg:items-center lg:gap-10"
-        >
-          <p
-            class="shrink-0 font-mono text-[0.72rem] uppercase leading-relaxed tracking-[0.16em] text-muted"
-          >
-            Feeds any app that reads<br class="hidden lg:block" /> a PipeWire node
-            or /dev/video
+        <div class="flex flex-col items-start gap-5 lg:flex-row lg:items-center lg:gap-10">
+          <p class="shrink-0 text-[0.72rem] font-medium uppercase leading-relaxed tracking-[0.16em] text-muted">
+            Feeds any app that reads<br class="hidden lg:block" /> a PipeWire node or /dev/video
           </p>
           <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
-            {
-              apps.map((app) => (
-                <span class="font-display text-[0.95rem] font-medium text-paper/55 transition-colors hover:text-paper">
-                  {app}
-                </span>
-              ))
-            }
+            {apps.map((app) => (
+              <span class="text-[0.95rem] font-semibold text-muted transition-colors hover:text-fg">{app}</span>
+            ))}
           </div>
         </div>
       </div>
     </section>
 
     <!-- ================= FEATURES ================= -->
-    <section
-      id="features"
-      class="mx-auto max-w-6xl scroll-mt-20 px-6 py-20 sm:py-28"
-    >
+    <section id="features" class="mx-auto max-w-6xl scroll-mt-20 px-6 py-20 sm:py-28">
       <div class="max-w-2xl">
         <span class="eyebrow">The effects</span>
-        <h2
-          class="mt-5 font-display text-3xl font-semibold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]"
-        >
-          Everything a modern camera does — <span class="text-muted"
-            >without the closed-source camera app.</span
-          >
+        <h2 class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]">
+          Everything a modern camera does — <span class="text-muted">without the closed-source camera app.</span>
         </h2>
       </div>
 
       <div class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {
-          features.map((f) => (
-            <FeatureCard
-              icon={f.icon}
-              title={f.title}
-              body={f.body}
-              badge={f.badge}
-            />
-          ))
-        }
+        {features.map((f) => <FeatureCard icon={f.icon} title={f.title} body={f.body} badge={f.badge} />)}
       </div>
     </section>
 
     <!-- ================= HOW IT WORKS ================= -->
-    <section id="how" class="scroll-mt-20 border-y border-haze/10 bg-ink-2/40">
+    <section id="how" class="scroll-mt-20 border-y border-line bg-surface">
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
         <div class="max-w-2xl">
           <span class="eyebrow">How it works</span>
-          <h2
-            class="mt-5 font-display text-3xl font-semibold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]"
-          >
+          <h2 class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]">
             One daemon between your camera and everything else.
           </h2>
           <p class="mt-5 text-lg leading-relaxed text-muted">
-            No always-open window. A headless pipeline does the work and
-            republishes a virtual camera the rest of your desktop can pick up.
+            No always-open window. A headless pipeline does the work and republishes a virtual camera the rest of your desktop can pick up.
           </p>
         </div>
 
-        <!-- pipeline -->
         <ol class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {
-            pipeline.map((step) => (
-              <li class="card relative p-6">
-                <span class="font-mono text-sm text-lens">{step.n}</span>
-                <h3 class="mt-3 font-display text-xl font-medium text-paper">
-                  {step.title}
-                </h3>
-                <p class="mt-1.5 text-[0.92rem] leading-relaxed text-muted">
-                  {step.body}
-                </p>
-              </li>
-            ))
-          }
+          {pipeline.map((step) => (
+            <li class="card relative p-6">
+              <span class="text-sm font-semibold text-accent">{step.n}</span>
+              <h3 class="mt-3 text-xl font-semibold text-fg">{step.title}</h3>
+              <p class="mt-1.5 text-[0.92rem] leading-relaxed text-muted">{step.body}</p>
+            </li>
+          ))}
         </ol>
 
-        <!-- components -->
         <div class="mt-4 grid gap-4 md:grid-cols-3">
-          {
-            components.map((c) => (
-              <div class="card flex flex-col p-6">
-                <div class="flex items-baseline justify-between gap-3">
-                  <code class="font-mono text-sm text-lens">{c.name}</code>
-                  <span class="font-mono text-[11px] uppercase tracking-wider text-muted">
-                    {c.role}
-                  </span>
-                </div>
-                <p class="mt-3 text-[0.92rem] leading-relaxed text-muted">
-                  {c.body}
-                </p>
+          {components.map((c) => (
+            <div class="card flex flex-col p-6">
+              <div class="flex items-baseline justify-between gap-3">
+                <code class="text-sm font-semibold text-accent">{c.name}</code>
+                <span class="text-[11px] uppercase tracking-wider text-muted">{c.role}</span>
               </div>
-            ))
-          }
+              <p class="mt-3 text-[0.92rem] leading-relaxed text-muted">{c.body}</p>
+            </div>
+          ))}
         </div>
       </div>
     </section>
@@ -390,142 +260,76 @@ openeffectsctl toggle reactions`;
     <!-- ================= PERFORMANCE / PRIVACY ================= -->
     <section class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
       <div class="grid gap-4 lg:grid-cols-2">
-        <div class="card relative overflow-hidden p-8 sm:p-10">
-          <div
-            aria-hidden="true"
-            class="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-lens/10 blur-3xl"
-          >
-          </div>
+        <div class="card p-8 sm:p-10">
           <span class="eyebrow">Performance</span>
-          <p
-            class="mt-6 font-display text-6xl font-semibold tracking-tight text-paper sm:text-7xl"
-          >
-            2–5<span class="ml-2 align-baseline text-2xl font-medium text-muted"
-              >ms / frame</span
-            >
+          <p class="mt-6 text-6xl font-bold tracking-tight text-fg sm:text-7xl">
+            2–5<span class="ml-2 align-baseline text-2xl font-medium text-muted">ms / frame</span>
           </p>
           <p class="mt-5 max-w-md leading-relaxed text-muted">
-            Inference on a modern x86_64 CPU. The bundled models are
-            MobileNet-class, 256² and 640² — small enough that a discrete GPU
-            would only add latency. None required.
+            Inference on a modern x86_64 CPU. The bundled models are MobileNet-class, 256² and 640² — small enough that a discrete GPU would only add latency. None required.
           </p>
         </div>
 
-        <div class="card relative overflow-hidden p-8 sm:p-10">
-          <div
-            aria-hidden="true"
-            class="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-record/10 blur-3xl"
-          >
-          </div>
-          <span class="eyebrow" style="color: var(--color-record);"
-            >Privacy</span
-          >
-          <p
-            class="mt-6 font-display text-6xl font-semibold tracking-tight text-paper sm:text-7xl"
-          >
-            0<span class="ml-2 align-baseline text-2xl font-medium text-muted"
-              >bytes leave</span
-            >
+        <div class="card p-8 sm:p-10">
+          <span class="eyebrow">Privacy</span>
+          <p class="mt-6 text-6xl font-bold tracking-tight text-fg sm:text-7xl">
+            0<span class="ml-2 align-baseline text-2xl font-medium text-muted">bytes leave</span>
           </p>
           <p class="mt-5 max-w-md leading-relaxed text-muted">
-            No telemetry, no network calls, no cloud inference — all ML runs
-            locally. Cameras open through xdg-desktop-portal and IPC stays on
-            the D-Bus session bus.
+            No telemetry, no network calls, no cloud inference — all ML runs locally. Cameras open through xdg-desktop-portal and IPC stays on the D-Bus session bus.
           </p>
         </div>
       </div>
 
-      <!-- spec bar -->
-      <dl
-        class="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-haze/10 bg-haze/10 sm:grid-cols-3 lg:grid-cols-5"
-      >
-        {
-          specs.map(([k, v]) => (
-            <div class="flex flex-col gap-1 bg-ink px-5 py-4">
-              <dt class="font-mono text-[10px] uppercase tracking-wider text-muted">
-                {k}
-              </dt>
-              <dd class="font-display text-[0.95rem] font-medium text-paper">
-                {v}
-              </dd>
-            </div>
-          ))
-        }
+      <dl class="mt-4 grid grid-cols-2 gap-px border border-line bg-line sm:grid-cols-3 lg:grid-cols-5">
+        {specs.map(([k, v]) => (
+          <div class="flex flex-col gap-1 bg-page px-5 py-4">
+            <dt class="text-[10px] uppercase tracking-wider text-muted">{k}</dt>
+            <dd class="text-[0.95rem] font-semibold text-fg">{v}</dd>
+          </div>
+        ))}
       </dl>
     </section>
 
     <!-- ================= INSTALL ================= -->
-    <section
-      id="install"
-      class="scroll-mt-20 border-t border-haze/10 bg-ink-2/40"
-    >
+    <section id="install" class="scroll-mt-20 border-t border-line bg-surface">
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
         <div class="grid gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16">
           <div>
             <span class="eyebrow">Install</span>
-            <h2
-              class="mt-5 font-display text-3xl font-semibold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]"
-            >
-              Grab it from the latest release.
+            <h2 class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]">
+              Get it from Flathub.
             </h2>
             <p class="mt-5 leading-relaxed text-muted">
-              Download the packages for your distro, then install the daemon (<code
-                class="font-mono text-sm text-lens">openeffectsd</code
-              >, it bundles the models) alongside the GUI or CLI. Pass both
-              files on the same line so the dependency resolves.
+              The Flatpak is the quickest path on any distro. Prefer native packages? Grab the <code class="font-medium text-fg">.pkg</code>, <code class="font-medium text-fg">.rpm</code> or <code class="font-medium text-fg">.deb</code> from the latest release, then install the daemon (<code class="font-medium text-accent">openeffectsd</code>, it bundles the models) alongside the GUI or CLI.
             </p>
             <div class="mt-7 flex flex-wrap gap-3">
-              <a href={RELEASES} class="btn btn-primary">Download packages</a>
+              <a href={FLATHUB} class="btn btn-primary">
+                <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>
+                Get it on Flathub
+              </a>
+              <a href={RELEASES} class="btn btn-ghost">Direct packages</a>
               <a href={DOCS} class="btn btn-ghost">CLI reference</a>
             </div>
-            <p
-              class="mt-6 font-mono text-[0.78rem] leading-relaxed text-muted/80"
-            >
-              Flathub, AUR, COPR and a PPA are on the way.
+            <p class="mt-6 text-[0.8rem] leading-relaxed text-muted">
+              AUR, COPR and a PPA are coming soon.
             </p>
           </div>
 
           <div>
-            <div
-              role="tablist"
-              aria-label="Distribution"
-              class="mb-3 flex flex-wrap gap-2"
-            >
-              <button
-                role="tab"
-                aria-selected="true"
-                class="tab is-active"
-                data-tab="arch">Arch</button
-              >
-              <button
-                role="tab"
-                aria-selected="false"
-                class="tab"
-                data-tab="fedora">Fedora / RHEL</button
-              >
-              <button
-                role="tab"
-                aria-selected="false"
-                class="tab"
-                data-tab="ubuntu">Ubuntu / Debian</button
-              >
+            <div role="tablist" aria-label="Install method" class="mb-3 flex flex-wrap gap-2">
+              <button role="tab" aria-selected="true" class="tab is-active" data-tab="flatpak">Flatpak</button>
+              <button role="tab" aria-selected="false" class="tab" data-tab="arch">Arch</button>
+              <button role="tab" aria-selected="false" class="tab" data-tab="fedora">Fedora / RHEL</button>
+              <button role="tab" aria-selected="false" class="tab" data-tab="ubuntu">Ubuntu / Debian</button>
             </div>
 
-            <div data-panel="arch">
-              <CodeBlock code={install.arch} label="pacman" />
-            </div>
-            <div data-panel="fedora" class="hidden">
-              <CodeBlock code={install.fedora} label="dnf" />
-            </div>
-            <div data-panel="ubuntu" class="hidden">
-              <CodeBlock code={install.ubuntu} label="apt" />
-            </div>
+            <div data-panel="flatpak"><CodeBlock code={install.flatpak} label="flatpak" /></div>
+            <div data-panel="arch" class="hidden"><CodeBlock code={install.arch} label="pacman" /></div>
+            <div data-panel="fedora" class="hidden"><CodeBlock code={install.fedora} label="dnf" /></div>
+            <div data-panel="ubuntu" class="hidden"><CodeBlock code={install.ubuntu} label="apt" /></div>
 
-            <p
-              class="mb-2 mt-8 font-mono text-[11px] uppercase tracking-wider text-muted"
-            >
-              Then drive it from anywhere
-            </p>
+            <p class="mb-2 mt-8 text-[11px] uppercase tracking-wider text-muted">Then drive it from anywhere</p>
             <CodeBlock code={cli} label="openeffectsctl" />
           </div>
         </div>
@@ -534,63 +338,40 @@ openeffectsctl toggle reactions`;
 
     <!-- ================= CTA ================= -->
     <section class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
-      <div
-        class="card relative overflow-hidden px-8 py-14 text-center sm:px-10 sm:py-20"
-      >
-        <div aria-hidden="true" class="pointer-events-none absolute inset-0">
-          <div
-            class="absolute left-1/2 top-0 h-72 w-72 -translate-x-1/2 rounded-full bg-lens/15 blur-[100px]"
-          >
-          </div>
-        </div>
-        <div class="relative">
-          <h2
-            class="mx-auto max-w-2xl font-display text-3xl font-semibold tracking-tight sm:text-5xl sm:leading-[1.08]"
-          >
-            Your next call deserves a better camera.
-          </h2>
-          <p class="mx-auto mt-5 max-w-lg leading-relaxed text-muted">
-            Free and open source. Install once and every app on your desktop
-            gets the upgrade.
-          </p>
-          <div class="mt-8 flex flex-wrap justify-center gap-3">
-            <a href={RELEASES} class="btn btn-primary">Download for Linux</a>
-            <a href={GITHUB} class="btn btn-ghost">View source</a>
-          </div>
+      <div class="card bg-surface px-8 py-14 text-center sm:px-10 sm:py-20">
+        <h2 class="mx-auto max-w-2xl text-3xl font-bold tracking-tight sm:text-5xl sm:leading-[1.08]">
+          Your next call deserves a better camera.
+        </h2>
+        <p class="mx-auto mt-5 max-w-lg leading-relaxed text-muted">
+          Free and open source. Install once and every app on your desktop gets the upgrade.
+        </p>
+        <div class="mt-8 flex flex-wrap justify-center gap-3">
+          <a href={FLATHUB} class="btn btn-primary">
+            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 3 7.5v9L12 21l9-4.5v-9L12 3Z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>
+            Get it on Flathub
+          </a>
+          <a href={GITHUB} class="btn btn-ghost">View source</a>
         </div>
       </div>
     </section>
   </main>
 
   <!-- ================= FOOTER ================= -->
-  <footer class="border-t border-haze/10">
-    <div
-      class="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 px-6 py-10 sm:flex-row sm:items-center"
-    >
+  <footer class="border-t border-line">
+    <div class="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 px-6 py-10 sm:flex-row sm:items-center">
       <div class="flex items-center gap-2.5">
-        <img
-          src="/openeffects.svg"
-          alt=""
-          width="26"
-          height="26"
-          class="rounded-md"
-        />
+        <img src="/openeffects.svg" alt="" width="26" height="26" />
         <div class="leading-tight">
-          <p class="font-display text-sm font-semibold">OpenEffects</p>
-          <p class="font-mono text-[11px] text-muted">
-            Wayland-native webcam effects
-          </p>
+          <p class="text-sm font-bold">OpenEffects</p>
+          <p class="text-[11px] text-muted">Wayland-native webcam effects</p>
         </div>
       </div>
-      <div
-        class="flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-[0.8rem] text-muted"
-      >
-        <a href={GITHUB} class="transition-colors hover:text-paper">GitHub</a>
-        <a href={RELEASES} class="transition-colors hover:text-paper"
-          >Releases</a
-        >
-        <a href={DOCS} class="transition-colors hover:text-paper">CLI Docs</a>
-        <a href={LICENSE} class="transition-colors hover:text-paper">GPL-3.0</a>
+      <div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-[0.85rem] text-muted">
+        <a href={FLATHUB} class="transition-colors hover:text-fg">Flathub</a>
+        <a href={GITHUB} class="transition-colors hover:text-fg">GitHub</a>
+        <a href={RELEASES} class="transition-colors hover:text-fg">Releases</a>
+        <a href={DOCS} class="transition-colors hover:text-fg">CLI Docs</a>
+        <a href={LICENSE} class="transition-colors hover:text-fg">GPL-3.0</a>
       </div>
     </div>
   </footer>
@@ -605,10 +386,10 @@ openeffectsctl toggle reactions`;
           await navigator.clipboard.writeText(text);
           const prev = label?.textContent ?? "Copy";
           if (label) label.textContent = "Copied";
-          btn.classList.add("text-lens");
+          btn.classList.add("text-accent");
           window.setTimeout(() => {
             if (label) label.textContent = prev;
-            btn.classList.remove("text-lens");
+            btn.classList.remove("text-accent");
           }, 1600);
         } catch {
           /* clipboard unavailable */
@@ -627,9 +408,7 @@ openeffectsctl toggle reactions`;
           t.classList.toggle("is-active", active);
           t.setAttribute("aria-selected", String(active));
         });
-        panels.forEach((p) =>
-          p.classList.toggle("hidden", p.dataset.panel !== name),
-        );
+        panels.forEach((p) => p.classList.toggle("hidden", p.dataset.panel !== name));
       });
     });
   </script>
