@@ -59,6 +59,12 @@ const waybar = `"custom/openeffects": {
 }`;
 const keybinds = `bind = $mod, F1, exec, openeffectsctl toggle portrait-blur
 bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
+
+// "Open in LLM" links: prefill a prompt that points the assistant at this page.
+const pageUrl = new URL("/docs", Astro.site).href;
+const llmPrompt = `Read ${pageUrl} so you can answer questions about the OpenEffects CLI.`;
+const chatgptUrl = `https://chatgpt.com/?hints=search&q=${encodeURIComponent(llmPrompt)}`;
+const claudeUrl = `https://claude.ai/new?q=${encodeURIComponent(llmPrompt)}`;
 ---
 
 <Layout
@@ -95,9 +101,55 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
 
         <!-- Content -->
         <article class="doc min-w-0">
-          <h1>
-            <code class="bg-transparent! p-0! text-fg!">openeffectsctl</code>
-          </h1>
+          <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+            <h1>
+              <code class="bg-transparent! p-0! text-fg!">openeffectsctl</code>
+            </h1>
+
+            <!-- LLM actions: copy the page as Markdown, or hand it to an assistant -->
+            <div class="llm-actions relative flex">
+              <button type="button" class="llm-btn rounded-l" data-copy-md>
+                <svg
+                  class="h-3.5 w-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  aria-hidden="true"
+                >
+                  <rect x="9" y="9" width="12" height="12" rx="2"></rect>
+                  <path d="M5 15V5a2 2 0 0 1 2-2h10"></path>
+                </svg>
+                <span data-copy-md-label>Copy page</span>
+              </button>
+              <details class="llm-menu-root" data-llm-menu>
+                <summary
+                  class="llm-btn rounded-r border-l-0!"
+                  aria-label="More ways to use this page with an LLM"
+                >
+                  <svg
+                    class="h-3.5 w-3.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    aria-hidden="true"
+                  >
+                    <path d="m6 9 6 6 6-6"></path>
+                  </svg>
+                </summary>
+                <div class="llm-menu">
+                  <button type="button" data-view-md>View as Markdown</button>
+                  <a href={chatgptUrl} target="_blank" rel="noopener"
+                    >Open in ChatGPT</a
+                  >
+                  <a href={claudeUrl} target="_blank" rel="noopener"
+                    >Open in Claude</a
+                  >
+                </div>
+              </details>
+            </div>
+          </div>
           <p class="lead">
             The command-line control surface for the OpenEffects daemon. Every
             command talks to a running <code>openeffectsd</code> over the session
@@ -483,6 +535,84 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
       });
     });
 
+    // Serialize the rendered docs into Markdown for the LLM actions, so the
+    // Markdown view can never drift from the page content.
+    const doc = document.querySelector<HTMLElement>("article.doc");
+
+    const inline = (el: Element): string =>
+      Array.from(el.childNodes)
+        .map((n) =>
+          n.nodeType === Node.TEXT_NODE
+            ? (n.textContent ?? "")
+            : (n as Element).tagName === "CODE"
+              ? "`" + n.textContent + "`"
+              : inline(n as Element),
+        )
+        .join("")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const tableMd = (t: Element) => {
+      const rows = Array.from(t.querySelectorAll("tr")).map(
+        (tr) => "| " + Array.from(tr.children).map(inline).join(" | ") + " |",
+      );
+      const cols = t.querySelector("tr")?.children.length ?? 1;
+      rows.splice(1, 0, "|" + " --- |".repeat(cols));
+      return rows.join("\n");
+    };
+
+    const docMarkdown = () => {
+      const parts: string[] = [];
+      doc?.querySelectorAll("h1, h2, h3, p, pre, table").forEach((el) => {
+        if (el.tagName === "H1") parts.push("# " + inline(el));
+        else if (el.tagName === "H2") parts.push("## " + inline(el));
+        else if (el.tagName === "H3") parts.push("### " + inline(el));
+        else if (el.tagName === "PRE")
+          parts.push("```\n" + (el.textContent ?? "").trimEnd() + "\n```");
+        else if (el.tagName === "TABLE") parts.push(tableMd(el));
+        else parts.push(inline(el));
+      });
+      return parts.join("\n\n") + "\n";
+    };
+
+    const copyMd = document.querySelector<HTMLButtonElement>("[data-copy-md]");
+    copyMd?.addEventListener("click", async () => {
+      const label = copyMd.querySelector("[data-copy-md-label]");
+      try {
+        await navigator.clipboard.writeText(docMarkdown());
+        if (label) label.textContent = "Copied";
+        copyMd.classList.add("text-accent");
+        window.setTimeout(() => {
+          if (label) label.textContent = "Copy page";
+          copyMd.classList.remove("text-accent");
+        }, 1600);
+      } catch {
+        /* clipboard unavailable */
+      }
+    });
+
+    document
+      .querySelector<HTMLButtonElement>("[data-view-md]")
+      ?.addEventListener("click", () => {
+        const blob = new Blob([docMarkdown()], {
+          type: "text/plain;charset=utf-8",
+        });
+        window.open(URL.createObjectURL(blob), "_blank");
+      });
+
+    // close the dropdown after choosing or when clicking elsewhere
+    const menu = document.querySelector<HTMLElement>("[data-llm-menu]") as
+      | HTMLDetailsElement
+      | null;
+    document.addEventListener("click", (e) => {
+      if (menu?.open && !menu.contains(e.target as Node)) menu.open = false;
+    });
+    menu
+      ?.querySelectorAll(".llm-menu a, .llm-menu button")
+      .forEach((el) =>
+        el.addEventListener("click", () => (menu.open = false)),
+      );
+
     // scrollspy: highlight the current section in the sidebar
     const links = new Map<string, HTMLAnchorElement>();
     document
@@ -597,6 +727,64 @@ bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
   }
   .doc td code {
     white-space: nowrap;
+  }
+
+  /* LLM actions toolbar */
+  .llm-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border: 1px solid var(--color-line-strong);
+    background: var(--color-page);
+    padding: 0.45rem 0.7rem;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--color-fg);
+    cursor: pointer;
+    transition:
+      color 0.15s ease,
+      border-color 0.15s ease;
+  }
+  .llm-btn:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+  }
+  .llm-menu-root {
+    position: relative;
+  }
+  .llm-menu-root summary {
+    list-style: none;
+    height: 100%;
+  }
+  .llm-menu-root summary::-webkit-details-marker {
+    display: none;
+  }
+  .llm-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 0.4rem);
+    z-index: 30;
+    min-width: 12rem;
+    display: flex;
+    flex-direction: column;
+    padding: 0.3rem;
+    background: var(--color-page);
+    border: 1px solid var(--color-line);
+    border-radius: 6px;
+    box-shadow: 0 12px 28px -14px rgba(20, 24, 29, 0.3);
+  }
+  .llm-menu a,
+  .llm-menu button {
+    text-align: left;
+    padding: 0.5rem 0.7rem;
+    font-size: 0.85rem;
+    color: var(--color-fg);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .llm-menu a:hover,
+  .llm-menu button:hover {
+    background: var(--color-surface);
   }
 
   /* sidebar TOC */
