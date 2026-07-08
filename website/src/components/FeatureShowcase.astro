@@ -40,6 +40,20 @@ const features = [
     icon: `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px"><path d="M90.77-181.54q-8.54 0-14.27-5.73t-5.73-14.27q0-8.54 5.73-14.27t14.27-5.73h778.46q8.54 0 14.27 5.73t5.73 14.27q0 8.54-5.73 14.27t-14.27 5.73H90.77Zm93.85-80q-27.62 0-46.12-18.5-18.5-18.5-18.5-46.11v-390.77q0-27.62 18.5-46.12 18.5-18.5 46.12-18.5h590.76q27.62 0 46.12 18.5 18.5 18.5 18.5 46.12v390.77q0 27.61-18.5 46.11t-46.12 18.5H184.62Zm0-40h590.76q9.24 0 16.93-7.69 7.69-7.69 7.69-16.92v-390.77q0-9.23-7.69-16.93-7.69-7.69-16.93-7.69H184.62q-9.24 0-16.93 7.69-7.69 7.7-7.69 16.93v390.77q0 9.23 7.69 16.92 7.69 7.69 16.93 7.69Zm-24.62 0v-440 440Z"/></svg>`,
   },
 ];
+
+// reactions demo: waves of one emoji at a time, streaming bottom-to-top.
+// Each wave reuses the same spread of positions/sizes, phase-shifted by 2s.
+const reactionWaves = ["👍", "❤️", "🎉"].map((emoji, w) => ({
+  emoji,
+  spans: [
+    { left: 16, size: "text-3xl", d: 0, tilt: -12 },
+    { left: 62, size: "text-4xl", d: 0.3, tilt: 9 },
+    { left: 34, size: "text-2xl", d: 0.55, tilt: -7 },
+    { left: 78, size: "text-3xl", d: 0.8, tilt: 14 },
+    { left: 48, size: "text-3xl", d: 1.05, tilt: -10 },
+    { left: 88, size: "text-2xl", d: 1.3, tilt: 6 },
+  ].map((s) => ({ ...s, d: s.d + w * 2 })),
+}));
 ---
 
 <div
@@ -173,9 +187,18 @@ const features = [
         class="fx pointer-events-none absolute inset-0 opacity-0"
         aria-hidden="true"
       >
-        <span class="absolute bottom-[22%] left-[60%] text-4xl">👍</span>
-        <span class="absolute bottom-[18%] left-[30%] text-3xl">❤️</span>
-        <span class="absolute bottom-[25%] left-[74%] text-3xl">🎉</span>
+        {
+          reactionWaves.map((wave) =>
+            wave.spans.map((s) => (
+              <span
+                class:list={["absolute bottom-[-10%]", s.size]}
+                style={`left:${s.left}%; animation-delay:${s.d}s; --tilt:${s.tilt}deg`}
+              >
+                {wave.emoji}
+              </span>
+            )),
+          )
+        }
       </div>
 
       <!-- REC HUD -->
@@ -203,7 +226,7 @@ const features = [
           <span class="h-3 w-3 rounded-full bg-yellow-400"></span>
           <span class="h-3 w-3 rounded-full bg-green-400"></span>
         </span>
-        <span class="ml-1">YOUR CAMERA IN</span>
+        <span>YOUR CAMERA IN</span>
         <span class="appcycle relative h-4 w-24 font-semibold text-white">
           <span>ZOOM</span>
           <span>MEET</span>
@@ -230,7 +253,7 @@ const features = [
         features.map((f, i) => (
           <p
             class:list={[
-              "feature-desc col-start-1 row-start-1 text-[0.95rem] leading-relaxed text-muted transition-opacity duration-300",
+              "feature-desc col-start-1 w-3/4 row-start-1 text-center text-[0.95rem] leading-relaxed text-muted transition-opacity duration-300",
               i !== 0 && "opacity-0",
             ]}
             data-desc={f.id}
@@ -257,18 +280,18 @@ const features = [
           aria-selected={i === 0 ? "true" : "false"}
           aria-controls="feature-demo"
           class:list={[
-            "feature-tab relative flex items-center gap-3.5 rounded-md px-3 py-3.5 text-left sm:px-5",
+            "feature-tab relative flex items-center gap-3.5 rounded-md px-3 py-3 text-left sm:px-5",
             i === 0 && "is-active",
           ]}
           data-feature={f.id}
           data-title={f.title}
         >
           <span
-            class="tab-icon shrink-0 text-muted [&_svg]:h-6 [&_svg]:w-6 [&_svg]:fill-current"
+            class="tab-icon shrink-0 text-muted [&_svg]:h-8 [&_svg]:w-8 [&_svg]:fill-current"
             set:html={f.icon}
             aria-hidden="true"
           />
-          <span class="text-lg font-semibold text-fg">{f.title}</span>
+          <span class="tab-title text-lg font-semibold text-fg">{f.title}</span>
         </button>
       ))
     }
@@ -290,7 +313,8 @@ const features = [
     background: var(--color-page);
     border-color: var(--color-line);
   }
-  .feature-tab.is-active .tab-icon {
+  .feature-tab.is-active .tab-icon,
+  .feature-tab.is-active .tab-title {
     color: var(--color-accent);
   }
 
@@ -372,13 +396,10 @@ const features = [
   }
   .demo[data-effect="reactions"] .fx span {
     opacity: 0;
-    animation: float-up 2.6s ease-in infinite;
-  }
-  .demo[data-effect="reactions"] .fx span:nth-child(2) {
-    animation-delay: 0.9s;
-  }
-  .demo[data-effect="reactions"] .fx span:nth-child(3) {
-    animation-delay: 1.7s;
+    /* per-span animation-delay and --tilt come from the inline style; rotate
+       is a separate property, so the keyframe transforms don't reset it */
+    rotate: var(--tilt, 0deg);
+    animation: float-up 6s linear infinite;
   }
 
   .demo[data-effect="everywhere"] .appbar {
@@ -415,16 +436,22 @@ const features = [
       transform: translateX(2.5%);
     }
   }
+  /* rise takes the first half of the loop, with a long fade that dissolves
+     the emoji well before the top edge; the dead time keeps waves distinct */
   @keyframes float-up {
     0% {
-      transform: translateY(12px) scale(0.8);
+      transform: translateY(0) scale(0.7);
       opacity: 0;
     }
-    12% {
+    5% {
       opacity: 1;
     }
+    28% {
+      opacity: 0.85;
+    }
+    48%,
     100% {
-      transform: translateY(-130px) scale(1.15);
+      transform: translateY(-290px) scale(1.05);
       opacity: 0;
     }
   }
@@ -462,8 +489,9 @@ const features = [
     [data-auto="on"] .feature-tab.is-active::after {
       content: none;
     }
-    .demo[data-effect="reactions"] .fx span {
+    .demo[data-effect="reactions"] .fx span:nth-child(-n + 6) {
       opacity: 1;
+      transform: translateY(-70px);
     }
     .appcycle span:first-child {
       opacity: 1;
@@ -498,30 +526,21 @@ const features = [
       );
     };
 
-    tabs.forEach((t, i) =>
-      t.addEventListener("click", () => {
-        root.dataset.auto = "off";
-        select(i);
-      }),
-    );
+    tabs.forEach((t, i) => t.addEventListener("click", () => select(i)));
 
     root.addEventListener("keydown", (e) => {
       if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
       if (!(e.target as HTMLElement).closest("[role='tablist']")) return;
       e.preventDefault();
-      root.dataset.auto = "off";
       select(current + (e.key === "ArrowDown" ? 1 : -1));
       tabs[current].focus();
     });
 
-    // auto-advance is driven by the progress bar finishing, so hovering the
-    // section (which pauses the bar via CSS) pauses the cycle too
+    // auto-advance is driven by the progress bar finishing: hovering the
+    // section pauses it via CSS, and a manual selection restarts the bar,
+    // so the slideshow resumes from whatever the user picked
     root.addEventListener("animationend", (e) => {
-      if (
-        e.animationName.includes("tab-progress") &&
-        root.dataset.auto === "on"
-      )
-        select(current + 1);
+      if (e.animationName.includes("tab-progress")) select(current + 1);
     });
   });
 </script>
