@@ -83,16 +83,20 @@ openeffectsctl toggle reactions`;
   <Header />
 
   <main id="main">
-    <section class="relative w-full overflow-x-hidden">
-      <div class="mx-auto max-w-4xl px-6 pt-16 text-center sm:pt-16">
+    <section
+      class="relative flex min-h-[calc(100svh-4rem)] w-full flex-col justify-center overflow-x-hidden py-6 sm:py-8"
+    >
+      <div class="mx-auto max-w-4xl px-6 text-center">
         <h1
-          class="mx-auto text-6xl font-black leading-[1.05] tracking-tight sm:text-7xl"
+          class="mx-auto text-5xl font-black leading-[1.05] tracking-tight sm:text-7xl"
         >
           Your next video call deserves
           <span class="text-accent"> the best.</span>
         </h1>
 
-        <p class="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-muted">
+        <p
+          class="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted sm:text-lg"
+        >
           Background blur, auto-framing, studio light and fun reactions, added
           to <span class="font-medium text-fg"
             >any app that uses your camera.</span
@@ -100,11 +104,11 @@ openeffectsctl toggle reactions`;
         </p>
       </div>
 
-      <div class="mt-14 sm:mt-16 mb-14">
+      <div class="my-6 sm:my-10">
         <Carousel />
       </div>
 
-      <div class="mx-auto max-w-3xl pt-12 text-center sm:pb-10">
+      <div class="mx-auto max-w-3xl px-6 text-center">
         <div class="flex flex-wrap items-center justify-center gap-3">
           <FlathubBadge href={FLATHUB} />
           <a
@@ -338,7 +342,11 @@ openeffectsctl toggle reactions`;
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
         <div class="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
           <div class="max-w-xl">
-            <p class="eyebrow">Coming Soon</p>
+            <p
+              class="eyebrow border px-3 py-1 rounded-full bg-accent text-white"
+            >
+              Coming Soon
+            </p>
             <h2
               class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]"
             >

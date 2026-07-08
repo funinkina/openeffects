@@ -253,7 +253,7 @@ const reactionWaves = ["👍", "❤️", "🎉"].map((emoji, w) => ({
         features.map((f, i) => (
           <p
             class:list={[
-              "feature-desc col-start-1 w-3/4 row-start-1 text-center text-[0.95rem] leading-relaxed text-muted transition-opacity duration-300",
+              "feature-desc mx-auto col-start-1 w-4/5 row-start-1 text-center text-[0.95rem] leading-relaxed text-muted transition-opacity duration-300",
               i !== 0 && "opacity-0",
             ]}
             data-desc={f.id}
@@ -327,9 +327,6 @@ const reactionWaves = ["👍", "❤️", "🎉"].map((emoji, w) => ({
     background: var(--color-accent);
     transform-origin: left;
     animation: tab-progress 5s linear forwards;
-  }
-  [data-showcase]:hover .feature-tab.is-active::after {
-    animation-play-state: paused;
   }
   @keyframes tab-progress {
     from {
@@ -536,9 +533,8 @@ const reactionWaves = ["👍", "❤️", "🎉"].map((emoji, w) => ({
       tabs[current].focus();
     });
 
-    // auto-advance is driven by the progress bar finishing: hovering the
-    // section pauses it via CSS, and a manual selection restarts the bar,
-    // so the slideshow resumes from whatever the user picked
+    // auto-advance is driven by the progress bar finishing; a manual
+    // selection restarts the bar, so the slideshow resumes from there
     root.addEventListener("animationend", (e) => {
       if (e.animationName.includes("tab-progress")) select(current + 1);
     });

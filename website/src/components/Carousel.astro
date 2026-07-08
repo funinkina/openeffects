@@ -30,13 +30,17 @@ const slides = [
 
 <div class="relative w-full overflow-visible" data-carousel>
   <div class="relative mx-auto" data-stage>
-    <!-- sizer: keeps the stage the same height as the front card, responsively -->
-    <div class="invisible mx-auto aspect-16/10 w-[82vw] max-w-155"></div>
+    <!-- sizer: keeps the stage the same height as the front card, responsively.
+         Width is also capped by viewport height so the hero fits on short screens. -->
+    <div
+      class="invisible mx-auto aspect-16/10 w-[clamp(17rem,min(82vw,(100svh-34rem)*1.6),38.75rem)]"
+    >
+    </div>
 
     {
       slides.map((s, i) => (
         <figure
-          class="carousel-slide absolute left-1/2 top-0 aspect-16/10 w-[82vw] max-w-155 cursor-pointer overflow-hidden rounded-3xl bg-surface shadow-2xl"
+          class="carousel-slide absolute left-1/2 top-0 aspect-16/10 w-[clamp(17rem,min(82vw,(100svh-34rem)*1.6),38.75rem)] cursor-pointer overflow-hidden rounded-3xl bg-surface shadow-2xl"
           data-slide={i}
         >
           <img
