@@ -1,0 +1,527 @@
+---
+// Interactive features section: the tab list on the left acts like the daemon's
+// effect toggles, and the viewfinder on the right applies the selected effect
+// live (CSS only). Auto-advances until the user takes over.
+const features = [
+  {
+    id: "portrait",
+    title: "Portrait Mode",
+    body: "Background blur with feathered edges and temporal stability. No halo around your hair, no flicker between frames.",
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px"><path d="M480.12-200q-117.2 0-198.66-81.34T200-479.88q0-117.2 81.34-198.66T479.88-760q117.2 0 198.66 81.34T760-480.12q0 117.2-81.34 198.66T480.12-200Zm-.12-40q100 0 170-70t70-170q0-17.4-2.5-34.28-2.5-16.89-7.5-33.26-15.77 3.77-31.73 5.66-15.96 1.88-31.92 1.88-67.04 0-126.73-28.23-59.7-28.23-103.16-78.85-24.92 57.77-70.46 100.93-45.54 43.15-106 63.69.69 99.54 70.58 171Q380.46-240 480-240ZM246.77-528.31q46.31-20.69 88.92-64.65 42.62-43.96 53.85-109.81-56.46 22.31-93.92 68.27-37.47 45.96-48.85 106.19Zm114.11 107.43Q350-431.76 350-447.84t10.88-27.58q10.88-11.5 26.96-11.5t27.58 11.5q11.5 11.5 11.5 27.58t-11.5 26.96Q403.92-410 387.84-410t-26.96-10.88ZM646.15-580q12.93 0 24.7-1.15 11.77-1.16 23.92-4.47-29.92-62.69-88.12-98.53Q548.46-720 480-720q-16.77 0-30.85 1.54-14.07 1.54-28.3 5.61 37.46 68.08 99.42 100.47Q582.23-580 646.15-580ZM545.49-420.88q-10.87-10.88-10.87-26.96t10.87-27.58q10.88-11.5 26.97-11.5 16.08 0 27.58 11.5t11.5 27.58q0 16.08-11.5 26.96Q588.54-410 572.46-410q-16.09 0-26.97-10.88ZM80-740v-75.38Q80-843 98.5-861.5 117-880 144.62-880H220q8.5 0 14.25 5.76t5.75 14.27q0 8.51-5.75 14.24T220-840h-75.38q-9.24 0-16.93 7.69-7.69 7.69-7.69 16.93V-740q0 8.5-5.76 14.25T99.97-720q-8.51 0-14.24-5.75T80-740ZM220-80h-75.38Q117-80 98.5-98.5 80-117 80-144.62V-220q0-8.5 5.76-14.25t14.27-5.75q8.51 0 14.24 5.75T120-220v75.38q0 9.24 7.69 16.93 7.69 7.69 16.93 7.69H220q8.5 0 14.25 5.76T240-99.97q0 8.51-5.75 14.24T220-80Zm595.38 0H740q-8.5 0-14.25-5.76T720-100.03q0-8.51 5.75-14.24T740-120h75.38q9.24 0 16.93-7.69 7.69-7.69 7.69-16.93V-240h40v95.38q0 27.62-18.5 46.12Q843-80 815.38-80ZM840-740v-75.38q0-9.24-7.69-16.93-7.69-7.69-16.93-7.69H740q-8.5 0-14.25-5.76T720-860.03q0-8.51 5.75-14.24T740-880h75.38q27.62 0 46.12 18.5Q880-843 880-815.38V-740q0 8.5-5.76 14.25T859.97-720q-8.51 0-14.24-5.75T840-740Zm-419.15 27.15Zm-31.31 10.08Z"/></svg>`,
+  },
+  {
+    id: "centerStage",
+    title: "Center Stage",
+    body: "Face and body-tracking crops and zooms to keep you or your whole group centered as you move around.",
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px"><path d="M224.62-160q-27.62 0-46.12-18.5Q160-197 160-224.62V-340q0-8.54 5.73-14.27T180-360q8.54 0 14.27 5.73T200-340v115.38q0 9.24 7.69 16.93 7.69 7.69 16.93 7.69H340q8.54 0 14.27 5.73T360-180q0 8.54-5.73 14.27T340-160H224.62Zm510.76 0H620q-8.54 0-14.27-5.73T600-180q0-8.54 5.73-14.27T620-200h115.38q9.24 0 16.93-7.69 7.69-7.69 7.69-16.93V-340q0-8.54 5.73-14.27T780-360q8.54 0 14.27 5.73T800-340v115.38q0 27.62-18.5 46.12Q763-160 735.38-160ZM160-620v-115.38q0-27.62 18.5-46.12Q197-800 224.62-800H340q8.54 0 14.27 5.73T360-780q0 8.54-5.73 14.27T340-760H224.62q-9.24 0-16.93 7.69-7.69 7.69-7.69 16.93V-620q0 8.54-5.73 14.27T180-600q-8.54 0-14.27-5.73T160-620Zm600 0v-115.38q0-9.24-7.69-16.93-7.69-7.69-16.93-7.69H620q-8.54 0-14.27-5.73T600-780q0-8.54 5.73-14.27T620-800h115.38q27.62 0 46.12 18.5Q800-763 800-735.38V-620q0 8.54-5.73 14.27T780-600q-8.54 0-14.27-5.73T760-620ZM366.58-366.58Q320-413.15 320-480t46.58-113.42Q413.15-640 480-640t113.42 46.58Q640-546.85 640-480t-46.58 113.42Q546.85-320 480-320t-113.42-46.58ZM565-395q35-35 35-85t-35-85q-35-35-85-35t-85 35q-35 35-35 85t35 85q35 35 85 35t85-35Zm-85-85Z"/></svg>`,
+  },
+  {
+    id: "background",
+    title: "Background Replacement",
+    body: "Swap your room for a solid color or your own image. Whatever is behind you stays behind closed doors.",
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px"><path d="M160-597.85v-50.38l182.54-182.54h50.38L160-597.85Zm0-162.92v-46.92l23.08-23.08H230l-70 70Zm440.85 49.31q-6.93-5.62-14.58-11.12-7.65-5.5-15.04-9.65l98.54-98.54h50.38l-119.3 119.31ZM183.08-344.08l124.69-124.69q4.69 8.69 8.73 15.39 4.04 6.69 9.19 12.38L268-383.31q-18.77 5.46-40.73 15.58-21.96 10.11-44.19 23.65Zm482.3-269.3v-.47q-1.53-8.23-4.92-18.53-3.38-10.31-7.84-18.08L800-797.85V-748L665.38-613.38ZM422.15-746.77l84.23-84h50.39l-76.31 76.31q-2.54-.46-4.84-.69-2.31-.23-4.85-.23-11 .76-24.31 3.3-13.31 2.54-24.31 5.31ZM160-434.23v-50.39l133.23-133.23q-3.54 12.54-5.69 24.7-2.16 12.15-2.16 23.15 0 2.54.24 4.85.23 2.3.69 4.61L160-434.23Zm577.46 76.08q-7.23-5.08-14.65-9.54-7.42-4.46-16.35-9.62L800-470.85v50.39l-62.54 62.31Zm-79.84-83.54q2.23-6.85 3.3-13.19 1.08-6.35 1.77-12.97 1-7.61.58-15.23-.42-7.61-.96-14.23L800-635.23v51.38L657.62-441.69ZM480-440q-49.85 0-84.92-35.08Q360-510.15 360-560t35.08-84.92Q430.15-680 480-680t84.92 35.08Q600-609.85 600-560t-35.08 84.92Q529.85-440 480-440Zm56.5-63.5Q560-527 560-560t-23.5-56.5Q513-640 480-640t-56.5 23.5Q400-593 400-560t23.5 56.5Q447-480 480-480t56.5-23.5ZM200-192.31v-24.07q0-27.85 15.08-48 15.07-20.16 38.15-32.08 48.69-23.69 106.27-39 57.58-15.31 120.5-15.31t120.5 15.31q57.58 15.31 106.27 39 22.31 11.15 37.77 32.08 15.46 20.92 15.46 48v24.07q0 13.93-9.19 23.12-9.19 9.19-23.12 9.19H232.31q-13.93 0-23.12-9.19-9.19-9.19-9.19-23.12Zm40.23-7.69h479.54q-.46-25.92-7-39.35-6.54-13.42-25.31-22.03-37.54-18-89.58-33.7-52.03-15.69-117.88-15.69t-117.88 15.69q-52.04 15.7-89.58 33.7-18 8.61-24.92 22.15-6.93 13.54-7.39 39.23ZM480-200Zm0-360Z"/></svg>`,
+  },
+  {
+    id: "studioLight",
+    title: "Studio Light",
+    body: "Face-aware tone mapping lifts and separates you from the background, like a softbox rendered in software.",
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px"><path d="M565-395q35-35 35-85t-35-85q-35-35-85-35t-85 35q-35 35-35 85t35 85q35 35 85 35t85-35Zm-198.42 28.42Q320-413.15 320-480t46.58-113.42Q413.15-640 480-640t113.42 46.58Q640-546.85 640-480t-46.58 113.42Q546.85-320 480-320t-113.42-46.58ZM80-460q-8.54 0-14.27-5.73T60-480q0-8.54 5.73-14.27T80-500h100q8.54 0 14.27 5.73T200-480q0 8.54-5.73 14.27T180-460H80Zm700 0q-8.54 0-14.27-5.73T760-480q0-8.54 5.73-14.27T780-500h100q8.54 0 14.27 5.73T900-480q0 8.54-5.73 14.27T880-460H780ZM465.73-765.73Q460-771.46 460-780v-100q0-8.54 5.73-14.27T480-900q8.54 0 14.27 5.73T500-880v100q0 8.54-5.73 14.27T480-760q-8.54 0-14.27-5.73Zm0 700Q460-71.46 460-80v-100q0-8.54 5.73-14.27T480-200q8.54 0 14.27 5.73T500-180v100q0 8.54-5.73 14.27T480-60q-8.54 0-14.27-5.73ZM254.46-678.77l-57.61-55.85q-5.85-5.61-5.73-13.76.11-8.16 5.73-14.77 6.61-6.62 14.38-6.62 7.77 0 14.15 6.62L282-706.31q6.38 6.62 6.38 14.16 0 7.53-6.38 14.15-5.62 6.62-13.27 6.12-7.65-.5-14.27-6.89Zm480.16 481.92L678-253.69q-6.38-6.62-6.38-14.27 0-7.66 6.38-14.04 5.62-6.62 13.27-6.12 7.65.5 14.27 6.89l57.61 55.85q5.85 5.61 5.73 13.76-.11 8.16-5.73 14.77-6.61 6.62-14.38 6.62-7.77 0-14.15-6.62ZM678-678q-6.62-5.62-6.12-13.27.5-7.65 6.89-14.27l55.85-57.61q5.61-5.85 13.76-5.73 8.16.11 14.77 5.73 6.62 6.61 6.62 14.38 0 7.77-6.62 14.15L706.31-678q-6.62 6.38-14.16 6.38-7.53 0-14.15-6.38ZM196.85-196.85q-6.62-6.61-6.62-14.38 0-7.77 6.62-14.15L253.69-282q6.62-6.38 14.27-6.38 7.66 0 14.04 6.38 5.85 5.62 5.35 13.27-.5 7.65-6.12 14.27l-55.85 57.61q-6.38 6.62-14.15 6.5-7.77-.11-14.38-6.5ZM480-480Z"/></svg>`,
+  },
+  {
+    id: "reactions",
+    title: "Reactions",
+    body: "Hand gestures trigger animated overlays: thumbs-up, heart, and more. Or fire them straight from the CLI.",
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px"><path d="M480-480Zm.13 360q-74.67 0-140.41-28.34-65.73-28.34-114.36-76.92-48.63-48.58-76.99-114.26Q120-405.19 120-479.87q0-74.67 28.35-140.41 28.35-65.73 76.95-114.36 48.6-48.63 114.3-76.99Q405.3-840 480-840q35.31 0 68.85 6.15 33.53 6.16 64.3 19.23 11.38 4.22 14.34 12.38 2.97 8.16.28 15.47-2.69 7.31-9.27 11.19-6.58 3.89-14.35.73-28.3-12.84-59.28-19Q513.9-800 480-800q-133 0-226.5 93.5T160-480q0 133 93.5 226.5T480-160q133 0 226.5-93.5T800-480q0-21.85-2.77-43.24-2.77-21.4-8.31-41.61-2.69-9 2.31-14.84 5-5.85 12.31-8.08 7.31-2.23 14.92 1.58 7.61 3.82 10.23 14.5 5.77 22.31 8.54 45.07Q840-503.85 840-480q0 74.7-28.34 140.4t-76.92 114.3q-48.58 48.6-114.26 76.95Q554.81-120 480.13-120ZM820-780h-60q-8.5 0-14.25-5.76T740-800.03q0-8.51 5.75-14.24T760-820h60v-60q0-8.5 5.76-14.25t14.27-5.75q8.51 0 14.24 5.75T860-880v60h60q8.5 0 14.25 5.76t5.75 14.27q0 8.51-5.75 14.24T920-780h-60v60q0 8.5-5.76 14.25T839.97-700q-8.51 0-14.24-5.75T820-720v-60ZM612.49-535.38q18.66 0 31.55-13.07 12.88-13.07 12.88-31.73 0-18.67-13.06-31.55-13.07-12.89-31.73-12.89-18.67 0-31.55 13.07-12.89 13.07-12.89 31.73 0 18.67 13.07 31.55 13.06 12.89 31.73 12.89Zm-264.62 0q18.67 0 31.55-13.07 12.89-13.07 12.89-31.73 0-18.67-13.07-31.55-13.06-12.89-31.73-12.89-18.66 0-31.55 13.07-12.88 13.07-12.88 31.73 0 18.67 13.06 31.55 13.07 12.89 31.73 12.89ZM480-284.62q49.71 0 91.7-23T640.49-370q5.36-9.85.28-19.92Q635.69-400 624-400H336q-11.69 0-16.77 10.08-5.08 10.07.28 19.92 26.8 39.38 69.22 62.38t91.27 23Z"/></svg>`,
+  },
+  {
+    id: "everywhere",
+    title: "Works Everywhere",
+    body: "Zoom, Meet, Discord, OBS and the rest all see the improved feed. Set it once and forget it.",
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 -960 960 960" width="24px"><path d="M90.77-181.54q-8.54 0-14.27-5.73t-5.73-14.27q0-8.54 5.73-14.27t14.27-5.73h778.46q8.54 0 14.27 5.73t5.73 14.27q0 8.54-5.73 14.27t-14.27 5.73H90.77Zm93.85-80q-27.62 0-46.12-18.5-18.5-18.5-18.5-46.11v-390.77q0-27.62 18.5-46.12 18.5-18.5 46.12-18.5h590.76q27.62 0 46.12 18.5 18.5 18.5 18.5 46.12v390.77q0 27.61-18.5 46.11t-46.12 18.5H184.62Zm0-40h590.76q9.24 0 16.93-7.69 7.69-7.69 7.69-16.92v-390.77q0-9.23-7.69-16.93-7.69-7.69-16.93-7.69H184.62q-9.24 0-16.93 7.69-7.69 7.7-7.69 16.93v390.77q0 9.23 7.69 16.92 7.69 7.69 16.93 7.69Zm-24.62 0v-440 440Z"/></svg>`,
+  },
+];
+---
+
+<div
+  class="grid items-start gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-14"
+  data-showcase
+  data-auto="on"
+>
+  <!-- live preview -->
+  <div class="sticky top-16 z-20 bg-surface pb-4 lg:top-24 lg:order-2 lg:pb-0">
+    <div
+      class="demo relative aspect-video w-full select-none overflow-hidden rounded-2xl border border-haze/15 bg-[#0d1219] shadow-lens"
+      id="feature-demo"
+      data-effect="portrait"
+      role="img"
+      aria-label="Simulated webcam preview demonstrating the selected effect live."
+    >
+      <div class="scene absolute inset-0">
+        <!-- the real room: sharp by default so the effects have something to work on -->
+        <div class="room absolute -inset-8">
+          <div
+            class="absolute inset-0"
+            style="background: radial-gradient(120% 90% at 25% 20%, #1f3a54 0%, #12202f 45%, #0b131c 100%);"
+          >
+          </div>
+          <div
+            class="absolute left-[10%] top-[13%] h-[38%] w-[19%] border border-white/25 bg-[linear-gradient(180deg,#3d6a94,#22405e)]"
+          >
+            <span class="absolute inset-y-0 left-1/2 w-px bg-white/25"></span>
+            <span class="absolute inset-x-0 top-1/2 h-px bg-white/25"></span>
+          </div>
+          <div
+            class="absolute right-[11%] top-[20%] flex w-[17%] items-end gap-[5%] border-b-4 border-[#0a1119]"
+          >
+            <span class="h-9 w-[15%] bg-[#7f5a44]"></span>
+            <span class="h-7 w-[15%] bg-[#4f6d7a]"></span>
+            <span class="h-10 w-[15%] bg-[#8a6d56]"></span>
+            <span class="h-6 w-[15%] bg-[#5d7a5f]"></span>
+            <span class="h-8 w-[15%] bg-[#6e5a70]"></span>
+          </div>
+          <span
+            class="absolute left-[70%] top-[58%] h-24 w-24 rounded-full bg-record/20 blur-xl"
+          ></span>
+          <span
+            class="absolute left-[4%] top-[64%] h-20 w-20 rounded-full bg-lens/25 blur-xl"
+          ></span>
+        </div>
+
+        <!-- replacement background -->
+        <div class="alt absolute -inset-8 opacity-0">
+          <div
+            class="absolute inset-0"
+            style="background: linear-gradient(180deg, #27476b 0%, #a86544 62%, #dd9c5b 100%);"
+          >
+          </div>
+          <span
+            class="absolute left-[62%] top-[32%] h-14 w-14 rounded-full bg-[#ffd98a] shadow-[0_0_44px_14px_rgba(255,208,122,0.45)]"
+          ></span>
+          <span
+            class="absolute left-[-10%] bottom-0 h-[24%] w-[72%] rounded-t-[100%] bg-[#1c2f47]"
+          ></span>
+          <span
+            class="absolute right-[-14%] bottom-0 h-[32%] w-[66%] rounded-t-[100%] bg-[#16263a]"
+          ></span>
+        </div>
+
+        <!-- vignette -->
+        <div
+          class="pointer-events-none absolute inset-0"
+          style="background: radial-gradient(80% 70% at 50% 62%, transparent 40%, rgba(4,10,18,0.55) 100%);"
+        >
+        </div>
+
+        <!-- studio light wash -->
+        <div
+          class="glow pointer-events-none absolute inset-0 opacity-0"
+          style="background: radial-gradient(48% 42% at 50% 30%, rgba(255,240,206,0.18), transparent 70%);"
+        >
+        </div>
+
+        <!-- subject, always sharp -->
+        <svg
+          class="subject absolute bottom-0 left-1/2 h-[86%] w-auto -translate-x-1/2"
+          viewBox="0 0 220 190"
+          fill="none"
+          aria-hidden="true"
+        >
+          <defs>
+            <linearGradient
+              id="fs-subject"
+              x1="110"
+              y1="8"
+              x2="110"
+              y2="190"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop offset="0" stop-color="#f4f9fe"></stop>
+              <stop offset="0.65" stop-color="#cfe4f6"></stop>
+              <stop offset="1" stop-color="#8fb6d8"></stop>
+            </linearGradient>
+          </defs>
+          <path
+            d="M14 190 C14 138 55 112 110 112 C165 112 206 138 206 190 Z"
+            fill="url(#fs-subject)"></path>
+          <circle cx="110" cy="60" r="44" fill="url(#fs-subject)"></circle>
+          <path
+            d="M76 34 A44 44 0 0 0 76 86"
+            stroke="#fff"
+            stroke-opacity="0.5"
+            stroke-width="3"
+            stroke-linecap="round"></path>
+        </svg>
+      </div>
+
+      <!-- tracking reticle (center stage) -->
+      <svg
+        class="reticle absolute left-1/2 top-[26%] h-14 w-14 -translate-x-1/2 text-lens opacity-0"
+        viewBox="0 0 100 100"
+        fill="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M12 28 V12 H28 M72 12 H88 V28 M88 72 V88 H72 M28 88 H12 V72"
+          stroke="currentColor"
+          stroke-width="3"
+          stroke-linecap="round"></path>
+        <circle cx="50" cy="50" r="2.5" fill="currentColor"></circle>
+      </svg>
+
+      <!-- floating reactions -->
+      <div
+        class="fx pointer-events-none absolute inset-0 opacity-0"
+        aria-hidden="true"
+      >
+        <span class="absolute bottom-[22%] left-[60%] text-4xl">👍</span>
+        <span class="absolute bottom-[18%] left-[30%] text-3xl">❤️</span>
+        <span class="absolute bottom-[25%] left-[74%] text-3xl">🎉</span>
+      </div>
+
+      <!-- REC HUD -->
+      <div
+        class="hud absolute left-4 top-3.5 flex items-center gap-2 text-[11px] tracking-wider text-white/90"
+      >
+        <span
+          class="rec-dot inline-block h-2.5 w-2.5 rounded-full bg-record shadow-[0_0_10px_2px_rgba(255,233,77,0.7)]"
+        ></span>
+        REC
+      </div>
+      <div
+        class="hud absolute right-4 top-3.5 text-[11px] tracking-wider text-white/70"
+      >
+        1080P · 30FPS
+      </div>
+
+      <!-- app window chrome (works everywhere) -->
+      <div
+        class="appbar absolute inset-x-0 top-0 flex items-center gap-2.5 bg-black/50 px-4 py-2.5 text-[11px] tracking-wider text-white/75 opacity-0 backdrop-blur-sm"
+        aria-hidden="true"
+      >
+        <span class="flex gap-1.5">
+          <span class="h-3 w-3 rounded-full bg-red-500"></span>
+          <span class="h-3 w-3 rounded-full bg-yellow-400"></span>
+          <span class="h-3 w-3 rounded-full bg-green-400"></span>
+        </span>
+        <span class="ml-1">YOUR CAMERA IN</span>
+        <span class="appcycle relative h-4 w-24 font-semibold text-white">
+          <span>ZOOM</span>
+          <span>MEET</span>
+          <span>DISCORD</span>
+          <span>OBS</span>
+        </span>
+      </div>
+
+      <!-- active effect chip -->
+      <div
+        class="absolute bottom-3 left-3 inline-flex items-center gap-1.5 rounded-md border border-lens/50 bg-lens/15 px-2 py-1 text-[10px] uppercase tracking-wider text-white sm:bottom-4 sm:left-4 sm:text-[11px]"
+      >
+        <span
+          class="h-1.5 w-1.5 rounded-full bg-lens shadow-[0_0_8px_1px_rgba(86,167,234,0.8)]"
+        ></span>
+        <span class="effect-label">Portrait Mode</span>
+        <span class="text-white/55">ON</span>
+      </div>
+    </div>
+
+    <!-- active feature description; stacked in one cell so height stays stable -->
+    <div class="mt-5 grid">
+      {
+        features.map((f, i) => (
+          <p
+            class:list={[
+              "feature-desc col-start-1 row-start-1 text-[0.95rem] leading-relaxed text-muted transition-opacity duration-300",
+              i !== 0 && "opacity-0",
+            ]}
+            data-desc={f.id}
+          >
+            {f.body}
+          </p>
+        ))
+      }
+    </div>
+  </div>
+
+  <!-- effect toggles -->
+  <div
+    class="flex flex-col gap-2 lg:order-1"
+    role="tablist"
+    aria-label="Features"
+    aria-orientation="vertical"
+  >
+    {
+      features.map((f, i) => (
+        <button
+          type="button"
+          role="tab"
+          aria-selected={i === 0 ? "true" : "false"}
+          aria-controls="feature-demo"
+          class:list={[
+            "feature-tab relative flex items-center gap-3.5 rounded-md px-3 py-3.5 text-left sm:px-5",
+            i === 0 && "is-active",
+          ]}
+          data-feature={f.id}
+          data-title={f.title}
+        >
+          <span
+            class="tab-icon shrink-0 text-muted [&_svg]:h-6 [&_svg]:w-6 [&_svg]:fill-current"
+            set:html={f.icon}
+            aria-hidden="true"
+          />
+          <span class="text-lg font-semibold text-fg">{f.title}</span>
+        </button>
+      ))
+    }
+  </div>
+</div>
+
+<style>
+  .feature-tab {
+    border: 1px solid transparent;
+    cursor: pointer;
+    overflow: hidden;
+    transition:
+      background-color 0.2s ease,
+      border-color 0.2s ease;
+  }
+  .feature-tab:hover,
+  .feature-tab.is-active {
+    color: var(--color-accent);
+    background: var(--color-page);
+    border-color: var(--color-line);
+  }
+  .feature-tab.is-active .tab-icon {
+    color: var(--color-accent);
+  }
+
+  /* auto-advance progress along the bottom of the active tab */
+  [data-auto="on"] .feature-tab.is-active::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 2px;
+    background: var(--color-accent);
+    transform-origin: left;
+    animation: tab-progress 5s linear forwards;
+  }
+  [data-showcase]:hover .feature-tab.is-active::after {
+    animation-play-state: paused;
+  }
+  @keyframes tab-progress {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  /* ---- the effects themselves ---- */
+  .scene {
+    transform-origin: 50% 60%;
+    transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .room,
+  .alt {
+    transition:
+      filter 0.7s ease,
+      opacity 0.6s ease;
+  }
+  .subject {
+    filter: drop-shadow(0 6px 22px rgba(86, 167, 234, 0.35));
+    transition: filter 0.6s ease;
+  }
+  .glow,
+  .fx,
+  .appbar,
+  .reticle,
+  .hud {
+    transition: opacity 0.45s ease;
+  }
+  .demo[data-effect="portrait"] .room {
+    filter: blur(16px) saturate(1.05);
+  }
+
+  .demo[data-effect="centerStage"] .scene {
+    transform: scale(1.3);
+  }
+  .demo[data-effect="centerStage"] .room {
+    animation: cam-pan 7s ease-in-out infinite alternate;
+  }
+  .demo[data-effect="centerStage"] .reticle {
+    opacity: 1;
+    animation: reticle 4.5s ease-in-out infinite;
+  }
+
+  .demo[data-effect="background"] .alt {
+    opacity: 1;
+  }
+
+  .demo[data-effect="studioLight"] .glow {
+    opacity: 1;
+  }
+  .demo[data-effect="studioLight"] .room {
+    filter: brightness(0.7) saturate(0.9);
+  }
+  .demo[data-effect="studioLight"] .subject {
+    filter: brightness(1.05) drop-shadow(0 0 16px rgba(255, 241, 205, 0.25));
+  }
+
+  .demo[data-effect="reactions"] .fx {
+    opacity: 1;
+  }
+  .demo[data-effect="reactions"] .fx span {
+    opacity: 0;
+    animation: float-up 2.6s ease-in infinite;
+  }
+  .demo[data-effect="reactions"] .fx span:nth-child(2) {
+    animation-delay: 0.9s;
+  }
+  .demo[data-effect="reactions"] .fx span:nth-child(3) {
+    animation-delay: 1.7s;
+  }
+
+  .demo[data-effect="everywhere"] .appbar {
+    opacity: 1;
+  }
+  .demo[data-effect="everywhere"] .hud {
+    opacity: 0;
+  }
+  .demo[data-effect="everywhere"] .room {
+    filter: blur(16px) saturate(1.05);
+  }
+
+  .appcycle span {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    animation: app-swap 8s linear infinite;
+  }
+  .appcycle span:nth-child(2) {
+    animation-delay: 2s;
+  }
+  .appcycle span:nth-child(3) {
+    animation-delay: 4s;
+  }
+  .appcycle span:nth-child(4) {
+    animation-delay: 6s;
+  }
+
+  @keyframes cam-pan {
+    from {
+      transform: translateX(-2.5%);
+    }
+    to {
+      transform: translateX(2.5%);
+    }
+  }
+  @keyframes float-up {
+    0% {
+      transform: translateY(12px) scale(0.8);
+      opacity: 0;
+    }
+    12% {
+      opacity: 1;
+    }
+    100% {
+      transform: translateY(-130px) scale(1.15);
+      opacity: 0;
+    }
+  }
+  @keyframes app-swap {
+    0%,
+    21% {
+      opacity: 1;
+    }
+    25%,
+    100% {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .scene,
+    .room,
+    .alt,
+    .subject,
+    .glow,
+    .fx,
+    .appbar,
+    .reticle,
+    .hud {
+      transition: none;
+    }
+    .demo[data-effect="centerStage"] .room,
+    .demo[data-effect="centerStage"] .reticle,
+    .demo[data-effect="reactions"] .fx span,
+    .appcycle span,
+    [data-auto="on"] .feature-tab.is-active::after {
+      animation: none;
+    }
+    /* static fallbacks: no auto-advance, visible emoji, first app name */
+    [data-auto="on"] .feature-tab.is-active::after {
+      content: none;
+    }
+    .demo[data-effect="reactions"] .fx span {
+      opacity: 1;
+    }
+    .appcycle span:first-child {
+      opacity: 1;
+    }
+  }
+</style>
+
+<script>
+  document.querySelectorAll<HTMLElement>("[data-showcase]").forEach((root) => {
+    const tabs = Array.from(
+      root.querySelectorAll<HTMLButtonElement>(".feature-tab"),
+    );
+    const demo = root.querySelector<HTMLElement>(".demo");
+    const label = root.querySelector<HTMLElement>(".effect-label");
+    const descs = Array.from(
+      root.querySelectorAll<HTMLElement>(".feature-desc"),
+    );
+    if (!demo || !tabs.length) return;
+    let current = 0;
+
+    const select = (i: number) => {
+      current = ((i % tabs.length) + tabs.length) % tabs.length;
+      tabs.forEach((t, j) => {
+        t.classList.toggle("is-active", j === current);
+        t.setAttribute("aria-selected", String(j === current));
+      });
+      const id = tabs[current].dataset.feature ?? "";
+      demo.dataset.effect = id;
+      if (label) label.textContent = tabs[current].dataset.title ?? "";
+      descs.forEach((d) =>
+        d.classList.toggle("opacity-0", d.dataset.desc !== id),
+      );
+    };
+
+    tabs.forEach((t, i) =>
+      t.addEventListener("click", () => {
+        root.dataset.auto = "off";
+        select(i);
+      }),
+    );
+
+    root.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      if (!(e.target as HTMLElement).closest("[role='tablist']")) return;
+      e.preventDefault();
+      root.dataset.auto = "off";
+      select(current + (e.key === "ArrowDown" ? 1 : -1));
+      tabs[current].focus();
+    });
+
+    // auto-advance is driven by the progress bar finishing, so hovering the
+    // section (which pauses the bar via CSS) pauses the cycle too
+    root.addEventListener("animationend", (e) => {
+      if (
+        e.animationName.includes("tab-progress") &&
+        root.dataset.auto === "on"
+      )
+        select(current + 1);
+    });
+  });
+</script>

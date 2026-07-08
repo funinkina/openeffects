@@ -3,7 +3,7 @@ import Layout from "../layouts/Layout.astro";
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
 import Carousel from "../components/Carousel.astro";
-import FeatureCard from "../components/FeatureCard.astro";
+import FeatureShowcase from "../components/FeatureShowcase.astro";
 import CodeBlock from "../components/CodeBlock.astro";
 import FlathubBadge from "../components/FlathubBadge.astro";
 import GnomeBadge from "../components/GnomeBadge.astro";
@@ -37,50 +37,6 @@ const appIcons = [
   {
     name: "Slack",
     path: "M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z",
-  },
-];
-
-const features: {
-  icon:
-    | "portrait"
-    | "centerStage"
-    | "background"
-    | "studioLight"
-    | "reactions"
-    | "everywhere";
-  title: string;
-  body: string;
-  badge?: string;
-}[] = [
-  {
-    icon: "portrait",
-    title: "Portrait Mode",
-    body: "Background blur with feathered edges and temporal stability. No halo around your hair, no flicker between frames.",
-  },
-  {
-    icon: "centerStage",
-    title: "Center Stage",
-    body: "Face and body-tracking crops and zooms to keep you or your whole group centered as you move around.",
-  },
-  {
-    icon: "background",
-    title: "Background Replacement",
-    body: "Swap your room for a solid color or your own image. Whatever is behind you stays behind closed doors.",
-  },
-  {
-    icon: "studioLight",
-    title: "Studio Light",
-    body: "Face-aware tone mapping lifts and separates you from the background, like a softbox rendered in software.",
-  },
-  {
-    icon: "reactions",
-    title: "Reactions",
-    body: "Hand gestures trigger animated overlays: thumbs-up, heart, and more. Or fire them straight from the CLI.",
-  },
-  {
-    icon: "everywhere",
-    title: "Works Everywhere",
-    body: "Zoom, Meet, Discord, OBS and the rest all see the improved feed. Set it once and forget it.",
   },
 ];
 
@@ -212,9 +168,9 @@ openeffectsctl toggle reactions`;
         >OVERVIEW</span
       >
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
-        <div class="max-w-2xl">
+        <div class="max-w-3xl">
           <h2
-            class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]"
+            class="mt-5 text-6xl font-extrabold tracking-tight sm:leading-[1.1]"
           >
             One helper between your camera and everything else.
           </h2>
@@ -228,8 +184,12 @@ openeffectsctl toggle reactions`;
           {
             pipeline.map((step) => (
               <li class="card relative rounded p-6">
-                <span class="text-sm font-semibold text-accent">{step.n}</span>
-                <h3 class="mt-3 text-xl font-semibold text-fg">{step.title}</h3>
+                <div class="flex items-baseline justify-between gap-3">
+                  <h3 class="text-xl font-semibold text-fg">{step.title}</h3>
+                  <span class="text-sm font-semibold text-accent">
+                    {step.n}
+                  </span>
+                </div>
                 <p class="mt-1.5 text-[0.92rem] leading-relaxed text-muted">
                   {step.body}
                 </p>
@@ -250,27 +210,21 @@ openeffectsctl toggle reactions`;
         >FEATURES</span
       >
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
-        <div class="max-w-3xl">
+        <div class="max-w-4xl">
           <h2
-            class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]"
+            class="mt-5 text-6xl font-extrabold tracking-tight sm:leading-[1.1]"
           >
             Everything a modern camera does <span class="text-muted"
               >without the closed-source camera app.</span
             >
           </h2>
+          <p class="mt-5 text-lg leading-relaxed text-muted">
+            Pick a feature and watch the preview apply it live.
+          </p>
         </div>
 
-        <div class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {
-            features.map((f) => (
-              <FeatureCard
-                icon={f.icon}
-                title={f.title}
-                body={f.body}
-                badge={f.badge}
-              />
-            ))
-          }
+        <div class="mt-12">
+          <FeatureShowcase />
         </div>
       </div>
     </section>
