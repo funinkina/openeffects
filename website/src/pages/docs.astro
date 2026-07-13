@@ -78,11 +78,7 @@ const claudeUrl = `https://claude.ai/new?q=${encodeURIComponent(llmPrompt)}`;
       <div class="grid gap-10 lg:grid-cols-[13rem_1fr] lg:gap-14">
         <!-- Sidebar -->
         <aside class="lg:sticky lg:top-24 lg:h-max">
-          <p
-            class="text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-accent"
-          >
-            CLI reference
-          </p>
+          <p class="eyebrow">CLI reference</p>
           <nav class="doc-toc mt-4 flex flex-col gap-1 text-[0.9rem]">
             {
               toc.map((t) => (

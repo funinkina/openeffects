@@ -1,32 +1,39 @@
 @import "tailwindcss";
 
-/* ---- Light, flat theme. Sharp corners, no gradients/shadows. Inter for UI,
-   system monospace for code (<code>/<pre>).
-   The lens/haze/record/lens-deep tokens exist ONLY for the Viewfinder,
-   the single dark, rounded, non-flat element (the simulated screenshot). ---- */
+/* ---- Cream "instrument" theme: warm off-white page, near-black ink, a violet
+   primary and a lime highlight used sparingly. Mono (JetBrains Mono) drives the
+   uppercase eyebrow labels, code and stats; Inter carries headings and body.
+   Subtly-rounded cards, fully-rounded pills/bars, a couple of soft shadows.
+   The ink-deep/lens/haze/record tokens style the dark camera demos
+   (Viewfinder / FeatureShowcase), the pages' one near-black, non-flat surface. ---- */
 @theme {
-  --color-page: #ffffff;
-  --color-surface: #f5f7f8;
-  --color-surface-2: #eef1f4;
-  --color-fg: #14181d;
-  --color-muted: #586170;
-  --color-line: #e2e6ea;
-  --color-line-strong: #cdd4dc;
-  --color-accent: #1466a8;
-  --color-accent-deep: #0f4f85;
+  --color-page: #efece3;
+  --color-surface: #e8e5da;
+  --color-surface-2: #e0ddd0;
+  --color-fg: #16161c;
+  --color-muted: #8a897e;
+  --color-line: #dcd8cc;
+  --color-line-strong: #c9c5b6;
+  --color-accent: #6a5cf0;
+  --color-accent-deep: #5546db;
+  --color-highlight: #cef24e;
+  --color-highlight-ink: #1c2400;
 
-  /* viewfinder-only accents */
-  --color-lens: #56a7ea;
-  --color-lens-deep: #1873b5;
-  --color-record: #ffe94d;
-  --color-haze: #91c1e6;
+  /* dark camera-demo accents */
+  --color-ink-deep: #131319;
+  --color-lens: #8175f6;
+  --color-lens-deep: #5546db;
+  --color-record: #cef24e;
+  --color-haze: #b8b2e8;
 
   --font-display: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono",
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code",
     "Fira Code", Menlo, Consolas, "Liberation Mono", monospace;
 
-  --shadow-lens: 0 24px 60px -28px rgba(20, 24, 29, 0.35);
+  --shadow-lens: 0 24px 60px -28px rgba(22, 22, 28, 0.38);
+  --shadow-soft: 0 10px 30px -18px rgba(22, 22, 28, 0.3);
+  --radius-card: 0.75rem;
 }
 
 @layer base {
@@ -40,6 +47,18 @@
 
   body {
     background-color: var(--color-page);
+    background-image:
+      linear-gradient(
+        to right,
+        color-mix(in oklab, var(--color-fg) 5%, transparent) 1px,
+        transparent 1px
+      ),
+      linear-gradient(
+        to bottom,
+        color-mix(in oklab, var(--color-fg) 5%, transparent) 1px,
+        transparent 1px
+      );
+    background-size: 64px 64px;
     color: var(--color-fg);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
@@ -63,21 +82,98 @@
 
 @layer components {
 
-  /* mono-style eyebrow with a viewfinder focus-bracket tick */
+  /* signature mono eyebrow: uppercase, tracked-out label with a lime tick */
   .eyebrow {
+    font-family: var(--font-mono);
     font-size: 0.72rem;
     font-weight: 500;
-    letter-spacing: 0.18em;
+    letter-spacing: 0.16em;
     text-transform: uppercase;
-    color: var(--color-accent);
+    color: var(--color-fg);
     display: inline-flex;
     align-items: center;
     gap: 0.6rem;
+  }
+  .eyebrow::before {
+    content: "";
+    height: 0.5rem;
+    width: 0.5rem;
+    border-radius: 9999px;
+    background: var(--color-highlight);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-highlight) 30%, transparent);
+  }
+
+  /* small round status dot; --live turns it lime with a soft glow */
+  .status-dot {
+    height: 0.5rem;
+    width: 0.5rem;
+    border-radius: 9999px;
+    background: var(--color-line-strong);
+    flex-shrink: 0;
+  }
+  .status-dot--live {
+    background: var(--color-highlight);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--color-highlight) 30%, transparent);
+  }
+
+  /* mono status label + dot, e.g. LISTENING / AWAKE / LIVE */
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  /* fully-rounded mono pill badge */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border-radius: 9999px;
+    padding: 0.3rem 0.75rem;
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border: 1px solid transparent;
+  }
+  .pill--lime {
+    background: var(--color-highlight);
+    color: var(--color-highlight-ink);
+  }
+  .pill--ghost {
+    border-color: var(--color-line-strong);
+    color: var(--color-fg);
+  }
+
+  /* mono index number, positioned top-right of a card */
+  .card-index {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: var(--color-muted);
   }
 
   .card {
     background: var(--color-page);
     border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+  }
+  .card--float {
+    box-shadow: var(--shadow-soft);
+  }
+  /* the single lime-highlighted tile, echoing the reference's "Stress" card */
+  .card--lime {
+    background: var(--color-highlight);
+    border-color: var(--color-highlight);
+    color: var(--color-highlight-ink);
   }
 
   .btn {
@@ -102,6 +198,15 @@
 
   .btn-primary:hover {
     background: var(--color-accent-deep);
+  }
+
+  .btn-lime {
+    background: var(--color-highlight);
+    color: var(--color-highlight-ink);
+  }
+
+  .btn-lime:hover {
+    background: color-mix(in oklab, var(--color-highlight) 88%, var(--color-fg));
   }
 
   .btn-ghost {

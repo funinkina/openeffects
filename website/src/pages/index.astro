@@ -40,26 +40,36 @@ const appIcons = [
   },
 ];
 
+// thin-stroke line icons echo the reference's "constellation" tiles
 const pipeline = [
   {
     n: "01",
     title: "Turn it on",
     body: "OpenEffects picks up your camera and starts working in the background.",
+    state: "Ready",
+    icon: `<path d="M12 3v9"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/>`,
   },
   {
     n: "02",
     title: "Pick your look",
     body: "Blur, framing, lighting and reactions, easily flip them on and off live.",
+    state: "Live",
+    icon: `<path d="M4 8h9"/><path d="M17 8h3"/><circle cx="15" cy="8" r="2"/><path d="M4 16h3"/><path d="M11 16h9"/><circle cx="9" cy="16" r="2"/>`,
   },
   {
     n: "03",
     title: "Join any call",
     body: "Every app sees the improved feed automatically. No setup per app.",
+    state: "Connected",
+    icon: `<rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3"/>`,
   },
   {
     n: "04",
     title: "Stays private",
     body: "Everything runs on your device. Nothing is uploaded, ever.",
+    state: "On-device",
+    icon: `<path d="M12 3l7 3v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3Z"/>`,
+    highlight: true,
   },
 ];
 
@@ -87,6 +97,9 @@ openeffectsctl toggle reactions`;
       class="relative flex min-h-[calc(100svh-4rem)] w-full flex-col justify-center overflow-x-hidden py-6 sm:py-8"
     >
       <div class="mx-auto max-w-4xl px-6 text-center">
+        <span class="eyebrow mb-6 justify-center">
+          Linux-native webcam effects
+        </span>
         <h1
           class="mx-auto text-5xl font-black leading-[1.05] tracking-tight sm:text-7xl"
         >
@@ -166,13 +179,9 @@ openeffectsctl toggle reactions`;
       id="overview"
       class="relative isolate scroll-mt-20 overflow-hidden"
     >
-      <span
-        aria-hidden="true"
-        class="pointer-events-none absolute bottom-28 left-0 -z-10 hidden rotate-180 text-8xl font-black tracking-tight text-accent/10 [writing-mode:vertical-rl] lg:block"
-        >OVERVIEW</span
-      >
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
         <div class="max-w-3xl">
+          <span class="eyebrow">How it works</span>
           <h2
             class="mt-5 text-6xl font-extrabold tracking-tight sm:leading-[1.1]"
           >
@@ -186,17 +195,33 @@ openeffectsctl toggle reactions`;
 
         <ol class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {
-            pipeline.map((step) => (
-              <li class="card relative rounded p-6">
-                <div class="flex items-baseline justify-between gap-3">
-                  <h3 class="text-xl font-semibold text-fg">{step.title}</h3>
-                  <span class="text-sm font-semibold text-accent">
-                    {step.n}
-                  </span>
+            pipeline.map((step, i) => (
+              <li
+                class="card relative flex min-h-52 flex-col p-6 text-highlight-ink"
+                style={`background: color-mix(in oklab, var(--color-highlight) ${25 + i * 25}%, var(--color-page)); border-color: color-mix(in oklab, var(--color-highlight-ink) 12%, transparent);`}
+              >
+                <div class="flex items-start justify-between">
+                  <svg
+                    class="h-6 w-6"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                    set:html={step.icon}
+                  />
+                  <span class="card-index text-highlight-ink/60">{step.n}</span>
                 </div>
-                <p class="mt-1.5 text-[0.92rem] leading-relaxed text-muted">
+                <h3 class="mt-8 text-xl font-semibold">{step.title}</h3>
+                <p class="mt-1.5 text-[0.92rem] leading-relaxed text-highlight-ink/75">
                   {step.body}
                 </p>
+                <span class="status mt-auto pt-6 text-highlight-ink/70">
+                  <span class="status-dot bg-highlight-ink" />
+                  {step.state}
+                </span>
               </li>
             ))
           }
@@ -208,13 +233,9 @@ openeffectsctl toggle reactions`;
       id="features"
       class="relative isolate scroll-mt-20 overflow-hidden border-y border-line bg-surface"
     >
-      <span
-        aria-hidden="true"
-        class="pointer-events-none absolute bottom-28 left-0 -z-10 hidden rotate-180 text-8xl font-black tracking-tight text-accent/10 [writing-mode:vertical-rl] lg:block"
-        >FEATURES</span
-      >
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
         <div class="max-w-4xl">
+          <span class="eyebrow">Features</span>
           <h2
             class="mt-5 text-6xl font-extrabold tracking-tight sm:leading-[1.1]"
           >
@@ -234,16 +255,12 @@ openeffectsctl toggle reactions`;
     </section>
 
     <section id="install" class="relative isolate scroll-mt-20 overflow-hidden">
-      <span
-        aria-hidden="true"
-        class="pointer-events-none absolute bottom-28 left-0 -z-10 hidden rotate-180 text-8xl font-black tracking-tight text-accent/10 [writing-mode:vertical-rl] lg:block"
-        >INSTALL</span
-      >
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
         <div
           class="flex gap-8 justify-between sm:flex-col md:flex-col lg:flex-row"
         >
           <div class="max-w-xl md:mx-auto sm:mx-auto">
+            <span class="eyebrow">Install</span>
             <h2
               class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]"
             >
@@ -334,19 +351,13 @@ openeffectsctl toggle reactions`;
       id="gnome"
       class="relative isolate scroll-mt-20 overflow-hidden border-y border-line bg-surface"
     >
-      <span
-        aria-hidden="true"
-        class="pointer-events-none absolute bottom-28 left-0 -z-10 hidden rotate-180 text-8xl font-black tracking-tight text-accent/10 [writing-mode:vertical-rl] lg:block"
-        >EXTENSION</span
-      >
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
         <div class="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
           <div class="max-w-xl">
-            <p
-              class="eyebrow border px-3 py-1 rounded-full bg-accent text-white"
-            >
+            <span class="pill pill--lime">
+              <span class="status-dot bg-highlight-ink"></span>
               Coming Soon
-            </p>
+            </span>
             <h2
               class="mt-5 text-3xl font-bold tracking-tight sm:text-[2.6rem] sm:leading-[1.1]"
             >
