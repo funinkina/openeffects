@@ -1,6 +1,7 @@
 ---
 import Layout from "../layouts/Layout.astro";
 import Header from "../components/Header.astro";
+import AnnouncementBar from "../components/AnnouncementBar.astro";
 import Footer from "../components/Footer.astro";
 import Carousel from "../components/Carousel.astro";
 import FeatureShowcase from "../components/FeatureShowcase.astro";
@@ -91,10 +92,11 @@ openeffectsctl toggle reactions`;
 
 <Layout>
   <Header />
+  <AnnouncementBar />
 
   <main id="main">
     <section
-      class="relative flex min-h-[calc(100svh-4rem)] w-full flex-col justify-center overflow-x-hidden py-6 sm:py-8"
+      class="relative flex min-h-[calc(100svh-4rem)] w-full flex-col justify-center overflow-x-hidden py-6 sm:pb-8 sm:pt-2"
     >
       <div class="mx-auto max-w-4xl px-6 text-center">
         <span class="eyebrow mb-6 justify-center">

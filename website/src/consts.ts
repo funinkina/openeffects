@@ -1,6 +1,10 @@
 export const GITHUB = "https://github.com/funinkina/openeffects";
 export const RELEASES = `${GITHUB}/releases/latest`;
 export const LICENSE = `${GITHUB}/blob/main/LICENSE`;
+
+// Latest release tag, injected from git at build time (see astro.config.mjs).
+export const VERSION = __APP_VERSION__;
+export const RELEASE_NOTES = `${GITHUB}/releases/tag/${VERSION}`;
 // Local documentation page.
 export const DOCS = "/docs";
 export const FLATHUB = "https://flathub.org/apps/in.co.funinkina.OpenEffects";

@@ -1,0 +1,41 @@
+---
+// Full-width release banner shown below the navbar. Links to the tagged
+// release notes; VERSION is injected from git at build time (see consts.ts).
+import { VERSION, RELEASE_NOTES } from "../consts";
+---
+
+<a
+  href={RELEASE_NOTES}
+  class="group block border-b border-accent-deep bg-accent text-white"
+>
+  <div
+    class="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-3 gap-y-1 px-6 py-2.5 text-center text-[0.85rem]"
+  >
+    <span class="pill pill--lime shrink-0">New</span>
+    <span>
+      <strong class="font-semibold">OpenEffects {VERSION}</strong>
+      <span class="text-white/85 pl-1">
+        is out: a global passthrough switch, sharper portrait blur and five new
+        reactions.
+      </span>
+    </span>
+    <span
+      class="inline-flex shrink-0 items-center gap-1 font-medium underline-offset-4 group-hover:underline"
+    >
+      Learn more
+      <svg
+        class="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M5 12h14"></path>
+        <path d="m13 6 6 6-6 6"></path>
+      </svg>
+    </span>
+  </div>
+</a>
