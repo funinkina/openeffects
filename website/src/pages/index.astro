@@ -99,28 +99,16 @@ openeffectsctl toggle reactions`;
       class="relative flex min-h-[calc(100svh-4rem)] w-full flex-col justify-center overflow-x-hidden py-6 sm:pb-8 sm:pt-2"
     >
       <div class="mx-auto max-w-4xl px-6 text-center">
-        <span class="eyebrow mb-6 justify-center">
-          Linux-native webcam effects
-        </span>
         <h1
           class="mx-auto text-5xl font-black leading-[1.05] tracking-tight sm:text-7xl"
         >
           Your next video call deserves
           <span class="text-accent"> the best.</span>
         </h1>
-
-        <p
-          class="mx-auto mt-5 max-w-3xl text-base leading-relaxed text-muted sm:text-lg"
-        >
-          Background blur, auto-framing, studio light and fun reactions, added
-          to <span class="font-medium text-fg"
-            >any app that uses your camera.</span
-          > Set it once and Zoom, Meet, Discord and OBS all get the upgrade.
-        </p>
       </div>
 
-      <div class="my-6 sm:my-10">
-        <Carousel />
+      <div class="mx-auto my-8 w-full max-w-3xl px-6 sm:my-12">
+        <FeatureShowcase variant="hero" />
       </div>
 
       <div class="mx-auto max-w-3xl px-6 text-center">
@@ -236,21 +224,21 @@ openeffectsctl toggle reactions`;
     >
       <div class="mx-auto max-w-6xl px-6 py-20 sm:py-28">
         <div class="max-w-4xl">
-          <span class="eyebrow">Features</span>
+          <span class="eyebrow">Gallery</span>
           <h2
             class="mt-5 text-6xl font-extrabold tracking-tight sm:leading-[1.1]"
           >
-            Everything a modern camera does <span class="text-muted"
-              >without the closed-source camera app.</span
+            See every effect <span class="text-muted"
+              >on a real camera feed.</span
             >
           </h2>
           <p class="mt-5 text-lg leading-relaxed text-muted">
-            Pick a feature and watch the preview apply it live.
+            Swipe through real previews from each mode.
           </p>
         </div>
 
         <div class="mt-12">
-          <FeatureShowcase />
+          <Carousel />
         </div>
       </div>
     </section>

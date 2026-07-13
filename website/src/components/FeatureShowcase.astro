@@ -1,7 +1,35 @@
 ---
-// Interactive features section: the tab list on the left acts like the daemon's
-// effect toggles, and the viewfinder on the right applies the selected effect
-// live (CSS only). Auto-advances until the user takes over.
+// Interactive features section: the tab list acts like the daemon's effect
+// toggles, and the viewfinder applies the selected effect live (CSS only).
+// Auto-advances until the user takes over.
+// variant "split" = preview beside a vertical tab list (default).
+// variant "hero"  = boxed, preview centered, toggles in a row underneath;
+//                   inactive toggles collapse to icon-only.
+interface Props {
+  variant?: "split" | "hero";
+}
+const { variant = "split" } = Astro.props;
+const isHero = variant === "hero";
+
+const rootClass = isHero
+  ? "flex flex-col-reverse gap-3 rounded-2xl border border-line bg-surface p-4"
+  : "grid items-start gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-14";
+const previewClass = isHero
+  ? "mx-auto w-full max-w-3xl"
+  : "sticky top-16 z-20 bg-surface pb-4 lg:top-24 lg:order-2 lg:pb-0";
+const tablistClass = isHero
+  ? "flex flex-row flex-wrap justify-center gap-2"
+  : "flex flex-col gap-2 lg:order-1";
+const tabClass = isHero
+  ? "feature-tab feature-tab--pill relative flex items-center gap-0 rounded-full px-3.5 py-2.5"
+  : "feature-tab relative flex items-center gap-3.5 rounded-md px-3 py-3 text-left sm:px-5";
+const iconClass = isHero
+  ? "tab-icon shrink-0 text-muted [&_svg]:h-6 [&_svg]:w-6 [&_svg]:fill-current"
+  : "tab-icon shrink-0 text-muted [&_svg]:h-8 [&_svg]:w-8 [&_svg]:fill-current";
+const titleClass = isHero
+  ? "tab-title font-semibold text-fg"
+  : "tab-title text-lg font-semibold text-fg";
+
 const features = [
   {
     id: "portrait",
@@ -56,13 +84,9 @@ const reactionWaves = ["👍", "❤️", "🎉"].map((emoji, w) => ({
 }));
 ---
 
-<div
-  class="grid items-start gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:gap-14"
-  data-showcase
-  data-auto="on"
->
+<div class={rootClass} data-showcase data-auto="on">
   <!-- live preview -->
-  <div class="sticky top-16 z-20 bg-surface pb-4 lg:top-24 lg:order-2 lg:pb-0">
+  <div class={previewClass}>
     <div
       class="demo relative aspect-video w-full select-none overflow-hidden rounded-2xl border border-haze/15 bg-ink-deep shadow-lens"
       id="feature-demo"
@@ -267,10 +291,10 @@ const reactionWaves = ["👍", "❤️", "🎉"].map((emoji, w) => ({
 
   <!-- effect toggles -->
   <div
-    class="flex flex-col gap-2 lg:order-1"
+    class={tablistClass}
     role="tablist"
     aria-label="Features"
-    aria-orientation="vertical"
+    aria-orientation={isHero ? "horizontal" : "vertical"}
   >
     {
       features.map((f, i) => (
@@ -279,19 +303,12 @@ const reactionWaves = ["👍", "❤️", "🎉"].map((emoji, w) => ({
           role="tab"
           aria-selected={i === 0 ? "true" : "false"}
           aria-controls="feature-demo"
-          class:list={[
-            "feature-tab relative flex items-center gap-3.5 rounded-md px-3 py-3 text-left sm:px-5",
-            i === 0 && "is-active",
-          ]}
+          class:list={[tabClass, i === 0 && "is-active"]}
           data-feature={f.id}
           data-title={f.title}
         >
-          <span
-            class="tab-icon shrink-0 text-muted [&_svg]:h-8 [&_svg]:w-8 [&_svg]:fill-current"
-            set:html={f.icon}
-            aria-hidden="true"
-          />
-          <span class="tab-title text-lg font-semibold text-fg">{f.title}</span>
+          <span class={iconClass} set:html={f.icon} aria-hidden="true" />
+          <span class={titleClass}>{f.title}</span>
         </button>
       ))
     }
@@ -316,6 +333,26 @@ const reactionWaves = ["👍", "❤️", "🎉"].map((emoji, w) => ({
   .feature-tab.is-active .tab-icon,
   .feature-tab.is-active .tab-title {
     color: var(--color-accent);
+  }
+
+  /* hero pills: the active toggle reveals its label, others collapse to the
+     icon. max-width + opacity animate; the pill (and its neighbors) reflow
+     smoothly as the label slides in. */
+  .feature-tab--pill .tab-title {
+    max-width: 0;
+    margin-left: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    opacity: 0;
+    transition:
+      max-width 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+      margin-left 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.25s ease;
+  }
+  .feature-tab--pill.is-active .tab-title {
+    max-width: 16rem;
+    margin-left: 0.5rem;
+    opacity: 1;
   }
 
   /* auto-advance progress along the bottom of the active tab */
@@ -472,7 +509,8 @@ const reactionWaves = ["👍", "❤️", "🎉"].map((emoji, w) => ({
     .fx,
     .appbar,
     .reticle,
-    .hud {
+    .hud,
+    .feature-tab--pill .tab-title {
       transition: none;
     }
     .demo[data-effect="centerStage"] .room,
