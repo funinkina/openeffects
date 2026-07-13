@@ -1,22 +1,27 @@
 ---
 // Official Flathub "Download on Flathub" badge (dark variant), from
 // dl.flathub.org/assets/badges/flathub-badge-en.svg. Wrapped in a link.
+// Not yet published on Flathub — rendered as a dimmed, non-interactive badge
+// with a "Coming soon" corner tag. `href` is accepted but ignored for now.
 interface Props {
-  href: string;
+  href?: string;
   class?: string;
 }
-const { href, class: className = "" } = Astro.props;
+const { class: className = "" } = Astro.props;
 ---
 
-<a
-  href={href}
-  class:list={["inline-flex", className]}
-  aria-label="Download OpenEffects on Flathub"
+<span
+  class:list={["relative inline-flex select-none", className]}
+  role="img"
+  aria-label="OpenEffects on Flathub — coming soon"
 >
+  <span
+    class="pill pill--lime absolute -right-2 -top-2 z-10 px-2 py-0.5 text-[0.6rem] shadow-soft"
+    >Coming soon</span
+  >
   <svg
     viewBox="0 0 300 100"
-    class="h-13 w-auto sm:h-14"
-    role="img"
+    class="h-13 w-auto opacity-55 grayscale sm:h-14"
     aria-hidden="true"
     xmlns="http://www.w3.org/2000/svg"
   >
@@ -89,4 +94,4 @@ const { href, class: className = "" } = Astro.props;
       </g>
     </g>
   </svg>
-</a>
+</span>

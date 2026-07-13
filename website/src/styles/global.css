@@ -209,6 +209,42 @@
     background: color-mix(in oklab, var(--color-highlight) 88%, var(--color-fg));
   }
 
+  /* violet button with a lime sheen that sweeps across on hover + a lime glow */
+  .btn-shine {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    transition:
+      background-color 0.2s ease,
+      box-shadow 0.25s ease;
+  }
+  .btn-shine::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: -1;
+    width: 55%;
+    background: linear-gradient(
+      100deg,
+      transparent 0%,
+      color-mix(in oklab, var(--color-highlight) 90%, #fff) 50%,
+      transparent 100%
+    );
+    transform: translateX(-200%) skewX(-20deg);
+    opacity: 0.85;
+    pointer-events: none;
+    /* transition drives the sweep both ways: across on hover, back on unhover */
+    transition: transform 0.7s ease;
+  }
+  .btn-shine:hover {
+    box-shadow:
+      0 0 0 1px color-mix(in oklab, var(--color-highlight) 55%, transparent),
+      0 10px 34px -10px color-mix(in oklab, var(--color-highlight) 60%, transparent);
+  }
+  .btn-shine:hover::before {
+    transform: translateX(320%) skewX(-20deg);
+  }
+
   .btn-ghost {
     background: var(--color-page);
     border-color: var(--color-line-strong);
@@ -329,5 +365,9 @@
   .bokeh,
   .scan {
     animation: none !important;
+  }
+
+  .btn-shine::before {
+    transition: none !important;
   }
 }
