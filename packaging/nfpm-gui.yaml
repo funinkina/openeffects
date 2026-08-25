@@ -32,6 +32,8 @@ overrides:
       - openeffectsd
       - libgtk-4-1
       - libadwaita-1-0
+      # gtk4paintablesink, used by the GUI's live preview
+      - gstreamer1.0-gtk4
     scripts:
       postinstall: packaging/postinstall.sh
       postremove: packaging/postremove.sh
@@ -48,4 +50,6 @@ overrides:
       - openeffectsd
       - gtk4
       - libadwaita
+      # gtk4paintablesink, used by the GUI's live preview
+      - gst-plugin-gtk4
     # Arch updates the icon cache / desktop database via pacman hooks.
