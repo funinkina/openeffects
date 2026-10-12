@@ -12,16 +12,13 @@ pub struct ResolvedModel {
 }
 
 /// Model search directories, in PRD §9.3 priority order: per-user data dir,
-/// system-wide data dir, then the Flatpak app mount when sandboxed.
+/// system-wide data dir.
 pub fn search_dirs() -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     if let Some(data_dir) = dirs::data_dir() {
         dirs.push(data_dir.join("vinoopeneffects/models"));
     }
     dirs.push(PathBuf::from("/usr/share/vinoopeneffects/models"));
-    if std::env::var_os("FLATPAK_ID").is_some() {
-        dirs.push(PathBuf::from("/app/share/vinoopeneffects/models"));
-    }
     dirs
 }
 

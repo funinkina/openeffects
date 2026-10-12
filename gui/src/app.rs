@@ -179,9 +179,8 @@ pub fn build_window(
             if quitting.get() {
                 return glib::Propagation::Proceed;
             }
-            let in_flatpak = std::env::var_os("FLATPAK_ID").is_some();
             let keep_running = gui_config.borrow().keep_running_in_background;
-            if keep_running || (!in_flatpak && shared::systemd::is_enabled()) {
+            if keep_running || shared::systemd::is_enabled() {
                 return glib::Propagation::Proceed;
             }
             quitting.set(true);

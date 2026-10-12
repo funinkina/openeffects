@@ -84,7 +84,6 @@ You do **not** package these by hand — they resolve automatically:
   (`daemon/src/inference/registry.rs`) already searches:
   1. `~/.local/share/vinoopeneffects/models` (per-user)
   2. `/usr/share/vinoopeneffects/models` (system — where packages put them)
-  3. `/app/share/vinoopeneffects/models` (Flatpak)
 
   So an installed package reports `Capabilities.models_ready = true` immediately,
   offline, with no user step. Model licenses are Apache-2.0 / MIT (redistributable).
