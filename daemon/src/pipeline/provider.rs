@@ -28,13 +28,15 @@ use tracing::{error, info, warn};
 
 use super::bridge::Bridge;
 use super::probe::PIPEWIRE_NODE_NAME;
-use super::{CaptureCmd, PipelineEvent, PipelineFormat};
+use super::{CaptureCmd, PipelineEvent, PipelineFormat, WorkerMsg};
 
 /// State carried through the stream callbacks.
 struct UserData {
     /// Emit `VirtualCameraVerified` only once, on first registration.
     announced: bool,
-    capture_tx: StdSender<CaptureCmd>,
+    capture_tx: StdSender<WorkerMsg>,
+    /// Arms (`true`) or parks (`false`) the frame tick thread.
+    tick_gate: StdSender<bool>,
     events: mpsc::Sender<PipelineEvent>,
     bridge: Arc<Bridge>,
     /// The advertised video format (the selected camera's native mode).
@@ -50,7 +52,7 @@ struct UserData {
 pub fn run(
     bridge: Arc<Bridge>,
     fmt: PipelineFormat,
-    capture_tx: StdSender<CaptureCmd>,
+    capture_tx: StdSender<WorkerMsg>,
     events: mpsc::Sender<PipelineEvent>,
     quit_rx: pw::channel::Receiver<()>,
 ) {
@@ -63,7 +65,7 @@ pub fn run(
 fn run_inner(
     bridge: Arc<Bridge>,
     fmt: PipelineFormat,
-    capture_tx: StdSender<CaptureCmd>,
+    capture_tx: StdSender<WorkerMsg>,
     events: mpsc::Sender<PipelineEvent>,
     quit_rx: pw::channel::Receiver<()>,
 ) -> Result<(), pw::Error> {
@@ -79,9 +81,21 @@ fn run_inner(
         move |_| mainloop.quit()
     });
 
+    // Frame ticks come from a thread that sleeps until a consumer is streaming,
+    // so a paused node costs no wakeups. It hands each tick to this loop, since
+    // the stream can only be driven from its own thread.
+    let (tick_tx, tick_rx) = pw::channel::channel::<()>();
+    let (tick_gate, gate_rx) = std::sync::mpsc::channel::<bool>();
+    spawn_tick_thread(
+        Duration::from_nanos(1_000_000_000 / fmt.fps as u64),
+        gate_rx,
+        tick_tx,
+    );
+
     let data = UserData {
         announced: false,
         capture_tx,
+        tick_gate,
         events,
         bridge,
         fmt,
@@ -110,8 +124,9 @@ fn run_inner(
             info!(?old, ?new, "provide node state changed");
             match new {
                 StreamState::Streaming => {
+                    let _ = ud.tick_gate.send(true);
                     // A consumer linked and the graph is cycling -> camera on.
-                    let _ = ud.capture_tx.send(CaptureCmd::Start);
+                    let _ = ud.capture_tx.send(WorkerMsg::Capture(CaptureCmd::Start));
                 }
                 StreamState::Paused => {
                     // First PAUSED = the node is registered and advertised.
@@ -125,10 +140,12 @@ fn run_inner(
                             });
                     }
                     // No consumer pulling (resting state) -> release the camera.
-                    let _ = ud.capture_tx.send(CaptureCmd::Stop);
+                    let _ = ud.tick_gate.send(false);
+                    let _ = ud.capture_tx.send(WorkerMsg::Capture(CaptureCmd::Stop));
                 }
                 StreamState::Unconnected | StreamState::Error(_) => {
-                    let _ = ud.capture_tx.send(CaptureCmd::Stop);
+                    let _ = ud.tick_gate.send(false);
+                    let _ = ud.capture_tx.send(WorkerMsg::Capture(CaptureCmd::Stop));
                 }
                 StreamState::Connecting => {}
             }
@@ -241,19 +258,15 @@ fn run_inner(
 
     // Drive output at the target framerate: each tick, if we are the active
     // driver (a consumer is streaming), trigger a graph cycle so process() runs
-    // and serves the latest frame. When PAUSED, is_driving() is false and the
-    // tick is a cheap no-op, so we never spin the camera with no consumer.
-    let _timer = {
+    // and serves the latest frame.
+    let _tick = tick_rx.attach(mainloop.loop_(), {
         let stream = stream.clone();
-        let timer = mainloop.loop_().add_timer(move |_expirations| {
+        move |()| {
             if stream.is_driving() {
                 let _ = stream.trigger_process();
             }
-        });
-        let interval = Duration::from_nanos(1_000_000_000 / fmt.fps as u64);
-        timer.update_timer(Some(interval), Some(interval));
-        timer
-    };
+        }
+    });
 
     info!(
         node = PIPEWIRE_NODE_NAME,
@@ -262,6 +275,41 @@ fn run_inner(
     mainloop.run();
     info!("provide node loop exited");
     Ok(())
+}
+
+/// Sends a tick every `interval` while the gate is open and blocks while it is
+/// closed. Exits once the gate sender or the tick receiver is gone.
+fn spawn_tick_thread(
+    interval: Duration,
+    gate: std::sync::mpsc::Receiver<bool>,
+    ticks: pw::channel::Sender<()>,
+) {
+    std::thread::spawn(move || {
+        let mut open = false;
+        loop {
+            if !open {
+                match gate.recv() {
+                    Ok(v) => open = v,
+                    Err(_) => return,
+                }
+                continue;
+            }
+            // Absolute deadlines, so a late wakeup doesn't drift the frame rate.
+            let mut next = std::time::Instant::now() + interval;
+            while open {
+                match gate.recv_timeout(next.saturating_duration_since(std::time::Instant::now())) {
+                    Ok(v) => open = v,
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                        if ticks.send(()).is_err() {
+                            return;
+                        }
+                        next += interval;
+                    }
+                }
+            }
+        }
+    });
 }
 
 /// The single video format we advertise to consumers: I420 at the selected

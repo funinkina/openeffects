@@ -13,7 +13,6 @@ use std::time::{Duration, Instant};
 use pipewire as pw;
 use shared::config::AppState;
 use tokio::sync::mpsc;
-use tokio::sync::mpsc::error::TryRecvError;
 use tracing::{error, info};
 
 use crate::pipeline::bridge::Bridge;
@@ -92,6 +91,14 @@ pub(crate) enum CaptureCmd {
     Stop,
 }
 
+/// Everything the worker reacts to arrives on one inbox, so it can block until
+/// there is work instead of polling: a daemon command, or a consumer-state
+/// change from the provide node.
+pub(crate) enum WorkerMsg {
+    Command(PipelineCommand),
+    Capture(CaptureCmd),
+}
+
 /// Handle to the running native provide node (its own `pw_main_loop` thread).
 struct ProviderHandle {
     quit: pw::channel::Sender<()>,
@@ -106,7 +113,7 @@ impl ProviderHandle {
 }
 
 pub fn spawn_worker(
-    commands: mpsc::Receiver<PipelineCommand>,
+    mut commands: mpsc::Receiver<PipelineCommand>,
     events: mpsc::Sender<PipelineEvent>,
 ) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
@@ -118,19 +125,30 @@ pub fn spawn_worker(
             let _ = events.blocking_send(PipelineEvent::Error(err.to_string()));
             return;
         }
+        let (inbox_tx, inbox) = std_mpsc::channel::<WorkerMsg>();
+        // Forward daemon commands onto the inbox. Parked in `blocking_recv`, so
+        // it costs nothing while idle; when the command channel closes it asks
+        // the worker to shut down.
+        let forward_tx = inbox_tx.clone();
+        std::thread::spawn(move || {
+            while let Some(cmd) = commands.blocking_recv() {
+                if forward_tx.send(WorkerMsg::Command(cmd)).is_err() {
+                    return;
+                }
+            }
+            let _ = forward_tx.send(WorkerMsg::Command(PipelineCommand::Shutdown));
+        });
         let bridge = Arc::new(Bridge::new());
-        worker_loop(commands, events, bridge);
+        worker_loop(inbox, inbox_tx, events, bridge);
     })
 }
 
 fn worker_loop(
-    mut commands: mpsc::Receiver<PipelineCommand>,
+    inbox: std_mpsc::Receiver<WorkerMsg>,
+    capture_tx: std_mpsc::Sender<WorkerMsg>,
     events: mpsc::Sender<PipelineEvent>,
     bridge: Arc<Bridge>,
 ) {
-    // Provider -> worker capture gating channel.
-    let (capture_tx, capture_rx) = std_mpsc::channel::<CaptureCmd>();
-
     let mut stored_app: Option<AppState> = None;
     let mut provider: Option<ProviderHandle> = None;
     let mut capture: Option<builder::BuiltCapture> = None;
@@ -144,8 +162,25 @@ fn worker_loop(
     let mut stop_deadline: Option<Instant> = None;
 
     loop {
-        match commands.try_recv() {
-            Ok(PipelineCommand::Start(app)) => {
+        // Sleep until a message arrives, or until the capture-release grace
+        // window ends. With no camera open and nothing pending this blocks
+        // indefinitely: an idle daemon takes no wakeups.
+        let msg = match stop_deadline {
+            Some(deadline) => {
+                match inbox.recv_timeout(deadline.saturating_duration_since(Instant::now())) {
+                    Ok(msg) => Some(msg),
+                    Err(std_mpsc::RecvTimeoutError::Timeout) => None,
+                    Err(std_mpsc::RecvTimeoutError::Disconnected) => break,
+                }
+            }
+            None => match inbox.recv() {
+                Ok(msg) => Some(msg),
+                Err(_) => break,
+            },
+        };
+
+        match msg {
+            Some(WorkerMsg::Command(PipelineCommand::Start(app))) => {
                 // Tear any running capture so a config/camera change takes effect.
                 if let Some(c) = capture.take() {
                     c.stop();
@@ -183,7 +218,7 @@ fn worker_loop(
                     start_capture(&app, current_fmt, &bridge, &events, &mut capture);
                 }
             }
-            Ok(PipelineCommand::Stop) => {
+            Some(WorkerMsg::Command(PipelineCommand::Stop)) => {
                 if let Some(c) = capture.take() {
                     c.stop();
                 }
@@ -195,19 +230,19 @@ fn worker_loop(
                 }
                 let _ = events.blocking_send(PipelineEvent::Stopped);
             }
-            Ok(PipelineCommand::ApplyEffects(app)) => {
+            Some(WorkerMsg::Command(PipelineCommand::ApplyEffects(app))) => {
                 if let Some(c) = capture.as_ref() {
                     c.apply_app_state(&app);
                 }
                 stored_app = Some(app);
             }
-            Ok(PipelineCommand::TriggerReaction(id)) => {
+            Some(WorkerMsg::Command(PipelineCommand::TriggerReaction(id))) => {
                 // Only meaningful while a consumer is streaming; otherwise drop.
                 if let Some(c) = capture.as_ref() {
                     c.trigger_reaction(&id);
                 }
             }
-            Ok(PipelineCommand::Shutdown) => {
+            Some(WorkerMsg::Command(PipelineCommand::Shutdown)) => {
                 if let Some(c) = capture.take() {
                     c.stop();
                 }
@@ -216,13 +251,8 @@ fn worker_loop(
                 }
                 break;
             }
-            Err(TryRecvError::Empty) => {}
-            Err(TryRecvError::Disconnected) => break,
-        }
-
-        // Capture gating driven by the provide node's consumer state.
-        match capture_rx.try_recv() {
-            Ok(CaptureCmd::Start) => {
+            // Capture gating driven by the provide node's consumer state.
+            Some(WorkerMsg::Capture(CaptureCmd::Start)) => {
                 consumer_streaming = true;
                 // A consumer is back -> cancel any pending release and ensure the
                 // camera is running (it may still be warm from a recent blip).
@@ -233,7 +263,7 @@ fn worker_loop(
                     start_capture(&app, current_fmt, &bridge, &events, &mut capture);
                 }
             }
-            Ok(CaptureCmd::Stop) => {
+            Some(WorkerMsg::Capture(CaptureCmd::Stop)) => {
                 consumer_streaming = false;
                 // Debounce: don't release the camera yet — a portal probe/retry
                 // may reconnect within the grace window. Arm a deadline instead.
@@ -241,8 +271,7 @@ fn worker_loop(
                     stop_deadline = Some(Instant::now() + CAPTURE_RELEASE_GRACE);
                 }
             }
-            Err(std_mpsc::TryRecvError::Empty) => {}
-            Err(std_mpsc::TryRecvError::Disconnected) => {}
+            None => {}
         }
 
         // Release the camera once the grace window elapses with no consumer.
@@ -261,15 +290,13 @@ fn worker_loop(
                 stop_deadline = None;
             }
         }
-
-        std::thread::sleep(Duration::from_millis(50));
     }
 }
 
 fn spawn_provider(
     bridge: &Arc<Bridge>,
     fmt: PipelineFormat,
-    capture_tx: &std_mpsc::Sender<CaptureCmd>,
+    capture_tx: &std_mpsc::Sender<WorkerMsg>,
     events: &mpsc::Sender<PipelineEvent>,
 ) -> ProviderHandle {
     let (quit_tx, quit_rx) = pw::channel::channel::<()>();
