@@ -92,3 +92,28 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
         with:
           command: check
+
+  # Fedora is the dev and packaging target. This builds with Fedora's own rustc
+  # and packaged GTK4, libadwaita, GStreamer and PipeWire, as an RPM build would.
+  # Not a required check: a new Fedora release can break it independently of a PR.
+  fedora:
+    runs-on: ubuntu-26.04
+    container: fedora:latest
+    steps:
+      - name: Install toolchain and dev libraries
+        run: |
+          dnf install -y --setopt=install_weak_deps=False \
+            rust cargo gcc pkgconf-pkg-config clang-devel git \
+            gstreamer1-devel gstreamer1-plugins-base-devel gstreamer1-plugins-bad-free-devel \
+            gtk4-devel libadwaita-devel pipewire-devel \
+            gstreamer1-plugins-base gstreamer1-plugins-good
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - run: rustc --version
+      # --locked: build against exactly the committed Cargo.lock, as a packager does.
+      - run: cargo build --workspace --locked
+      - run: cargo test --workspace --locked
