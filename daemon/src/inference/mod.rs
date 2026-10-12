@@ -73,4 +73,3 @@ fn with_execution_provider(
         other => anyhow::bail!("OE_EP={other:?} needs a build with --features npu"),
     }
 }
-
