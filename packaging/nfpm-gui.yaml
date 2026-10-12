@@ -7,7 +7,7 @@
 name: vinoopeneffects
 arch: ${ARCH}
 version: ${VERSION}
-maintainer: Karan Shukla <3769191+karanshukla@users.noreply.github.com>
+maintainer: Karan Shukla
 description: |
   GTK4/libadwaita control surface for the vinoOpenEffects daemon (vinoopeneffects-daemon):
   manage webcam effects, backgrounds, camera selection and the ML model library.

@@ -11,7 +11,7 @@
 name: vinoopeneffects-daemon
 arch: ${ARCH}
 version: ${VERSION}
-maintainer: Karan Shukla <3769191+karanshukla@users.noreply.github.com>
+maintainer: Karan Shukla
 description: |
   vinoOpenEffects daemon — real-time webcam effects for Linux (PipeWire virtual
   camera): background blur/replace, studio light, portrait blur, center stage.

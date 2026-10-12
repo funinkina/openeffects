@@ -7,7 +7,7 @@
 name: vinoopeneffects-ctl
 arch: ${ARCH}
 version: ${VERSION}
-maintainer: Karan Shukla <3769191+karanshukla@users.noreply.github.com>
+maintainer: Karan Shukla
 description: |
   Command-line control client for the vinoOpenEffects daemon (vinoopeneffects-daemon):
   start/stop the virtual camera, toggle effects, select the camera.
