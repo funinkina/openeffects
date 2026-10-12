@@ -4,6 +4,9 @@
 
 use std::time::{Duration, Instant};
 
+use gstreamer::prelude::*;
+use gstreamer_app::AppSink;
+
 use anyhow::{Context, Result};
 
 use super::engine::{SelfieSeg, YuNet};
@@ -112,4 +115,124 @@ fn synthetic_frame(w: usize, h: usize) -> (Vec<u8>, usize, usize) {
         }
     }
     (buf, w, h)
+}
+
+/// `openeffectsd --bench-video FILE [--seconds N] [--fps F]`: runs all four
+/// models on every frame of a decoded clip for N seconds. `--fps` paces the
+/// loop to a camera rate (sleeping between frames) so power draw reflects a
+/// realistic duty cycle; without it the loop runs flat out and reports
+/// throughput. Frames are decoded up front so decode cost stays out of the
+/// measurement. Prints one `key=value` summary line for the harness script.
+pub fn run_video(args: &[String]) -> Result<()> {
+    let mut path = None;
+    let mut seconds = 30.0_f64;
+    let mut fps: Option<f64> = None;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        match a.as_str() {
+            "--seconds" => seconds = it.next().context("--seconds needs a value")?.parse()?,
+            "--fps" => fps = Some(it.next().context("--fps needs a value")?.parse()?),
+            other => path = Some(other.to_string()),
+        }
+    }
+    let path = path.context("usage: --bench-video FILE [--seconds N] [--fps F]")?;
+    let (w, h) = (1280usize, 720usize);
+    let frames = decode_frames(&path, w, h, 90, 8)?;
+    anyhow::ensure!(!frames.is_empty(), "no frames decoded from {path}");
+    let stride = w * 4;
+
+    let mut seg = SelfieSeg::load()?;
+    let mut yunet = YuNet::load()?;
+    let mut palm = PalmDetector::load()?;
+    let mut hand = HandLandmarker::load()?;
+    let crop = CropBox { cx: 0.5, cy: 0.5, side: 0.4 };
+
+    let mut one = |f: &[u8]| -> Result<()> {
+        seg.segment(f, w, h, stride)?;
+        yunet.detect(f, w, h, stride, SCORE_THRESH)?;
+        palm.detect(f, w, h, stride, SCORE_THRESH)?;
+        hand.infer(f, w, h, stride, crop)?;
+        Ok(())
+    };
+    for f in frames.iter().cycle().take(WARMUP) {
+        one(f)?;
+    }
+
+    let budget = fps.map(|f| Duration::from_secs_f64(1.0 / f));
+    println!("# measuring");
+    let cpu0 = cpu_seconds();
+    let start = Instant::now();
+    let mut lat = Vec::new();
+    let mut deadline = start;
+    for f in frames.iter().cycle() {
+        if start.elapsed().as_secs_f64() >= seconds {
+            break;
+        }
+        let t = Instant::now();
+        one(f)?;
+        lat.push(t.elapsed().as_secs_f64() * 1e3);
+        if let Some(b) = budget {
+            deadline += b;
+            if let Some(wait) = deadline.checked_duration_since(Instant::now()) {
+                std::thread::sleep(wait);
+            }
+        }
+    }
+    let wall = start.elapsed().as_secs_f64();
+    let cpu = cpu_seconds() - cpu0;
+    lat.sort_by(f64::total_cmp);
+    let n = lat.len();
+    let pct = |p: f64| lat[((n - 1) as f64 * p).round() as usize];
+    println!(
+        "ep={} frames={n} fps={:.1} ms_mean={:.2} ms_p50={:.2} ms_p99={:.2} cpu_ms_per_frame={:.2} cpu_util_pct={:.1} wall_s={wall:.1}",
+        super::requested_ep(),
+        n as f64 / wall,
+        lat.iter().sum::<f64>() / n as f64,
+        pct(0.5),
+        pct(0.99),
+        cpu * 1e3 / n as f64,
+        cpu / wall * 100.0,
+    );
+    Ok(())
+}
+
+fn cpu_seconds() -> f64 {
+    let mut ru: libc::rusage = unsafe { std::mem::zeroed() };
+    unsafe { libc::getrusage(libc::RUSAGE_SELF, &mut ru) };
+    let tv = |t: libc::timeval| t.tv_sec as f64 + t.tv_usec as f64 / 1e6;
+    tv(ru.ru_utime) + tv(ru.ru_stime)
+}
+
+/// Decode `path` to tightly packed RGBA at `w`×`h`, keeping every `keep_every`th
+/// frame up to `max` frames.
+fn decode_frames(path: &str, w: usize, h: usize, max: usize, keep_every: usize) -> Result<Vec<Vec<u8>>> {
+    gstreamer::init()?;
+    let desc = format!(
+        "filesrc location=\"{path}\" ! decodebin ! videoconvert ! videoscale ! \
+         video/x-raw,format=RGBA,width={w},height={h} ! appsink name=sink sync=false"
+    );
+    let pipeline = gstreamer::parse::launch(&desc)?;
+    let sink = pipeline
+        .downcast_ref::<gstreamer::Bin>()
+        .and_then(|b| b.by_name("sink"))
+        .and_then(|e| e.downcast::<AppSink>().ok())
+        .context("appsink missing from decode pipeline")?;
+    pipeline.set_state(gstreamer::State::Playing)?;
+    let mut frames = Vec::new();
+    let mut seen = 0usize;
+    while let Ok(sample) = sink.pull_sample() {
+        seen += 1;
+        if (seen - 1) % keep_every != 0 {
+            continue;
+        }
+        let buf = sample.buffer().context("sample without buffer")?;
+        let map = buf.map_readable()?;
+        anyhow::ensure!(map.len() == w * h * 4, "unexpected frame size {}", map.len());
+        frames.push(map.to_vec());
+        if frames.len() >= max {
+            break;
+        }
+    }
+    pipeline.set_state(gstreamer::State::Null)?;
+    Ok(frames)
 }
