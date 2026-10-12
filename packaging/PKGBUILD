@@ -141,6 +141,8 @@ package_vinoopeneffects() {
 
   install -Dm644 data/icons/io.github.karanshukla.vinoopeneffects.svg \
     "$pkgdir/usr/share/icons/hicolor/scalable/apps/io.github.karanshukla.vinoopeneffects.svg"
+  install -Dm644 data/icons/io.github.karanshukla.vinoopeneffects-symbolic.svg \
+    "$pkgdir/usr/share/icons/hicolor/symbolic/apps/io.github.karanshukla.vinoopeneffects-symbolic.svg"
   install -Dm644 data/applications/io.github.karanshukla.vinoopeneffects.desktop \
     "$pkgdir/usr/share/applications/io.github.karanshukla.vinoopeneffects.desktop"
 

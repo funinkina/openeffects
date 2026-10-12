@@ -32,6 +32,8 @@ contents:
   # App icon + desktop entry
   - src: data/icons/io.github.karanshukla.vinoopeneffects.svg
     dst: /usr/share/icons/hicolor/scalable/apps/io.github.karanshukla.vinoopeneffects.svg
+  - src: data/icons/io.github.karanshukla.vinoopeneffects-symbolic.svg
+    dst: /usr/share/icons/hicolor/symbolic/apps/io.github.karanshukla.vinoopeneffects-symbolic.svg
   - src: data/applications/io.github.karanshukla.vinoopeneffects.desktop
     dst: /usr/share/applications/io.github.karanshukla.vinoopeneffects.desktop
 

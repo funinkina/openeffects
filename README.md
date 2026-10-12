@@ -1,13 +1,12 @@
-<img src="data/icons/in.co.funinkina.OpenEffects.svg" align="left" width="80" alt="OpenEffects icon">
+<p align="center">
+  <img src="https://raw.githubusercontent.com/karanshukla/vinoOpenEffects/main/docs/assets/vinoopeneffects.svg" width="112" alt="The vinoOpenEffects mark: a dark viewfinder with a green silhouette over blurred bars and crop brackets">
+</p>
 
 # vinoOpenEffects
 
-[![Latest Release](https://img.shields.io/github/v/release/funinkina/openeffects?style=flat-square)](https://github.com/funinkina/openeffects/releases/latest)
-[![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
-[![Language](https://img.shields.io/badge/language-Rust-orange?style=flat-square)](https://www.rust-lang.org/)
-[![Platform](https://img.shields.io/badge/platform-Linux-important?style=flat-square)](https://www.linux.org/)
-[![GitHub Stars](https://img.shields.io/github/stars/funinkina/openeffects?style=flat-square)](https://github.com/funinkina/openeffects/stargazers)
-[![GitHub Issues](https://img.shields.io/github/issues/funinkina/openeffects?style=flat-square)](https://github.com/funinkina/openeffects/issues)
+[![CI](https://github.com/karanshukla/vinoOpenEffects/actions/workflows/ci.yml/badge.svg)](https://github.com/karanshukla/vinoOpenEffects/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-GPL--3.0-blue)](https://github.com/karanshukla/vinoOpenEffects/blob/main/LICENSE)
+[![Language](https://img.shields.io/badge/language-Rust-orange?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 
 vinoOpenEffects is a Linux-native webcam effects engine powered by ONNX Runtime. It brings advanced camera features like Center Stage, Portrait blur, Background Replacement, and gesture-triggered Reactions to any Wayland Linux desktop. It works transparently with any app that consumes a PipeWire camera node or `/dev/video*` device (Zoom, OBS, WebRTC, etc.).
 

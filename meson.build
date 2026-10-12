@@ -42,6 +42,10 @@ install_data(
   'data/icons/io.github.karanshukla.vinoopeneffects.svg',
   install_dir: datadir / 'icons/hicolor/scalable/apps',
 )
+install_data(
+  'data/icons/io.github.karanshukla.vinoopeneffects-symbolic.svg',
+  install_dir: datadir / 'icons/hicolor/symbolic/apps',
+)
 
 install_data(
   'data/applications/io.github.karanshukla.vinoopeneffects.desktop',

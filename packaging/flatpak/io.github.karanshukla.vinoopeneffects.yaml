@@ -108,6 +108,7 @@ modules:
       - install -Dm644 data/applications/io.github.karanshukla.vinoopeneffects.desktop /app/share/applications/io.github.karanshukla.vinoopeneffects.desktop
       - sed -i 's/^Exec=vinoopeneffects$/Exec=vinoopeneffects-launcher/' /app/share/applications/io.github.karanshukla.vinoopeneffects.desktop
       - install -Dm644 data/icons/io.github.karanshukla.vinoopeneffects.svg /app/share/icons/hicolor/scalable/apps/io.github.karanshukla.vinoopeneffects.svg
+      - install -Dm644 data/icons/io.github.karanshukla.vinoopeneffects-symbolic.svg /app/share/icons/hicolor/symbolic/apps/io.github.karanshukla.vinoopeneffects-symbolic.svg
       - install -Dm644 packaging/flatpak/io.github.karanshukla.vinoopeneffects.metainfo.xml /app/share/metainfo/io.github.karanshukla.vinoopeneffects.metainfo.xml
 
       # Bundled, sha256-verified ML models -> /app/share/vinoopeneffects/models/<id>/.
