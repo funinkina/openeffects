@@ -81,6 +81,15 @@ sudo apt install ./vinoopeneffects-daemon_*_amd64.deb ./vinoopeneffects_*_amd64.
 
 For a headless / CLI-only setup, install `vinoopeneffects-daemon` plus `vinoopeneffects-ctl` instead. x86_64 only for now.
 
+### From source
+
+```bash
+scripts/install.sh            # ~/.local, no root; add --no-gui for daemon and CLI only
+scripts/uninstall.sh          # --purge also removes models and config
+```
+
+The GUI needs GTK 4 and libadwaita 1.7 or newer.
+
 ### Upgrading from openeffects
 
 This project is a hard fork of `openeffects` and everything was renamed. Installing the new packages removes the old ones and their leftover files (old unit, D-Bus service, desktop entry, icon, binaries).

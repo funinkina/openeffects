@@ -42,7 +42,8 @@ overrides:
     depends:
       - vinoopeneffects-daemon
       - libgtk-4-1
-      - libadwaita-1-0
+      # AdwToggleGroup, used by the effect pages, is new in 1.7.
+      - libadwaita-1-0 (>= 1.7)
       # gtk4paintablesink, used by the GUI's live preview
       - gstreamer1.0-gtk4
     scripts:
@@ -52,7 +53,7 @@ overrides:
     depends:
       - vinoopeneffects-daemon
       - gtk4
-      - libadwaita
+      - libadwaita >= 1.7
       # gtk4paintablesink, used by the GUI's live preview (Fedora: gst-plugins-rs)
       - gstreamer1-plugin-gtk4
     scripts:
@@ -62,7 +63,7 @@ overrides:
     depends:
       - vinoopeneffects-daemon
       - gtk4
-      - libadwaita
+      - libadwaita>=1.7
       # gtk4paintablesink, used by the GUI's live preview
       - gst-plugin-gtk4
     # Arch updates the icon cache / desktop database via pacman hooks.
