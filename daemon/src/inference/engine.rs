@@ -14,7 +14,7 @@ use anyhow::{Context, Result};
 use ort::session::Session;
 use ort::value::Tensor;
 
-use super::{load_session, registry};
+use super::{load_session, load_session_npu, registry};
 
 /// MediaPipe Selfie Segmentation: produces a per-pixel foreground probability
 /// mask. Input `pixel_values` is NCHW `[1,3,256,256]`, RGB scaled to `0..1`;
@@ -66,6 +66,77 @@ impl SelfieSeg {
             };
         }
         Ok(Mask { size: s, values })
+    }
+}
+
+/// IAT (Illumination Adaptive Transformer, 91k params) low-light enhancer.
+/// Input `input` and output `output` are NCHW `[1,3,256,256]` RGB in `0..1`.
+///
+/// NPU only: ~10 ms there, ~850 ms on CPU. Rather than use the enhanced image
+/// (which over-brightens well-lit frames and shifts colour), only its
+/// luminance ratio to the input is kept, as a low-res gain map the filter
+/// upsamples and applies to the full-resolution frame.
+pub struct AutoLight {
+    session: Session,
+}
+
+/// Per-pixel brightness gain (`>= 1`) plus the frame's mean luma (`0..1`).
+pub struct LightMap {
+    pub gain: Mask,
+    pub mean_luma: f32,
+}
+
+impl AutoLight {
+    pub const SIZE: usize = 256;
+    const MAX_GAIN: f32 = 6.0;
+    /// Keeps the ratio finite in near-black regions.
+    const LUMA_EPS: f32 = 0.03;
+
+    pub fn load() -> Result<Self> {
+        let resolved = registry::find_model("iat_lowlight")
+            .context("iat_lowlight model not found; see scripts/export-iat.py")?;
+        Ok(Self {
+            session: load_session_npu(&resolved.model_path)?,
+        })
+    }
+
+    pub fn analyze(&mut self, rgba: &[u8], w: usize, h: usize, stride: usize) -> Result<LightMap> {
+        let s = Self::SIZE;
+        let plane = s * s;
+        let mut input = vec![0f32; 3 * plane];
+        for y in 0..s {
+            let sy = (y * h / s).min(h - 1);
+            for x in 0..s {
+                let sx = (x * w / s).min(w - 1);
+                let p = sy * stride + sx * 4;
+                for c in 0..3 {
+                    input[c * plane + y * s + x] = rgba[p + c] as f32 / 255.0;
+                }
+            }
+        }
+        let luma = |buf: &[f32], i: usize| {
+            0.299 * buf[i] + 0.587 * buf[plane + i] + 0.114 * buf[2 * plane + i]
+        };
+        let tensor = Tensor::from_array(([1i64, 3, s as i64, s as i64], input.clone()))?;
+        let outputs = self.session.run(ort::inputs!["input" => tensor])?;
+        let (_shape, out) = outputs["output"].try_extract_tensor::<f32>()?;
+        anyhow::ensure!(out.len() == 3 * plane, "iat: unexpected output size");
+
+        let mut gain = vec![1f32; plane];
+        let mut sum = 0f32;
+        for (i, g) in gain.iter_mut().enumerate() {
+            let y_in = luma(&input, i);
+            let y_out = luma(out, i).clamp(0.0, 1.0);
+            sum += y_in;
+            *g = ((y_out + Self::LUMA_EPS) / (y_in + Self::LUMA_EPS)).clamp(1.0, Self::MAX_GAIN);
+        }
+        Ok(LightMap {
+            gain: Mask {
+                size: s,
+                values: gain,
+            },
+            mean_luma: sum / plane as f32,
+        })
     }
 }
 
@@ -342,5 +413,24 @@ mod tests {
         for f in &faces {
             assert!(f.score >= 0.6 && f.score <= 1.0);
         }
+    }
+
+    /// Needs an NPU and the exported model; skips with a message otherwise.
+    #[test]
+    fn auto_light_gain_is_bounded_when_available() {
+        if super::registry::find_model("iat_lowlight").is_none() {
+            eprintln!("skipping: iat_lowlight model not installed");
+            return;
+        }
+        if !super::super::npu_present() {
+            eprintln!("skipping: no NPU hardware present");
+            return;
+        }
+        let mut model = AutoLight::load().expect("load iat_lowlight on NPU");
+        let (w, h) = (320usize, 240usize);
+        let frame = vec![40u8; w * h * 4];
+        let map = model.analyze(&frame, w, h, w * 4).expect("analyze");
+        assert!(map.mean_luma > 0.1 && map.mean_luma < 0.2);
+        assert!(map.gain.values.iter().all(|g| (1.0..=6.0).contains(g)));
     }
 }

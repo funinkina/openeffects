@@ -170,6 +170,14 @@ impl DaemonState {
                     "bg_brightness".into(),
                     i32_value(self.app.effects.studio_light.bg_brightness as i32),
                 );
+                values.insert(
+                    "auto_light".into(),
+                    bool_value(self.app.effects.studio_light.auto_light),
+                );
+                values.insert(
+                    "auto_strength".into(),
+                    u32_value(self.app.effects.studio_light.auto_strength as u32),
+                );
             }
             "reactions" => {
                 values.insert(
@@ -280,6 +288,18 @@ impl DaemonState {
             ("studio_light", "contrast") => {
                 if let Some(v) = shared::dbus::value_as_u32(value) {
                     self.app.effects.studio_light.contrast = v.min(100) as u8;
+                    return true;
+                }
+            }
+            ("studio_light", "auto_light") => {
+                if let Some(v) = shared::dbus::value_as_bool(value) {
+                    self.app.effects.studio_light.auto_light = v;
+                    return true;
+                }
+            }
+            ("studio_light", "auto_strength") => {
+                if let Some(v) = shared::dbus::value_as_u32(value) {
+                    self.app.effects.studio_light.auto_strength = v.min(100) as u8;
                     return true;
                 }
             }
