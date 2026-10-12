@@ -1,19 +1,18 @@
-//! Background page: a master switch plus a "Style" group (Blur/Replace mode and,
-//! in Blur mode, a strength row) that drives the two underlying effects —
-//! `portrait_blur` and `bg_replace`. Only the controls for the active mode are
-//! shown, and everything below the master switch is disabled while it's off.
+//! Background card: the effect switch in the header, then a Blur/Replace mode
+//! control and, in Blur mode, a strength row. The card drives the two
+//! underlying effects — `portrait_blur` and `bg_replace`. Only the controls
+//! for the active mode are shown, and everything is disabled while it's off.
 //!
 //! The mode is *virtual*: `bg_replace.enabled` means Replace, otherwise
 //! Blur, and changing it just toggles those two effects' `enabled` flags
-//! (mutually exclusive). Replace mode offers a row of built-in image
+//! (mutually exclusive). Replace mode offers a grid of built-in image
 //! presets (plus a "choose your own" button) and a row of solid-color
 //! swatches with a custom-color button.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use adw::glib;
 use adw::prelude::*;
 use gtk::gdk::RGBA;
 use gtk::gio;
@@ -21,65 +20,60 @@ use shared::dbus::{VariantMap, value_as_bool, value_as_string, value_as_u32};
 
 use crate::constants::{BG_BLUR, BG_IMAGE_PRESETS, BG_MODES, BG_PRESETS, BG_REPLACE, BLUR_LEVELS};
 use crate::dbus_client::{CmdTx, GuiCommand};
-use crate::widgets::{ToggleCtl, pref_group, toggle_row};
+use crate::widgets::{EffectCard, ToggleCtl, plain_row, section_label, toggle_row};
 
 const CUSTOM_SWATCH_CLASS: &str = "oe-custom-swatch";
 const CUSTOM_IMAGE_CLASS: &str = "oe-custom-image";
 
-/// Size of the background-image preset thumbnails (bigger than the 32px
-/// color swatches).
-const IMAGE_THUMB_WIDTH: i32 = 84;
-const IMAGE_THUMB_HEIGHT: i32 = 52;
+/// Size of the background-image preset thumbnails, sized so five fit across
+/// the controls column.
+const IMAGE_THUMB_WIDTH: i32 = 60;
+const IMAGE_THUMB_HEIGHT: i32 = 40;
 
 /// Widgets the state-sync layer keeps in sync with the daemon.
 pub struct Widgets {
-    switch: adw::SwitchRow,
-    switch_handler: glib::SignalHandlerId,
-    style_group: adw::PreferencesGroup,
+    pub card: EffectCard,
+    mode_row: adw::ActionRow,
     mode: ToggleCtl,
     /// Blur-strength row, shown only in Blur mode.
     blur_row: adw::ActionRow,
     blur_strength: ToggleCtl,
-    /// Groups shown only in Replace mode (image picker + color swatches).
-    replace_groups: Vec<adw::PreferencesGroup>,
+    /// Rows shown only in Replace mode (image picker + color swatches).
+    replace_rows: Vec<gtk::ListBoxRow>,
+    /// Shows the file name of a custom (non-preset) image background.
     image_row: adw::ActionRow,
-    /// Built-in image backgrounds: on-disk path + their toggle button.
-    image_presets: Vec<(PathBuf, gtk::ToggleButton)>,
+    /// Built-in image backgrounds: label, on-disk path and toggle button.
+    image_presets: Vec<(&'static str, PathBuf, gtk::ToggleButton)>,
     swatches: Vec<gtk::ToggleButton>,
     custom_provider: gtk::CssProvider,
+    /// Display name of the current replacement background, for the summary.
+    bg_name: RefCell<String>,
     /// Guards programmatic widget updates so they don't echo to the daemon.
     applying: Rc<Cell<bool>>,
     blur_enabled: Cell<bool>,
     bg_enabled: Cell<bool>,
 }
 
-pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
+pub fn build(cmd_tx: &CmdTx) -> Widgets {
     install_swatch_css();
-    let page = adw::PreferencesPage::new();
     let applying = Rc::new(Cell::new(false));
 
-    // Style: mode toggle (blur / replace) and, for Blur, a strength row.
-    // Built before the master switch so its closure can capture the toggle.
-    let style_group = pref_group("Style", "");
+    // Mode toggle (blur / replace) and, for Blur, a strength row. Built
+    // before the card so the switch closure can capture the toggle.
     let (mode_row, mode) = {
         let cmd_tx = cmd_tx.clone();
         let applying = applying.clone();
-        toggle_row(
-            "Mode",
-            "Blur or replace what is behind you",
-            BG_MODES,
-            move |value| {
-                if applying.get() {
-                    return;
-                }
-                set_mode(&cmd_tx, value == BG_REPLACE);
-            },
-        )
+        toggle_row("Mode", "", BG_MODES, move |value| {
+            if applying.get() {
+                return;
+            }
+            set_mode(&cmd_tx, value == BG_REPLACE);
+        })
     };
     let (blur_row, blur_strength) = {
         let cmd_tx = cmd_tx.clone();
         let applying = applying.clone();
-        toggle_row("Blur Strength", "", BLUR_LEVELS, move |value| {
+        toggle_row("Strength", "", BLUR_LEVELS, move |value| {
             if applying.get() {
                 return;
             }
@@ -91,24 +85,16 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
             });
         })
     };
-    style_group.add(&mode_row);
-    style_group.add(&blur_row);
 
-    // master switch (no group title: the page tab already says "Background")
-    let main = adw::PreferencesGroup::new();
-    let switch = adw::SwitchRow::builder()
-        .title("Background")
-        .subtitle("Off shows the camera feed unmodified")
-        .build();
-    let switch_handler = {
+    let card = {
         let cmd_tx = cmd_tx.clone();
         let applying = applying.clone();
         let mode_toggle = mode.group.clone();
-        switch.connect_active_notify(move |row| {
+        EffectCard::new("Background", "view-conceal-symbolic", move |on| {
             if applying.get() {
                 return;
             }
-            if row.is_active() {
+            if on {
                 let replace = mode_toggle.active_name().as_deref() == Some(BG_REPLACE);
                 set_mode(&cmd_tx, replace);
             } else {
@@ -123,17 +109,15 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
             }
         })
     };
-    main.add(&switch);
-    page.add(&main);
-    page.add(&style_group);
+    card.add_row(&mode_row);
+    card.add_row(&blur_row);
 
     // Image presets and color swatches share one radio group, so picking
     // either kind of background visually deselects the other.
     let mut group_leader: Option<gtk::ToggleButton> = None;
 
     // replace: image presets
-    let image_group = pref_group("Image", "Use a built-in image or pick your own");
-    let image_box = wrapping_grid();
+    let image_box = wrapping_grid(5);
 
     let mut image_presets = Vec::new();
     for (label, path) in ensure_preset_images() {
@@ -154,7 +138,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
             });
         }
         image_box.append(&button);
-        image_presets.push((path, button));
+        image_presets.push((label, path, button));
     }
 
     // "Add your own" button (not part of the radio group): always opens a
@@ -171,19 +155,18 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
         browse.connect_clicked(move |b| open_image_dialog(b, &cmd_tx));
     }
     image_box.append(&browse);
-    image_group.add(&image_box);
+    let images_row = plain_row(&labelled(&section_label("Images"), &image_box));
+    card.add_row(&images_row);
 
     let image_row = adw::ActionRow::builder()
         .title("No image selected")
         .subtitle("—")
         .visible(false)
         .build();
-    image_group.add(&image_row);
-    page.add(&image_group);
+    card.add_row(&image_row);
 
     // replace: color swatches
-    let color_group = pref_group("Solid Color", "Pick a solid background color");
-    let swatch_box = wrapping_grid();
+    let swatch_box = wrapping_grid(7);
 
     let mut swatches = Vec::new();
     for (i, (label, hex)) in BG_PRESETS.iter().enumerate() {
@@ -223,27 +206,27 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
         custom.connect_clicked(move |b| open_color_dialog(b, &cmd_tx, &provider));
     }
     swatch_box.append(&custom);
-    color_group.add(&swatch_box);
-    page.add(&color_group);
+    let colors_row = plain_row(&labelled(&section_label("Solid colors"), &swatch_box));
+    card.add_row(&colors_row);
 
     let widgets = Widgets {
-        switch,
-        switch_handler,
-        style_group,
+        card,
+        mode_row,
         mode,
         blur_row,
         blur_strength,
-        replace_groups: vec![image_group, color_group],
+        replace_rows: vec![images_row, colors_row],
         image_row,
         image_presets,
         swatches,
         custom_provider,
+        bg_name: RefCell::new(String::new()),
         applying,
         blur_enabled: Cell::new(false),
         bg_enabled: Cell::new(false),
     };
     widgets.update_visibility();
-    (page, widgets)
+    widgets
 }
 
 impl Widgets {
@@ -275,7 +258,7 @@ impl Widgets {
     }
 
     /// `bg_replace` wins; otherwise Blur. Used as the default mode shown
-    /// while neither effect is enabled (master switch off).
+    /// while neither effect is enabled (switch off).
     fn current_mode(&self) -> &'static str {
         if self.bg_enabled.get() {
             return BG_REPLACE;
@@ -293,17 +276,38 @@ impl Widgets {
         let on = self.blur_enabled.get() || self.bg_enabled.get();
         let mode = self.current_mode();
 
-        self.switch.block_signal(&self.switch_handler);
-        self.switch.set_active(on);
-        self.switch.unblock_signal(&self.switch_handler);
-
+        self.card.set_on(on);
         self.mode.set_value(mode);
-        self.style_group.set_sensitive(on);
+        self.mode_row.set_sensitive(on);
+        self.blur_row.set_sensitive(on);
         self.blur_row.set_visible(mode == BG_BLUR);
-        for group in &self.replace_groups {
-            group.set_sensitive(on);
-            group.set_visible(mode == BG_REPLACE);
+        for row in &self.replace_rows {
+            row.set_sensitive(on);
+            row.set_visible(mode == BG_REPLACE);
         }
+        self.image_row.set_sensitive(on);
+        self.update_summary(on, mode);
+    }
+
+    fn update_summary(&self, on: bool, mode: &str) {
+        let summary = if !on {
+            "Off".to_string()
+        } else if mode == BG_REPLACE {
+            let name = self.bg_name.borrow();
+            if name.is_empty() {
+                "Replace".to_string()
+            } else {
+                format!("Replace · {name}")
+            }
+        } else {
+            let strength = self.blur_strength.group.active_name();
+            let label = BLUR_LEVELS
+                .iter()
+                .find(|(n, _)| Some(*n) == strength.as_deref())
+                .map_or("Medium", |(_, label)| *label);
+            format!("Blur · {label}")
+        };
+        self.card.set_summary(&summary);
     }
 
     /// Reflect the current `bg_replace.background` value in the swatch/image
@@ -312,24 +316,27 @@ impl Widgets {
         for button in &self.swatches {
             button.set_active(false);
         }
-        for (_, button) in &self.image_presets {
+        for (_, _, button) in &self.image_presets {
             button.set_active(false);
         }
-        if bg.starts_with('#') {
+        let name = if bg.starts_with('#') {
             self.image_row.set_visible(false);
             if let Some(idx) = BG_PRESETS.iter().position(|(_, h)| *h == bg) {
                 self.swatches[idx].set_active(true);
+                BG_PRESETS[idx].0.to_string()
             } else {
                 set_custom_color(&self.custom_provider, bg);
+                "Custom color".to_string()
             }
         } else if !bg.is_empty() {
-            if let Some((_, button)) = self
+            if let Some((label, _, button)) = self
                 .image_presets
                 .iter()
-                .find(|(path, _)| path.to_str() == Some(bg))
+                .find(|(_, path, _)| path.to_str() == Some(bg))
             {
                 button.set_active(true);
                 self.image_row.set_visible(false);
+                label.to_string()
             } else {
                 let path = std::path::Path::new(bg);
                 let name = path
@@ -339,10 +346,13 @@ impl Widgets {
                 self.image_row.set_title(&name);
                 self.image_row.set_subtitle(bg);
                 self.image_row.set_visible(true);
+                name
             }
         } else {
             self.image_row.set_visible(false);
-        }
+            String::new()
+        };
+        *self.bg_name.borrow_mut() = name;
     }
 }
 
@@ -428,20 +438,29 @@ fn rgba_to_hex(rgba: &RGBA) -> String {
 
 // swatch widgets & CSS
 
-/// A grid that wraps its swatches/thumbnails onto extra rows when the window
+/// A grid that wraps its swatches/thumbnails onto extra rows when the column
 /// is narrow, instead of forcing a minimum window width like a plain `Box`.
-fn wrapping_grid() -> gtk::FlowBox {
+fn wrapping_grid(max_per_line: u32) -> gtk::FlowBox {
     gtk::FlowBox::builder()
         .selection_mode(gtk::SelectionMode::None)
         .homogeneous(true)
         .min_children_per_line(2)
-        .max_children_per_line(8)
+        .max_children_per_line(max_per_line)
         .row_spacing(8)
         .column_spacing(8)
-        .halign(gtk::Align::Center)
-        .margin_top(6)
-        .margin_bottom(6)
+        .halign(gtk::Align::Start)
         .build()
+}
+
+/// A section heading stacked over its content.
+fn labelled(label: &gtk::Label, content: &impl IsA<gtk::Widget>) -> gtk::Box {
+    let body = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(8)
+        .build();
+    body.append(label);
+    body.append(content);
+    body
 }
 
 fn swatch_button(class: &str, tooltip: &str) -> gtk::ToggleButton {
@@ -534,7 +553,7 @@ fn set_custom_color(provider: &gtk::CssProvider, hex: &str) {
 /// Install the static swatch CSS (base shape + one class per preset color).
 fn install_swatch_css() {
     let mut css = String::from(
-        ".oe-swatch { border-radius: 8px; border: 1px solid alpha(currentColor, 0.2); } \
+        ".oe-swatch { border-radius: 50%; border: 1px solid alpha(currentColor, 0.2); } \
          .oe-swatch-btn { padding: 4px; min-width: 0; min-height: 0; } \
          .oe-bg-thumb { border-radius: 10px; border: 1px solid alpha(currentColor, 0.2); \
          overflow: hidden; } \

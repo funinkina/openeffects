@@ -1,5 +1,5 @@
-//! Static lookup tables shared across pages: app id, toggle-group option
-//! lists, built-in presets, and the view-stack page descriptors.
+//! Static lookup tables shared across the effect cards: app id, toggle-group
+//! option lists and built-in presets.
 
 pub const APP_ID: &str = "io.github.karanshukla.vinoopeneffects";
 
@@ -9,7 +9,7 @@ pub const APP_ID: &str = "io.github.karanshukla.vinoopeneffects";
 pub const VCAM_NODE_NAME: &str = "vinoopeneffects";
 
 /// Center Stage framing levels (stored value, display label). "Off" is the
-/// page's master switch, so it is not a framing choice here.
+/// card's switch, so it is not a framing choice here.
 pub const FRAMING_LEVELS: &[(&str, &str)] = &[
     ("subtle", "Subtle"),
     ("normal", "Normal"),
@@ -17,11 +17,11 @@ pub const FRAMING_LEVELS: &[(&str, &str)] = &[
 ];
 
 /// Center Stage tracking mode (stored value, display label).
-pub const FRAMING_MODES: &[(&str, &str)] = &[("single", "Single"), ("group", "Group")];
+pub const FRAMING_MODES: &[(&str, &str)] = &[("single", "One face"), ("group", "Whole group")];
 
-/// Background page modes (stored value, display label). These are virtual:
-/// they map onto the `portrait_blur` / `bg_replace` enable flags. The page's
-/// master switch covers "off", so only Blur/Replace are toggle choices.
+/// Background card modes (stored value, display label). These are virtual:
+/// they map onto the `portrait_blur` / `bg_replace` enable flags. The card's
+/// switch covers "off", so only Blur/Replace are toggle choices.
 pub const BG_BLUR: &str = "blur";
 pub const BG_REPLACE: &str = "replace";
 pub const BG_MODES: &[(&str, &str)] = &[(BG_BLUR, "Blur"), (BG_REPLACE, "Replace")];
@@ -67,7 +67,7 @@ pub const BG_IMAGE_PRESETS: &[(&str, &str, &[u8])] = &[
     ),
 ];
 
-/// Emoji reaction buttons shown on the Reactions page (reaction id, glyph,
+/// Emoji reaction buttons shown on the Reactions card (reaction id, glyph,
 /// tooltip), in the same order as `shared::dbus::REACTION_IDS`. Clicking one
 /// fires a one-shot reverse-rain burst, independent of the gesture toggle.
 pub const REACTION_BUTTONS: &[(&str, &str, &str)] = &[
@@ -101,17 +101,4 @@ pub const BUNDLED_MODELS: &[(&str, &str, &str)] = &[
         "MediaPipe Hand Landmark",
         "Hand keypoints for gesture reactions",
     ),
-];
-
-/// View-stack pages, shown as titled+icon entries in the `AdwViewSwitcher`:
-/// (stack child name, title, symbolic icon name).
-pub const NAV_PAGES: &[(&str, &str, &str)] = &[
-    ("center_stage", "Center Stage", "zoom-fit-best-symbolic"),
-    ("background", "Background", "view-conceal-symbolic"),
-    (
-        "studio_light",
-        "Studio Light",
-        "display-brightness-symbolic",
-    ),
-    ("reactions", "Reactions", "face-smile-symbolic"),
 ];

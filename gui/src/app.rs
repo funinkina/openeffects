@@ -1,5 +1,4 @@
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
 use std::rc::Rc;
 
 use adw::ApplicationWindow;
@@ -10,23 +9,34 @@ use shared::dbus::{EFFECT_IDS, VariantMap, value_as_bool, value_as_string};
 
 use crate::about;
 use crate::config::GuiConfig;
-use crate::constants::NAV_PAGES;
 use crate::dbus_client::{CameraInfo, CmdTx, GuiCommand, UiUpdate};
 use crate::pages::{background, center_stage, reactions, studio_light};
 use crate::preferences;
-use crate::preview;
-use crate::widgets::Switches;
+use crate::preview::{self, Preview};
+
+/// Width of the controls column beside the preview in the wide layout.
+const CONTROLS_WIDTH: i32 = 420;
+/// Preview height when the layout stacks it above the controls.
+const NARROW_PREVIEW_HEIGHT: i32 = 224;
+/// Below this window width the preview moves above the controls.
+const NARROW_BREAKPOINT: &str = "max-width: 760sp";
 
 struct Widgets {
     banner: adw::Banner,
-    switches: Switches,
     center_stage: center_stage::Widgets,
     background: background::Widgets,
     studio_light: studio_light::Widgets,
+    reactions: reactions::Widgets,
     prefs: preferences::Widgets,
+    preview: Rc<Preview>,
     bypass_switch: gtk::Switch,
     bypass_handler: glib::SignalHandlerId,
-    content_stack: adw::ViewStack,
+    bypass_label: gtk::Label,
+    /// The effect cards, dimmed while every effect is bypassed.
+    cards: gtk::Box,
+    /// True while "Hold to compare" is pressed; the resulting bypass echoes
+    /// are transient and must not flip the master switch.
+    comparing: Rc<Cell<bool>>,
 }
 
 pub fn build_window(
@@ -35,38 +45,53 @@ pub fn build_window(
     update_rx: async_channel::Receiver<UiUpdate>,
     config: GuiConfig,
 ) {
+    install_css();
     let gui_config = Rc::new(RefCell::new(config));
-
-    // Pages (each an AdwPreferencesPage) added to the view stack
-    let stack = adw::ViewStack::new();
-
-    let mut switches = HashMap::new();
-
-    let (cs_page, cs_widgets) = center_stage::build(&cmd_tx);
-    let (bg_page, bg_widgets) = background::build(&cmd_tx);
-    let (sl_page, sl_widgets) = studio_light::build(&cmd_tx);
-    let rx_page = reactions::build(&cmd_tx, &mut switches);
-
-    let page_widgets: [&gtk::Widget; 4] = [
-        cs_page.upcast_ref(),
-        bg_page.upcast_ref(),
-        sl_page.upcast_ref(),
-        rx_page.upcast_ref(),
-    ];
-    for ((name, title, icon), widget) in NAV_PAGES.iter().zip(page_widgets) {
-        stack.add_titled_with_icon(widget, Some(name), title, icon);
-    }
-
-    // View switchers: header (wide) + bottom bar (narrow)
-    let switcher = adw::ViewSwitcher::builder()
-        .stack(&stack)
-        .policy(adw::ViewSwitcherPolicy::Wide)
-        .build();
-
-    let switcher_bar = adw::ViewSwitcherBar::builder().stack(&stack).build();
 
     // Preferences dialog (camera, engine info, model library, startup)
     let (prefs_dialog, prefs_widgets) = preferences::build(&cmd_tx, Rc::clone(&gui_config));
+
+    // Effect cards, stacked in the controls column
+    let cs_widgets = center_stage::build(&cmd_tx);
+    let bg_widgets = background::build(&cmd_tx);
+    let sl_widgets = studio_light::build(&cmd_tx);
+    let rx_widgets = reactions::build(&cmd_tx);
+    bg_widgets.card.set_expanded(true);
+
+    let cards = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(10)
+        .margin_top(16)
+        .margin_bottom(16)
+        .margin_start(8)
+        .margin_end(16)
+        .build();
+    cards.append(&cs_widgets.card.list);
+    cards.append(&bg_widgets.card.list);
+    cards.append(&sl_widgets.card.list);
+    cards.append(&rx_widgets.card.list);
+
+    let controls = gtk::ScrolledWindow::builder()
+        .hscrollbar_policy(gtk::PolicyType::Never)
+        .width_request(CONTROLS_WIDTH)
+        .vexpand(true)
+        .child(&cards)
+        .build();
+
+    // Live preview, leading the window
+    let preview = preview::build(&cmd_tx, Rc::clone(&prefs_widgets.camera_ids));
+    preview.frame.set_margin_top(16);
+    preview.frame.set_margin_bottom(16);
+    preview.frame.set_margin_start(16);
+    preview.frame.set_margin_end(8);
+    preview.frame.set_hexpand(true);
+    preview.frame.set_vexpand(true);
+
+    let body = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .build();
+    body.append(&preview.frame);
+    body.append(&controls);
 
     // Primary menu (Preferences / About), right side of the header
     let menu = gio::Menu::new();
@@ -79,32 +104,38 @@ pub fn build_window(
         .tooltip_text("Main Menu")
         .build();
 
-    // Master effects switch (right of header): off = passthrough camera
+    // Master effects switch (left of header): off = passthrough camera
+    let bypass_label = gtk::Label::builder()
+        .label("Effects on")
+        .css_classes(["heading"])
+        .build();
     let bypass_switch = gtk::Switch::builder()
         .valign(gtk::Align::Center)
         .active(true)
         .tooltip_text("Toggle all effects. Off passes the camera through untouched.")
         .build();
+    bypass_switch.update_property(&[gtk::accessible::Property::Label("All effects")]);
     let bypass_handler = {
         let cmd_tx = cmd_tx.clone();
+        let bypass_label = bypass_label.clone();
         bypass_switch.connect_active_notify(move |sw| {
+            set_effects_label(&bypass_label, sw.is_active());
             // Switch on = effects active = bypass off.
             let _ = cmd_tx.send(GuiCommand::SetBypass {
                 on: !sw.is_active(),
             });
         })
     };
-
-    // Label the master switch so its meaning is clear without hovering.
-    let bypass_label = gtk::Label::builder()
-        .label("Effects")
-        .css_classes(["dim-label"])
+    let bypass_box = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(10)
         .build();
+    bypass_box.append(&bypass_switch);
+    bypass_box.append(&bypass_label);
 
-    let header = adw::HeaderBar::builder().title_widget(&switcher).build();
+    let header = adw::HeaderBar::new();
+    header.pack_start(&bypass_box);
     header.pack_end(&menu_button);
-    header.pack_end(&bypass_switch);
-    header.pack_end(&bypass_label);
 
     // Connection-trouble banner, sits just under the header.
     let banner = adw::Banner::builder().revealed(false).build();
@@ -112,41 +143,39 @@ pub fn build_window(
     let toolbar = adw::ToolbarView::new();
     toolbar.add_top_bar(&header);
     toolbar.add_top_bar(&banner);
-    toolbar.set_content(Some(&stack));
-    toolbar.add_bottom_bar(&switcher_bar);
-
-    let preview = preview::build(&toolbar);
-    header.pack_start(&preview.toggle);
+    toolbar.set_content(Some(&body));
 
     let window = ApplicationWindow::builder()
         .application(app)
         .title("vinoOpenEffects")
-        .default_width(720)
-        .default_height(640)
-        .content(&preview.split)
+        .default_width(1120)
+        .default_height(720)
+        .width_request(360)
+        .height_request(560)
+        .content(&toolbar)
         .build();
 
-    {
-        let switcher = switcher.clone();
-        let switcher_bar = switcher_bar.clone();
-        let header = header.clone();
-        window.connect_realize(move |window| {
-            // Header natural width with the wide switcher visible = the smallest
-            // window width that fits every label uncut. Below it, collapse.
-            let natural = header.measure(gtk::Orientation::Horizontal, -1).1;
-            if natural <= 0 {
-                return;
-            }
-            let Ok(condition) =
-                adw::BreakpointCondition::parse(&format!("max-width: {}px", natural - 1))
-            else {
-                return;
-            };
-            let breakpoint = adw::Breakpoint::new(condition);
-            breakpoint.add_setter(&switcher, "visible", Some(&false.to_value()));
-            breakpoint.add_setter(&switcher_bar, "reveal", Some(&true.to_value()));
-            window.add_breakpoint(breakpoint);
-        });
+    // Narrow windows: stack a shorter preview above the controls.
+    if let Ok(condition) = adw::BreakpointCondition::parse(NARROW_BREAKPOINT) {
+        let breakpoint = adw::Breakpoint::new(condition);
+        breakpoint.add_setter(
+            &body,
+            "orientation",
+            Some(&gtk::Orientation::Vertical.to_value()),
+        );
+        breakpoint.add_setter(&preview.frame, "vexpand", Some(&false.to_value()));
+        breakpoint.add_setter(
+            &preview.frame,
+            "height-request",
+            Some(&NARROW_PREVIEW_HEIGHT.to_value()),
+        );
+        breakpoint.add_setter(&preview.frame, "margin-end", Some(&16.to_value()));
+        breakpoint.add_setter(&preview.frame, "margin-bottom", Some(&0.to_value()));
+        breakpoint.add_setter(&controls, "width-request", Some(&(-1).to_value()));
+        breakpoint.add_setter(&cards, "margin-start", Some(&16.to_value()));
+        breakpoint.add_setter(&preview.live_label, "label", Some(&"Live".to_value()));
+        breakpoint.add_setter(&preview.node_pill, "visible", Some(&false.to_value()));
+        window.add_breakpoint(breakpoint);
     }
 
     // Primary menu actions
@@ -164,16 +193,22 @@ pub fn build_window(
     }
     window.add_action(&action_about);
 
+    let comparing = Rc::new(Cell::new(false));
+    wire_compare(&preview.compare, &bypass_switch, &cmd_tx, &comparing);
+
     let widgets = Rc::new(Widgets {
         banner,
-        switches,
         center_stage: cs_widgets,
         background: bg_widgets,
         studio_light: sl_widgets,
+        reactions: rx_widgets,
         prefs: prefs_widgets,
+        preview,
         bypass_switch,
         bypass_handler,
-        content_stack: stack,
+        bypass_label,
+        cards,
+        comparing,
     });
 
     let quitting = Rc::new(Cell::new(false));
@@ -210,6 +245,90 @@ pub fn build_window(
     window.present();
 }
 
+/// Press-and-hold on `button` bypasses every effect until release, so the
+/// preview shows the untouched camera. Does nothing while effects are already
+/// off. The gesture claims the press so the release always reaches it, even
+/// when the pointer leaves the button.
+fn wire_compare(
+    button: &gtk::Button,
+    bypass_switch: &gtk::Switch,
+    cmd_tx: &CmdTx,
+    comparing: &Rc<Cell<bool>>,
+) {
+    let gesture = gtk::GestureClick::new();
+    gesture.set_propagation_phase(gtk::PropagationPhase::Capture);
+    {
+        let bypass_switch = bypass_switch.clone();
+        let cmd_tx = cmd_tx.clone();
+        let comparing = Rc::clone(comparing);
+        gesture.connect_pressed(move |gesture, _, _, _| {
+            gesture.set_state(gtk::EventSequenceState::Claimed);
+            if !bypass_switch.is_active() || comparing.get() {
+                return;
+            }
+            comparing.set(true);
+            if let Some(widget) = gesture.widget() {
+                widget.add_css_class("oe-comparing");
+            }
+            let _ = cmd_tx.send(GuiCommand::SetBypass { on: true });
+        });
+    }
+    let end = {
+        let cmd_tx = cmd_tx.clone();
+        let comparing = Rc::clone(comparing);
+        move |gesture: &gtk::GestureClick| {
+            if !comparing.replace(false) {
+                return;
+            }
+            if let Some(widget) = gesture.widget() {
+                widget.remove_css_class("oe-comparing");
+            }
+            let _ = cmd_tx.send(GuiCommand::SetBypass { on: false });
+        }
+    };
+    {
+        let end = end.clone();
+        gesture.connect_released(move |gesture, _, _, _| end(gesture));
+    }
+    gesture.connect_cancel(move |gesture, _| end(gesture));
+    button.add_controller(gesture);
+}
+
+fn set_effects_label(label: &gtk::Label, on: bool) {
+    label.set_label(if on { "Effects on" } else { "Effects off" });
+}
+
+/// App-wide styling for the preview frame, its floating pills and the
+/// effect-card icons.
+fn install_css() {
+    let provider = gtk::CssProvider::new();
+    provider.load_from_string(
+        ".oe-preview-frame { border-radius: 18px; background-color: #0b0b0d; } \
+         .oe-preview-status { color: #d8d8de; } \
+         .oe-pill, .oe-pill-button, .oe-pill-dropdown > button { \
+           border-radius: 999px; min-height: 34px; padding: 0 12px; \
+           background-color: rgba(14, 14, 17, 0.66); color: #f2f2f5; \
+           border: 1px solid rgba(255, 255, 255, 0.14); font-size: 13px; } \
+         .oe-pill-button:hover, .oe-pill-dropdown > button:hover { \
+           background-color: rgba(30, 30, 36, 0.8); } \
+         .oe-pill-button.oe-comparing { background-color: rgba(60, 60, 70, 0.9); } \
+         .oe-live-dot { min-width: 8px; min-height: 8px; border-radius: 50%; \
+           background-color: @success_color; } \
+         .oe-effect-icon { min-width: 38px; min-height: 38px; border-radius: 10px; \
+           background-color: alpha(currentColor, 0.08); } \
+         .oe-effect-icon.oe-on { background-color: alpha(@success_color, 0.16); \
+           color: @success_color; } \
+         .oe-emoji-btn { font-size: 24px; min-height: 52px; padding: 0; }",
+    );
+    if let Some(display) = gtk::gdk::Display::default() {
+        gtk::style_context_add_provider_for_display(
+            &display,
+            &provider,
+            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
+        );
+    }
+}
+
 // Apply daemon state updates
 
 fn apply_update(w: &Widgets, update: UiUpdate) {
@@ -240,7 +359,8 @@ fn apply_effect(w: &Widgets, id: &str, params: &VariantMap) {
         "center_stage" => w.center_stage.apply(params),
         "portrait_blur" | "bg_replace" => w.background.apply(id, params),
         "studio_light" => w.studio_light.apply(params),
-        _ => apply_enabled(w, id, params),
+        "reactions" => w.reactions.apply(params),
+        _ => {}
     }
 }
 
@@ -272,7 +392,8 @@ fn apply_capabilities(w: &Widgets, caps: &VariantMap) {
         .and_then(value_as_string)
         .unwrap_or_else(|| "—".into());
 
-    w.prefs.virtual_cam_row.set_subtitle(&vcam);
+    w.prefs.virtual_cam_label.set_label(&vcam);
+    w.preview.node_pill.set_label(&vcam);
 
     let (pill_text, pill_class, stale_class) = if ready {
         ("Ready", "success", "warning")
@@ -304,6 +425,12 @@ fn apply_cameras(w: &Widgets, cameras: &[CameraInfo], active: &str) {
     w.prefs.camera_combo.set_model(Some(&model));
     w.prefs.camera_combo.set_selected(active_idx);
     w.prefs.camera_combo.unblock_signal(&w.prefs.camera_handler);
+
+    let dropdown = &w.preview.camera_dropdown;
+    dropdown.block_signal(&w.preview.camera_handler);
+    dropdown.set_model(Some(&model));
+    dropdown.set_selected(active_idx);
+    dropdown.unblock_signal(&w.preview.camera_handler);
 }
 
 /// `GetAllState()` returns keys prefixed with `"{effect_id}."`; strip the prefix
@@ -320,19 +447,14 @@ fn extract_effect_params(state: &VariantMap, id: &str) -> VariantMap {
 }
 
 fn apply_bypass(w: &Widgets, on: bool) {
+    // Transient bypass from "Hold to compare": leave the controls alone.
+    if w.comparing.get() {
+        return;
+    }
     w.bypass_switch.block_signal(&w.bypass_handler);
     w.bypass_switch.set_active(!on);
     w.bypass_switch.unblock_signal(&w.bypass_handler);
-    w.content_stack.set_sensitive(!on);
-}
-
-fn apply_enabled(w: &Widgets, id: &str, params: &VariantMap) {
-    let Some((switch, handler)) = w.switches.get(id) else {
-        return;
-    };
-    if let Some(on) = params.get("enabled").and_then(value_as_bool) {
-        switch.block_signal(handler);
-        switch.set_active(on);
-        switch.unblock_signal(handler);
-    }
+    set_effects_label(&w.bypass_label, !on);
+    w.cards.set_sensitive(!on);
+    w.preview.compare.set_sensitive(!on);
 }

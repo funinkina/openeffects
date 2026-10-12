@@ -22,7 +22,8 @@ pub struct Widgets {
     /// Camera ids in the same order as `camera_combo`'s model, shared with its
     /// change handler so a selection resolves back to an id.
     pub camera_ids: Rc<RefCell<Vec<String>>>,
-    pub virtual_cam_row: adw::ActionRow,
+    /// Node name of the virtual camera, shown on the "Virtual Camera" row.
+    pub virtual_cam_label: gtk::Label,
     pub model_rows: HashMap<&'static str, adw::ActionRow>,
 }
 
@@ -63,8 +64,14 @@ pub fn build(
 
     let virtual_cam_row = adw::ActionRow::builder()
         .title("Virtual Camera")
-        .subtitle("—")
+        .subtitle("Pick this one in Zoom, OBS or your browser")
         .build();
+    let virtual_cam_label = gtk::Label::builder()
+        .label("—")
+        .selectable(true)
+        .css_classes(["monospace"])
+        .build();
+    virtual_cam_row.add_suffix(&virtual_cam_label);
     camera_group.add(&virtual_cam_row);
     page.add(&camera_group);
 
@@ -95,13 +102,13 @@ pub fn build(
 
     let keep_running_row = adw::SwitchRow::builder()
         .title("Keep running in the background")
-        .subtitle("Leave the daemon running after this window is closed")
+        .subtitle("Leave the daemon on after this window closes")
         .active(gui_config.borrow().keep_running_in_background)
         .build();
 
     let boot_row = adw::SwitchRow::builder()
-        .title("Start on system boot")
-        .subtitle("Launch the daemon automatically when you log in")
+        .title("Start when I log in")
+        .subtitle("Launch the daemon automatically")
         .active(shared::systemd::is_enabled())
         .build();
     // Moot when boot-autostart is on (the daemon always runs then).
@@ -136,7 +143,7 @@ pub fn build(
             camera_combo,
             camera_handler,
             camera_ids,
-            virtual_cam_row,
+            virtual_cam_label,
             model_rows,
         },
     )
