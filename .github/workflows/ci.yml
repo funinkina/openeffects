@@ -19,6 +19,7 @@ env:
 jobs:
   fmt:
     runs-on: ubuntu-26.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -28,6 +29,7 @@ jobs:
 
   clippy:
     runs-on: ubuntu-26.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,9 +37,12 @@ jobs:
       - run: rustup toolchain install stable --profile minimal --component clippy
       - &apt
         name: Install system dependencies
+        timeout-minutes: 10
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          export DEBIAN_FRONTEND=noninteractive
+          apt_opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          sudo apt-get $apt_opts update
+          sudo -E apt-get $apt_opts install -y --no-install-recommends \
             libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libgstreamer-plugins-bad1.0-dev \
             libgtk-4-dev libadwaita-1-dev libpipewire-0.3-dev libspa-0.2-dev \
             gstreamer1.0-plugins-base gstreamer1.0-plugins-good
@@ -49,6 +54,7 @@ jobs:
 
   test:
     runs-on: ubuntu-26.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -61,6 +67,7 @@ jobs:
 
   build-npu:
     runs-on: ubuntu-26.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -73,6 +80,7 @@ jobs:
 
   msrv:
     runs-on: ubuntu-26.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -85,6 +93,7 @@ jobs:
 
   deny:
     runs-on: ubuntu-26.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -98,6 +107,7 @@ jobs:
   # Not a required check: a new Fedora release can break it independently of a PR.
   fedora:
     runs-on: ubuntu-26.04
+    timeout-minutes: 30
     container: fedora:latest
     steps:
       - name: Install toolchain and dev libraries
