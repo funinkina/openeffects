@@ -7,7 +7,7 @@ version = "0.1.4"
 edition = "2024"
 license = "GPL-3.0-or-later"
 authors = ["Aryan <hello@funinkina.co.in>"]
-rust-version = "1.88"
+rust-version = "1.92"
 
 [workspace.dependencies]
 anyhow = "1.0"

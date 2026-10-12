@@ -78,10 +78,10 @@ jobs:
         with:
           persist-credentials: false
       # Keep in sync with rust-version in Cargo.toml.
-      - run: rustup toolchain install 1.88 --profile minimal
+      - run: rustup toolchain install 1.92 --profile minimal
       - *apt
       - *cache
-      - run: cargo +1.88 check --workspace
+      - run: cargo +1.92 check --workspace
 
   deny:
     runs-on: ubuntu-26.04
