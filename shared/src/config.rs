@@ -96,8 +96,10 @@ impl Default for StudioLightState {
     fn default() -> Self {
         Self {
             enabled: false,
+            // Visible out of the box: at the default intensity this lifts the
+            // subject by ~15% rather than being an identity transform.
             intensity: 50,
-            brightness: 0,
+            brightness: 30,
             contrast: 50,
             bg_brightness: 0,
         }
@@ -200,7 +202,7 @@ background = ""
 [effects.studio_light]
 enabled = false
 intensity = 50
-brightness = 0
+brightness = 30
 contrast = 50
 bg_brightness = 0
 

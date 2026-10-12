@@ -157,8 +157,8 @@ vinoopeneffects-ctl studio-light --on --intensity 60 --brightness 10 --contrast 
 | ---------------- | ------------ | ------------------ |
 | `--on` / `--off` | —            | Enable / disable.  |
 | `--intensity`    | `0`–`100`    | Overall intensity. |
-| `--brightness`   | `-100`–`100` | Brightness lift.   |
-| `--contrast`     | `0`–`100`    | Contrast.          |
+| `--brightness`   | `-100`–`100` | Brightness lift on you, scaled by intensity. Default `30`. |
+| `--contrast`     | `0`–`100`    | Contrast around your average brightness. `50` is neutral.  |
 
 ### Reactions
 
