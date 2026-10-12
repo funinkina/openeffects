@@ -29,13 +29,35 @@ OpenEffects is designed to be lightweight and modular, avoiding the need for an 
 
 ## ML Inference
 
-All models run on the **CPU** via **ONNX Runtime** (`ort` crate with `download-binaries` feature). The bundled models (selfie segmentation, face detection, hand/palm landmarks) are lightweight MobileNet-class architectures — 256² and 640² — and complete inference in 2–5 ms on modern x86_64 CPUs. No GPU is required.
+Inference runs through **ONNX Runtime** (`ort` crate). Four bundled models: selfie segmentation (256²), YuNet face detection (640²), palm detection (192²) and hand landmarks (224²).
 
-> [!NOTE]
-> GPU execution providers (CUDA, OpenVINO, Vulkan) were evaluated and rejected: for
-> sub-1 MB models the kernel-launch and transfer latency of a discrete GPU exceeds
-> the total CPU inference time. Camera capture and the GStreamer/PipeWire pipeline
-> are the actual bottlenecks, not inference.
+The default build is **CPU only** (`download-binaries`), which is what the packages ship. An opt-in **`npu` build** runs the same models on Intel NPUs (or GPUs) through the OpenVINO execution provider:
+
+```bash
+# onnxruntime-openvino matched to the installed NPU driver
+ovfetch install --prefix ~/.local/lib/openeffects-ort
+
+cargo build --release -p openeffectsd --features npu
+ORT_DYLIB_PATH=~/.local/lib/openeffects-ort/libonnxruntime.so \
+  OE_EP=npu openeffectsd --start
+```
+
+`OE_EP` is `cpu` (default), `npu` or `gpu`. A non-CPU request that can't be satisfied is an error, never a silent CPU fallback.
+
+### Measured latency
+
+Per call, mean ms over 100 iterations after warmup, 1280×720 frame, Dell XPS 13 (Wildcat Lake NPU, driver 1.35.0, OpenVINO 2025.4.1). Includes the RGBA resample and output decode, not just `session.run`.
+
+| Model | CPU | NPU | NPU load (first run) |
+|---|---|---|---|
+| Selfie segmentation | 3.4 | 1.4 | 35 ms |
+| YuNet | 8.1 | 4.9 | 4 ms |
+| Palm detection | 4.9 | 2.1 | 533 ms |
+| Hand landmarks | 2.6 | 1.2 | 426 ms |
+
+Reproduce with `openeffectsd --bench-inference [ITERS] [FRAME.png]` under each `OE_EP`. The NPU run was confirmed on hardware via `npu_busy_time_us`.
+
+Palm and hand loaded in 37 ms and 68 ms on a later run, so the first-run compile cost is not paid every launch. This is one machine and a synthetic frame (no face or hand in it), so read it as a snapshot. It measures inference only, not the camera and GStreamer/PipeWire pipeline.
 
 ## Installation
 

@@ -22,6 +22,14 @@ use crate::{
 };
 
 fn main() -> anyhow::Result<()> {
+    if let Some(i) = std::env::args().position(|a| a == "--bench-inference") {
+        let rest: Vec<String> = std::env::args().skip(i + 1).collect();
+        return inference::bench::run(&rest);
+    }
+    if let Some(i) = std::env::args().position(|a| a == "--bench-video") {
+        let rest: Vec<String> = std::env::args().skip(i + 1).collect();
+        return inference::bench::run_video(&rest);
+    }
     unsafe { libc::mallopt(libc::M_ARENA_MAX, 2) };
 
     tokio::runtime::Builder::new_multi_thread()
