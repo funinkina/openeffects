@@ -391,6 +391,11 @@ mod imp {
         tracks: Vec<HandTrack>,
         /// Earliest frame palm re-detection may run again.
         redetect_at: u64,
+        /// Hands tracked for the segmentation mask, in the coordinate space of
+        /// the buffer it is segmented from (full frame or center-stage ROI), so
+        /// kept apart from the gesture `tracks`.
+        mask_tracks: Vec<HandTrack>,
+        mask_redetect_at: u64,
         /// Gesture held across the last `held_count` checks (debounce).
         held: Option<Gesture>,
         held_count: u32,
@@ -634,6 +639,8 @@ mod imp {
             // Normalized hand crops don't survive a resolution change.
             state.tracks.clear();
             state.redetect_at = 0;
+            state.mask_tracks.clear();
+            state.mask_redetect_at = 0;
             state.held = None;
             state.held_count = 0;
             drop(state);
@@ -712,69 +719,15 @@ mod imp {
         }
         let stride = w * 4;
 
-        // 1. (Re)acquire hands via palm detection when there's room for more.
-        if state.tracks.len() < MAX_TRACKS && state.frame >= state.redetect_at {
-            // Landmarks only run once palm finds a hand, so on its own the hand
-            // model idles out while palm keeps running. Load and touch it with
-            // palm so the first gesture never pays a model load on this thread.
-            let _ = state.engine.hand();
-            let palms = match state.engine.palm() {
-                Some(model) => model
-                    .detect(img, w, h, stride, PALM_SCORE_THRESH)
-                    .unwrap_or_default(),
-                None => Vec::new(),
-            };
+        // 1. Acquire (palm detection when there's room) and track landmarks.
+        let acquire = state.frame >= state.redetect_at;
+        if state.tracks.len() < MAX_TRACKS && acquire {
             state.redetect_at = state.frame + REDETECT_INTERVAL;
-            for palm in palms {
-                if state.tracks.len() >= MAX_TRACKS {
-                    break;
-                }
-                let crop = palm.crop(w, h);
-                if !state.tracks.iter().any(|t| crops_overlap(t.crop, crop)) {
-                    state.tracks.push(HandTrack { crop, missed: 0 });
-                }
-            }
         }
+        let State { engine, tracks, .. } = state;
+        let landmarks = track_hands(engine, tracks, acquire, img, w, h, stride);
 
-        if state.tracks.is_empty() {
-            return;
-        }
-
-        // 2. Landmarks per tracked hand. Crops are copied out so the engine can
-        //    be borrowed while we read them.
-        let crops: Vec<CropBox> = state.tracks.iter().map(|t| t.crop).collect();
-        let mut landmarks: Vec<HandLandmarks> = Vec::with_capacity(crops.len());
-        // Per track: the refreshed crop on success, or None to count a miss.
-        let mut next: Vec<Option<CropBox>> = Vec::with_capacity(crops.len());
-        for crop in crops {
-            let lm = state
-                .engine
-                .hand()
-                .and_then(|model| model.infer(img, w, h, stride, crop).ok());
-            match lm {
-                Some(lm) if lm.confidence >= HAND_CONF_THRESH => {
-                    next.push(Some(lm.tracking_crop(w, h)));
-                    landmarks.push(lm);
-                }
-                _ => next.push(None),
-            }
-        }
-
-        // Advance confident tracks; drop a track after two consecutive misses.
-        let mut updated = Vec::with_capacity(state.tracks.len());
-        for (i, track) in state.tracks.drain(..).enumerate() {
-            match next.get(i).and_then(|o| *o) {
-                Some(crop) => updated.push(HandTrack { crop, missed: 0 }),
-                None if track.missed + 1 < 2 => updated.push(HandTrack {
-                    crop: track.crop,
-                    missed: track.missed + 1,
-                }),
-                None => {}
-            }
-        }
-        state.tracks = updated;
-
-        // 3. Classify with hold-to-confirm debounce, gated by the cooldown.
+        // 2. Classify with hold-to-confirm debounce, gated by the cooldown.
         match gesture::classify(&landmarks) {
             g if g == state.held => state.held_count = state.held_count.saturating_add(1),
             g => {
@@ -791,6 +744,93 @@ mod imp {
             state.cooldown_until = frame + REACTION_COOLDOWN;
             state.held = None;
             state.held_count = 0;
+        }
+    }
+
+    /// One tracking step over `tracks`: palm-detect for new hands when `acquire`
+    /// and there is room, then run landmarks per tracked hand from its previous
+    /// crop (the cheap path). Confident hands advance; a track is dropped after
+    /// two consecutive misses. Returns the confident landmarks.
+    fn track_hands(
+        engine: &mut Engine,
+        tracks: &mut Vec<HandTrack>,
+        acquire: bool,
+        img: &[u8],
+        w: usize,
+        h: usize,
+        stride: usize,
+    ) -> Vec<HandLandmarks> {
+        if tracks.len() < MAX_TRACKS && acquire {
+            // Landmarks only run once palm finds a hand, so on its own the hand
+            // model idles out while palm keeps running. Load and touch it with
+            // palm so the first gesture never pays a model load on this thread.
+            let _ = engine.hand();
+            let palms = match engine.palm() {
+                Some(model) => model
+                    .detect(img, w, h, stride, PALM_SCORE_THRESH)
+                    .unwrap_or_default(),
+                None => Vec::new(),
+            };
+            for palm in palms {
+                if tracks.len() >= MAX_TRACKS {
+                    break;
+                }
+                let crop = palm.crop(w, h);
+                if !tracks.iter().any(|t| crops_overlap(t.crop, crop)) {
+                    tracks.push(HandTrack { crop, missed: 0 });
+                }
+            }
+        }
+
+        let mut landmarks = Vec::with_capacity(tracks.len());
+        let mut updated = Vec::with_capacity(tracks.len());
+        for track in tracks.drain(..) {
+            let lm = engine
+                .hand()
+                .and_then(|model| model.infer(img, w, h, stride, track.crop).ok());
+            match lm {
+                Some(lm) if lm.confidence >= HAND_CONF_THRESH => {
+                    updated.push(HandTrack {
+                        crop: lm.tracking_crop(w, h),
+                        missed: 0,
+                    });
+                    landmarks.push(lm);
+                }
+                _ if track.missed + 1 < 2 => updated.push(HandTrack {
+                    crop: track.crop,
+                    missed: track.missed + 1,
+                }),
+                _ => {}
+            }
+        }
+        *tracks = updated;
+        landmarks
+    }
+
+    /// Merge tracked hands into a fresh segmentation. The selfie model was
+    /// trained on torso framing and drops hands held away from the body; the
+    /// landmark silhouette is steadier than the mask it corrects, so the union
+    /// only fills in. Runs on the same buffer the mask was segmented from, so
+    /// the coordinate space (full frame or center-stage ROI) always matches.
+    fn paint_hands(
+        state: &mut State,
+        buf: &[u8],
+        w: usize,
+        h: usize,
+        stride: usize,
+        mask: &mut Mask,
+    ) {
+        let acquire = state.frame >= state.mask_redetect_at;
+        if state.mask_tracks.len() < MAX_TRACKS && acquire {
+            state.mask_redetect_at = state.frame + REDETECT_INTERVAL;
+        }
+        let State {
+            engine,
+            mask_tracks,
+            ..
+        } = state;
+        for lm in track_hands(engine, mask_tracks, acquire, buf, w, h, stride) {
+            lm.paint_silhouette(&mut mask.values, mask.size, w, h);
         }
     }
 
@@ -1157,10 +1197,14 @@ mod imp {
         }
         if space_changed {
             state.mask_ema = None;
+            state.mask_tracks.clear();
+            state.mask_redetect_at = 0;
         }
         if let Some(model) = state.engine.selfie() {
             match model.segment(buf, w, h, stride) {
                 Ok(mut mask) => {
+                    // Before the EMA, so hand edges are smoothed with the body's.
+                    paint_hands(state, buf, w, h, stride, &mut mask);
                     let a = SEG_EMA_ALPHA;
                     match &mut state.mask_ema {
                         Some(e) if e.len() == mask.values.len() => {
