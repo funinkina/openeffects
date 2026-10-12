@@ -48,7 +48,7 @@ ORT_DYLIB_PATH=~/.local/lib/openeffects-ort/libonnxruntime.so \
 
 Per call, mean ms over 100 iterations after warmup, 1280×720 frame, Dell XPS 13 (Wildcat Lake NPU, driver 1.35.0, OpenVINO 2025.4.1). Includes the RGBA resample and output decode, not just `session.run`.
 
-| Model | CPU | NPU | NPU load |
+| Model | CPU | NPU | NPU load (first run) |
 |---|---|---|---|
 | Selfie segmentation | 3.4 | 1.4 | 35 ms |
 | YuNet | 8.1 | 4.9 | 4 ms |
@@ -57,7 +57,7 @@ Per call, mean ms over 100 iterations after warmup, 1280×720 frame, Dell XPS 13
 
 Reproduce with `openeffectsd --bench-inference [ITERS] [FRAME.png]` under each `OE_EP`. The NPU run was confirmed on hardware via `npu_busy_time_us`.
 
-This is one machine and a synthetic frame (no face or hand in it), so read it as a snapshot. It measures inference only, not the camera and GStreamer/PipeWire pipeline.
+Palm and hand loaded in 37 ms and 68 ms on a later run, so the first-run compile cost is not paid every launch. This is one machine and a synthetic frame (no face or hand in it), so read it as a snapshot. It measures inference only, not the camera and GStreamer/PipeWire pipeline.
 
 ## Installation
 
