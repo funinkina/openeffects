@@ -15,7 +15,7 @@ vinoOpenEffects is a Linux-native webcam effects engine powered by ONNX Runtime.
 - **Portrait Mode:** High-quality background blur with feathered edges and temporal stability.
 - **Center Stage:** Intelligent face and body tracking that smoothly crops and zooms to keep you (or your group) centered.
 - **Background Replacement:** Replace your messy room with a solid color or custom image.
-- **Studio Light:** Subtly brightens and separates the subject from the background using face-region-aware tone mapping.
+- **Studio Light:** Lifts brightness and contrast on you (the segmentation mask, hands included) and can darken or brighten the room behind you independently. Contrast pivots on your own average brightness, so it never darkens a dim face.
 - **Reactions:** Hand-gesture-triggered animated overlays (e.g., thumbs-up for 👍 and thumbs down and heart emojies based on gestures). *Off by default.* Can be trigerred manually via the GUI or CLI anytime. 
 
 ## Components
