@@ -72,11 +72,20 @@ pub fn migrate_in(config_dir: &Path, data_dir: &Path) -> MigrationReport {
         &config_dir.join(NEW_APP_DIR),
         &mut r,
     );
-    move_item(
+    let data_moved = move_item(
         &data_dir.join(OLD_APP_DIR),
         &data_dir.join(NEW_APP_DIR),
         &mut r,
     );
+    if data_moved {
+        // state.toml stores absolute background paths under the data dir.
+        rewrite_state_paths(
+            &config_dir.join(NEW_APP_DIR).join("state.toml"),
+            &data_dir.join(OLD_APP_DIR),
+            &data_dir.join(NEW_APP_DIR),
+            &mut r,
+        );
+    }
 
     let user_units = config_dir.join("systemd").join("user");
     migrate_dropins(&user_units, &mut r);
@@ -152,6 +161,51 @@ fn migrate_dropins(user_units: &Path, r: &mut MigrationReport) {
     }
 }
 
+/// Point absolute paths in `state.toml` that name the old data dir at the new one.
+fn rewrite_state_paths(state: &Path, old_dir: &Path, new_dir: &Path, r: &mut MigrationReport) {
+    let text = match fs::read_to_string(state) {
+        Ok(t) => t,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return,
+        Err(e) => {
+            r.errors
+                .push(format!("cannot read {}: {e}", state.display()));
+            return;
+        }
+    };
+    let (old, new) = (
+        format!("{}/", old_dir.display()),
+        format!("{}/", new_dir.display()),
+    );
+    if !text.contains(&old) {
+        return;
+    }
+    match write_replacing(state, &text.replace(&old, &new)) {
+        Ok(()) => r.moved.push(format!(
+            "updated data paths in {} ({} -> {})",
+            state.display(),
+            old_dir.display(),
+            new_dir.display()
+        )),
+        Err(e) => r
+            .errors
+            .push(format!("failed to rewrite {}: {e}", state.display())),
+    }
+}
+
+/// Write `content` over `path` via a temp file, keeping the original mode.
+fn write_replacing(path: &Path, content: &str) -> io::Result<()> {
+    let mut tmp = path.as_os_str().to_owned();
+    tmp.push(".migrate-tmp");
+    let tmp = PathBuf::from(tmp);
+    let res = fs::write(&tmp, content)
+        .and_then(|()| fs::set_permissions(&tmp, fs::metadata(path)?.permissions()))
+        .and_then(|()| fs::rename(&tmp, path));
+    if res.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    res
+}
+
 fn rewrite_conf(path: &Path, r: &mut MigrationReport) {
     let text = match fs::read_to_string(path) {
         Ok(t) => t,
@@ -167,17 +221,13 @@ fn rewrite_conf(path: &Path, r: &mut MigrationReport) {
     if new == text {
         return;
     }
-    let tmp = path.with_extension("conf.migrate-tmp");
-    let res = fs::write(&tmp, &new).and_then(|()| fs::rename(&tmp, path));
-    match res {
+    match write_replacing(path, &new) {
         Ok(()) => r
             .moved
             .push(format!("updated variable names in {}", path.display())),
-        Err(e) => {
-            let _ = fs::remove_file(&tmp);
-            r.errors
-                .push(format!("failed to rewrite {}: {e}", path.display()));
-        }
+        Err(e) => r
+            .errors
+            .push(format!("failed to rewrite {}: {e}", path.display())),
     }
 }
 
@@ -321,6 +371,27 @@ mod tests {
             fs::read_to_string(c.join("vinoopeneffects/state.toml")).unwrap(),
             "new"
         );
+    }
+
+    #[test]
+    fn state_background_paths_follow_the_data_dir() {
+        let (_t, config, data) = roots();
+        fs::create_dir_all(config.join("openeffects")).unwrap();
+        fs::create_dir_all(data.join("openeffects/backgrounds")).unwrap();
+        let old_bg = format!("{}/openeffects/backgrounds/a.jpg", data.display());
+        fs::write(
+            config.join("openeffects/state.toml"),
+            format!("[bg_replace]\nbackground = \"{old_bg}\"\n"),
+        )
+        .unwrap();
+        let r = migrate_in(&config, &data);
+        assert!(r.errors.is_empty(), "{r:?}");
+        let text = fs::read_to_string(config.join("vinoopeneffects/state.toml")).unwrap();
+        assert!(text.contains(&format!(
+            "{}/vinoopeneffects/backgrounds/a.jpg",
+            data.display()
+        )));
+        assert!(!text.contains("/openeffects/"));
     }
 
     #[test]

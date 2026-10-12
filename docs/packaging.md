@@ -35,7 +35,7 @@ vinoOpenEffects is a hard fork of `openeffects`; every installed name changed:
 | `/usr/share/openeffects/models` | `/usr/share/vinoopeneffects/models` |
 | `OE_EP`, `OE_MODELS_DEST` | `VINOOPENEFFECTS_EP`, `VINOOPENEFFECTS_MODELS_DEST` |
 
-The camera picker in apps shows "vinoOpenEffects" instead of "OpenEffects Virtual
+The camera picker in apps shows "vinoOpenEffects Virtual Camera" instead of "OpenEffects Virtual
 Camera". `openeffectsctl` is gone; there is no alias, use `vinoopeneffects-ctl`.
 
 ### Migration

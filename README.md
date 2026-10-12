@@ -66,12 +66,12 @@ vinoOpenEffects ships as three packages — `vinoopeneffects-daemon` (daemon, bu
 
 ### Arch Linux
 ```bash
-sudo pacman -U vinoopeneffects-daemon-*-x86_64.pkg.tar.zst vinoopeneffects-*-x86_64.pkg.tar.zst
+sudo pacman -U vinoopeneffects-daemon-*-x86_64.pkg.tar.zst vinoopeneffects-[0-9]*-x86_64.pkg.tar.zst
 ```
 
 ### Fedora / RHEL
 ```bash
-sudo dnf install ./vinoopeneffects-daemon-*.x86_64.rpm ./vinoopeneffects-*.x86_64.rpm
+sudo dnf install ./vinoopeneffects-daemon-*.x86_64.rpm ./vinoopeneffects-[0-9]*.x86_64.rpm
 ```
 
 ### Ubuntu / Debian
@@ -90,7 +90,7 @@ This project is a hard fork of `openeffects` and everything was renamed. Install
 | packages `openeffectsd`, `openeffectsctl`, `openeffects` | `vinoopeneffects-daemon`, `vinoopeneffects-ctl`, `vinoopeneffects` |
 | `systemctl --user ... openeffectsd` | `systemctl --user ... vinoopeneffects-daemon` |
 | `OE_EP` | `VINOOPENEFFECTS_EP` |
-| camera picker entry "OpenEffects Virtual Camera" | "vinoOpenEffects" |
+| camera picker entry "OpenEffects Virtual Camera" | "vinoOpenEffects Virtual Camera" |
 | `openeffectsctl` | `vinoopeneffects-ctl` (there is no `openeffectsctl` alias) |
 
 Your config and downloaded models are migrated automatically on first start of the new daemon/GUI. If you set `OE_EP` in a systemd drop-in, the migration rewrites it to `VINOOPENEFFECTS_EP`. Update any scripts, keybinds or Waybar modules that call `openeffectsctl`, and re-select the camera in apps (Zoom, OBS, browsers) since the device name changed.
