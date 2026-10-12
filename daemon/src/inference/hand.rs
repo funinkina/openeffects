@@ -403,7 +403,7 @@ mod tests {
 
     fn synthetic_frame(w: usize, h: usize) -> Vec<u8> {
         let mut buf = vec![0u8; w * h * 4];
-        for (i, px) in buf.chunks_exact_mut(4).enumerate() {
+        for (i, px) in buf.as_chunks_mut::<4>().0.iter_mut().enumerate() {
             let v = ((i % 97) * 2) as u8;
             px.copy_from_slice(&[v, v / 2, 200 - v / 2, 255]);
         }

@@ -39,11 +39,12 @@ fn generate_proxies() -> Result<(), Box<dyn Error>> {
         env!("CARGO_PKG_VERSION"),
     )?;
 
-    // Strip the leading `//!` module-doc header: this file is `include!`d inside
-    // a `mod proxies { ... }` block, where inner doc comments are not allowed.
+    // Strip the `//!` module-doc header: this file is `include!`d inside a
+    // `mod proxies { ... }` block, where inner doc comments are not allowed.
+    // Match indented lines too, since not all of the header sits at column 0.
     let generated: String = generated
         .lines()
-        .skip_while(|line| line.starts_with("//!"))
+        .filter(|line| !line.trim_start().starts_with("//!"))
         .collect::<Vec<_>>()
         .join("\n");
 

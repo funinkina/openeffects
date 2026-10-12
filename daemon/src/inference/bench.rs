@@ -30,7 +30,11 @@ pub fn run(args: &[String]) -> Result<()> {
     println!(
         "ep={} iters={iters} warmup={WARMUP} frame={w}x{h}{}",
         super::requested_ep(),
-        if frame_path.is_some() { "" } else { " (synthetic)" },
+        if frame_path.is_some() {
+            ""
+        } else {
+            " (synthetic)"
+        },
     );
     println!(
         "{:<20} {:>10} {:>9} {:>9} {:>9} {:>9}",
@@ -57,7 +61,11 @@ pub fn run(args: &[String]) -> Result<()> {
 
     let t = Instant::now();
     let mut hand = HandLandmarker::load()?;
-    let crop = CropBox { cx: 0.5, cy: 0.5, side: 0.4 };
+    let crop = CropBox {
+        cx: 0.5,
+        cy: 0.5,
+        side: 0.4,
+    };
     report("hand_landmark", t.elapsed(), iters, |_| {
         hand.infer(&rgba, w, h, stride, crop).map(drop)
     })?;
@@ -145,7 +153,11 @@ pub fn run_video(args: &[String]) -> Result<()> {
     let mut yunet = YuNet::load()?;
     let mut palm = PalmDetector::load()?;
     let mut hand = HandLandmarker::load()?;
-    let crop = CropBox { cx: 0.5, cy: 0.5, side: 0.4 };
+    let crop = CropBox {
+        cx: 0.5,
+        cy: 0.5,
+        side: 0.4,
+    };
 
     let mut one = |f: &[u8]| -> Result<()> {
         seg.segment(f, w, h, stride)?;
@@ -205,7 +217,13 @@ fn cpu_seconds() -> f64 {
 
 /// Decode `path` to tightly packed RGBA at `w`×`h`, keeping every `keep_every`th
 /// frame up to `max` frames.
-fn decode_frames(path: &str, w: usize, h: usize, max: usize, keep_every: usize) -> Result<Vec<Vec<u8>>> {
+fn decode_frames(
+    path: &str,
+    w: usize,
+    h: usize,
+    max: usize,
+    keep_every: usize,
+) -> Result<Vec<Vec<u8>>> {
     gstreamer::init()?;
     let desc = format!(
         "filesrc location=\"{path}\" ! decodebin ! videoconvert ! videoscale ! \
@@ -222,12 +240,16 @@ fn decode_frames(path: &str, w: usize, h: usize, max: usize, keep_every: usize) 
     let mut seen = 0usize;
     while let Ok(sample) = sink.pull_sample() {
         seen += 1;
-        if (seen - 1) % keep_every != 0 {
+        if !(seen - 1).is_multiple_of(keep_every) {
             continue;
         }
         let buf = sample.buffer().context("sample without buffer")?;
         let map = buf.map_readable()?;
-        anyhow::ensure!(map.len() == w * h * 4, "unexpected frame size {}", map.len());
+        anyhow::ensure!(
+            map.len() == w * h * 4,
+            "unexpected frame size {}",
+            map.len()
+        );
         frames.push(map.to_vec());
         if frames.len() >= max {
             break;

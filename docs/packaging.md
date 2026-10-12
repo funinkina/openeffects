@@ -51,7 +51,7 @@ Same as a normal source build; the packages link against these at build time.
 | --------- | -------------------------------------------------------------------------------------------------- |
 | daemon    | GStreamer + plugins-base, PipeWire (`libpipewire-0.3`, `libspa-0.2`), `clang`/`libclang` (bindgen) |
 | gui       | GTK4, libadwaita, GStreamer                                                                        |
-| all       | Rust ≥ 1.88, `cargo`                                                                               |
+| all       | Rust ≥ 1.92, `cargo`                                                                               |
 | packaging | [nfpm](https://nfpm.goreleaser.com), `curl`, `python3`                                             |
 
 ONNX Runtime is pulled by `ort`'s `download-binaries` feature and **statically
