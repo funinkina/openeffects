@@ -78,6 +78,9 @@ pub fn load_session_npu(model: &Path) -> anyhow::Result<ort::session::Session> {
         requested_ep()
     );
     anyhow::ensure!(npu_present(), "no NPU present");
+    // Before any ort call: `is_available` below would otherwise lazily load
+    // `libonnxruntime.so` by bare name and panic when it isn't on the loader path.
+    ensure_runtime()?;
     let ep = OpenVINO::default().with_device_type("NPU");
     anyhow::ensure!(
         ep.is_available().unwrap_or(false),
