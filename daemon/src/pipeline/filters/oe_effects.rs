@@ -894,8 +894,8 @@ mod imp {
                 lh,
                 r,
             );
-            for i in 0..n {
-                prod[i] = state.gf_i_low[i] * state.gf_i_low[i];
+            for (p, &a) in prod.iter_mut().zip(&state.gf_i_low).take(n) {
+                *p = a * a;
             }
             box_f32(
                 &prod,
@@ -906,8 +906,12 @@ mod imp {
                 lh,
                 r,
             );
-            for i in 0..n {
-                prod[i] = state.gf_i_low[i] * state.gf_p_low[i];
+            for (p, (&a, &b)) in prod
+                .iter_mut()
+                .zip(state.gf_i_low.iter().zip(&state.gf_p_low))
+                .take(n)
+            {
+                *p = a * b;
             }
             box_f32(
                 &prod,
@@ -1022,6 +1026,7 @@ mod imp {
 
     /// Bilinear lookup into an `lw`-stride f32 plane at the four pre-resolved
     /// corner indices with fractional weights `tx`,`ty`.
+    #[allow(clippy::too_many_arguments)] // per-pixel hot path; a params struct would only add copies
     fn bilerp(
         buf: &[f32],
         lw: usize,
@@ -1264,7 +1269,7 @@ mod imp {
                 (((v - 0.5) * contrast + 0.5 + brightness).clamp(0.0, 1.0) * 255.0).round() as u8;
             adj_bg[p] = ((v + bg_brightness).clamp(0.0, 1.0) * 255.0).round() as u8;
         }
-        for (px, &m) in img.chunks_exact_mut(4).zip(lut) {
+        for (px, &m) in img.as_chunks_mut::<4>().0.iter_mut().zip(lut) {
             let m = m as u32;
             let bg_m = 255 - m;
             // Skip pixels entirely unaffected by either pass (m == 0 and no bg
@@ -1308,7 +1313,7 @@ mod imp {
     /// Composite a solid color behind the subject — no background buffer is
     /// ever materialized.
     fn composite_color(fg: &mut [u8], color: [u8; 4], lut: &[u8]) {
-        for (px, &m) in fg.chunks_exact_mut(4).zip(lut) {
+        for (px, &m) in fg.as_chunks_mut::<4>().0.iter_mut().zip(lut) {
             if m == 255 {
                 continue;
             }
@@ -1356,11 +1361,9 @@ mod imp {
                 for c in 0..3 {
                     // Un-premultiply: bg = premul·255 / weight. Fall back to the
                     // foreground when the neighborhood had no background weight.
-                    let bg = if wbg > 0 {
-                        (s[c] as u32 * 255 / wbg).min(255)
-                    } else {
-                        fg[p + c] as u32
-                    };
+                    let bg = (s[c] as u32 * 255)
+                        .checked_div(wbg)
+                        .map_or(fg[p + c] as u32, |v| v.min(255));
                     fg[p + c] = ((fg[p + c] as u32 * m + bg * (255 - m) + 127) / 255) as u8;
                 }
             }
@@ -1391,6 +1394,7 @@ mod imp {
     /// `rgb·255/alpha`, i.e. the weighted mean of the background pixels alone —
     /// person pixels (wbg ≈ 0) drop out. `box_blur` then blurs all four channels
     /// so premul and weight stay consistent under the blur.
+    #[allow(clippy::too_many_arguments)] // plain geometry args shared by every caller
     fn downsample_masked(
         src: &[u8],
         lut: &[u8],

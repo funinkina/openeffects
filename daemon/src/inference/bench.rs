@@ -240,7 +240,7 @@ fn decode_frames(
     let mut seen = 0usize;
     while let Ok(sample) = sink.pull_sample() {
         seen += 1;
-        if (seen - 1) % keep_every != 0 {
+        if !(seen - 1).is_multiple_of(keep_every) {
             continue;
         }
         let buf = sample.buffer().context("sample without buffer")?;

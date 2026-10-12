@@ -257,8 +257,10 @@ selected = ""
         let state = AppState::default();
         assert!(!state.bypass);
 
-        let mut on = AppState::default();
-        on.bypass = true;
+        let mut on = AppState {
+            bypass: true,
+            ..Default::default()
+        };
         on.effects.portrait_blur.enabled = true;
         let text = toml::to_string_pretty(&on).unwrap();
         let reparsed: AppState = toml::from_str(&text).unwrap();
