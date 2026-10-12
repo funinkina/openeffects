@@ -415,17 +415,18 @@ mod tests {
         }
     }
 
-    /// Needs an NPU and the exported model; no-ops otherwise.
+    /// Needs an NPU and the exported model; skips with a message otherwise.
     #[test]
     fn auto_light_gain_is_bounded_when_available() {
         if super::registry::find_model("iat_lowlight").is_none() {
             eprintln!("skipping: iat_lowlight model not installed");
             return;
         }
-        let Ok(mut model) = AutoLight::load() else {
-            eprintln!("skipping: no NPU for iat_lowlight");
+        if !super::super::npu_present() {
+            eprintln!("skipping: no NPU hardware present");
             return;
-        };
+        }
+        let mut model = AutoLight::load().expect("load iat_lowlight on NPU");
         let (w, h) = (320usize, 240usize);
         let frame = vec![40u8; w * h * 4];
         let map = model.analyze(&frame, w, h, w * 4).expect("analyze");

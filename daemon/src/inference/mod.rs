@@ -114,13 +114,18 @@ pub fn requested_ep() -> String {
 
 #[cfg(feature = "npu")]
 /// Whether the kernel exposes an Intel NPU (`intel_vpu` registers `accel` nodes).
-fn npu_present() -> bool {
+pub(crate) fn npu_present() -> bool {
     std::fs::read_dir("/dev/accel")
         .map(|d| {
             d.flatten()
                 .any(|e| e.file_name().to_string_lossy().starts_with("accel"))
         })
         .unwrap_or(false)
+}
+
+#[cfg(not(feature = "npu"))]
+pub(crate) fn npu_present() -> bool {
+    false
 }
 
 /// Directories searched for `libonnxruntime.so` when `ORT_DYLIB_PATH` is unset,
