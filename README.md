@@ -129,6 +129,10 @@ Use with Waybar:
 }
 ```
 
+### Desktop integrations
+
+No shell extension or tray is shipped. The daemon exposes everything the GUI and CLI use on the session bus as `io.github.karanshukla.vinoopeneffects.Daemon`; the interfaces are described in [`data/dbus/`](data/dbus).
+
 ## Security & Privacy
 
 - Cameras are accessed securely via the `xdg-desktop-portal-camera`.
