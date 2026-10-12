@@ -75,8 +75,10 @@ jobs:
       - run: rustup toolchain install stable --profile minimal
       - *apt
       - *cache
-      # load-dynamic needs no ONNX Runtime at build time.
-      - run: cargo check -p vinoopeneffects-daemon --features npu
+      # Default features are the NPU build (load-dynamic, no ONNX Runtime at
+      # build time); the opt-out is the statically linked CPU-only build.
+      - run: cargo check -p vinoopeneffects-daemon
+      - run: cargo check -p vinoopeneffects-daemon --no-default-features
 
   msrv:
     runs-on: ubuntu-26.04

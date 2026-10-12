@@ -14,7 +14,7 @@ use anyhow::{Context, Result};
 use ort::session::Session;
 use ort::value::Tensor;
 
-use super::{build_session, registry};
+use super::{load_session, registry};
 
 /// MediaPipe Selfie Segmentation: produces a per-pixel foreground probability
 /// mask. Input `pixel_values` is NCHW `[1,3,256,256]`, RGB scaled to `0..1`;
@@ -32,9 +32,7 @@ impl SelfieSeg {
     pub fn load() -> Result<Self> {
         let resolved = registry::find_model("selfie_segmentation")
             .context("selfie_segmentation model not found; run scripts/fetch-models.sh")?;
-        let session = build_session()?
-            .commit_from_file(&resolved.model_path)
-            .with_context(|| format!("load {}", resolved.model_path.display()))?;
+        let session = load_session(&resolved.model_path)?;
         Ok(Self { session, size: 256 })
     }
 
@@ -134,9 +132,7 @@ impl YuNet {
     pub fn load() -> Result<Self> {
         let resolved = registry::find_model("yunet")
             .context("yunet model not found; run scripts/fetch-models.sh")?;
-        let session = build_session()?
-            .commit_from_file(&resolved.model_path)
-            .with_context(|| format!("load {}", resolved.model_path.display()))?;
+        let session = load_session(&resolved.model_path)?;
         Ok(Self { session, size: 640 })
     }
 

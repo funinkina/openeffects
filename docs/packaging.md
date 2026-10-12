@@ -100,10 +100,12 @@ Same as a normal source build; the packages link against these at build time.
 | all       | Rust ≥ 1.92, `cargo`                                                                               |
 | packaging | [nfpm](https://nfpm.goreleaser.com), `curl`, `python3`                                             |
 
-ONNX Runtime is pulled by `ort`'s `download-binaries` feature and **statically
-linked** — the resulting binaries carry no `libonnxruntime.so` runtime dependency.
-`build-packages.sh` asserts this with an `ldd` guard; if a future toolchain links it
-dynamically the build fails loudly so the `.so` can be added to `nfpm.yaml` contents.
+ONNX Runtime is **loaded at runtime** (`npu` feature, on by default). Packages ship the
+sha256-verified CPU build (`scripts/fetch-ort.sh`, staged into `dist/ort` by
+`build-packages.sh`) in `/usr/lib/vinoopeneffects/ort`; the daemon prefers a per-user
+OpenVINO build in `~/.local/lib/vinoopeneffects/ort` (`ovfetch install`) when an NPU is
+present. Bumping onnxruntime means updating the version and hashes in `fetch-ort.sh`.
+`--no-default-features` is the statically linked CPU-only build.
 
 Distro **runtime** deps (what users need installed) are declared per-packager in
 the three `packaging/nfpm-*.yaml` configs under `overrides:` (different package names

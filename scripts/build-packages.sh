@@ -43,16 +43,6 @@ echo "==> Building vinoopeneffects $VERSION ($ARCH)"
 echo "==> cargo build --release --workspace"
 cargo build --release --workspace
 
-# Guard: ort's download-binaries is expected to statically link onnxruntime, so
-# the daemon should not depend on a runtime libonnxruntime.so. If it does, the
-# package would be incomplete — fail loudly so we can add the .so to contents.
-if ldd target/release/vinoopeneffects-daemon 2>/dev/null | grep -qi 'onnxruntime'; then
-    echo "error: vinoopeneffects-daemon dynamically links libonnxruntime.so." >&2
-    echo "       Bundle it into packaging/nfpm-daemon.yaml contents before shipping." >&2
-    ldd target/release/vinoopeneffects-daemon | grep -i onnxruntime >&2
-    exit 1
-fi
-
 rm -rf "$dist"
 mkdir -p "$dist"
 
@@ -61,6 +51,9 @@ sed "s|@bindir@|$bindir|g" data/dbus-services/io.github.karanshukla.vinoopeneffe
     > "$dist/io.github.karanshukla.vinoopeneffects.Daemon.service"
 sed "s|@bindir@|$bindir|g" data/systemd/vinoopeneffects-daemon.service.in \
     > "$dist/vinoopeneffects-daemon.service"
+
+echo "==> Staging onnxruntime into dist/ort (sha256-verified, CPU)"
+./scripts/fetch-ort.sh "$dist/ort"
 
 echo "==> Staging models into dist/models (sha256-verified)"
 VINOOPENEFFECTS_MODELS_DEST="$dist/models" ./scripts/fetch-models.sh

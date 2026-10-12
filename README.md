@@ -30,18 +30,13 @@ vinoOpenEffects is designed to be lightweight and modular, avoiding the need for
 
 Inference runs through **ONNX Runtime** (`ort` crate). Four bundled models: selfie segmentation (256²), YuNet face detection (640²), palm detection (192²) and hand landmarks (224²).
 
-The default build is **CPU only** (`download-binaries`), which is what the packages ship. An opt-in **`npu` build** runs the same models on Intel NPUs (or GPUs) through the OpenVINO execution provider:
+The default build uses the NPU when there is one and quietly runs on CPU when there isn't. ONNX Runtime is loaded at runtime from `lib/vinoopeneffects/ort` (next to the install prefix, or `~/.local/lib/vinoopeneffects/ort`), or from `ORT_DYLIB_PATH`:
 
-```bash
-# onnxruntime-openvino matched to the installed NPU driver
-ovfetch install --prefix ~/.local/lib/vinoopeneffects-ort
+- `scripts/install.sh` puts the OpenVINO build there with `ovfetch` when it detects an NPU or GPU, and the sha256-verified CPU runtime (`scripts/fetch-ort.sh`) otherwise.
+- Packages ship the CPU runtime in `/usr/lib/vinoopeneffects/ort`. To use an NPU with a package, run `ovfetch install --prefix ~/.local/lib/vinoopeneffects/ort`; that copy is preferred when an NPU is present.
+- `cargo build --no-default-features` links a CPU-only ONNX Runtime statically instead.
 
-cargo build --release -p vinoopeneffects-daemon --features npu
-ORT_DYLIB_PATH=~/.local/lib/vinoopeneffects-ort/libonnxruntime.so \
-  VINOOPENEFFECTS_EP=npu vinoopeneffects-daemon --start
-```
-
-`VINOOPENEFFECTS_EP` is `cpu` (default), `npu` or `gpu`. A non-CPU request that can't be satisfied is an error, never a silent CPU fallback.
+`VINOOPENEFFECTS_EP` is `auto` (default), `cpu`, `npu` or `gpu`. `auto` falls back to CPU, with a log line, if there is no NPU, the runtime has no OpenVINO provider, or a model fails to compile for the NPU. An explicit `npu` or `gpu` is strict: it errors rather than silently running on CPU.
 
 ### Measured latency
 

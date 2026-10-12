@@ -10,8 +10,11 @@ name = "vinoopeneffects-daemon"
 path = "src/main.rs"
 
 [features]
-# Opt-in OpenVINO execution provider (NPU/GPU). Switches ONNX Runtime from the
-# bundled CPU download to loading the library named by ORT_DYLIB_PATH.
+# OpenVINO execution provider (NPU/GPU), on by default: onnxruntime is loaded at
+# runtime (ORT_DYLIB_PATH or lib/vinoopeneffects/ort) and the NPU is used when
+# present, falling back to CPU. `--no-default-features` links the CPU-only
+# onnxruntime statically instead.
+default = ["npu"]
 npu = ["ort/load-dynamic", "ort/openvino"]
 
 [dependencies]
