@@ -32,6 +32,10 @@ rm -f "$datadir/systemd/user/vinoopeneffects-daemon.service"
 rm -f "$datadir/applications/$app_id.desktop"
 rm -f "$datadir/icons/hicolor/scalable/apps/$app_id.svg"
 rm -f "$datadir/icons/hicolor/symbolic/apps/$app_id-symbolic.svg"
+# The onnxruntime install.sh placed (CPU build, or OpenVINO via ovfetch). The
+# directory is ours alone, so it goes whole.
+rm -rf "$prefix/lib/vinoopeneffects"
+rmdir "$prefix/lib" 2>/dev/null || true
 
 if [ "$purge" = 1 ]; then
     rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/vinoopeneffects" \
