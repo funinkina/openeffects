@@ -714,6 +714,10 @@ mod imp {
 
         // 1. (Re)acquire hands via palm detection when there's room for more.
         if state.tracks.len() < MAX_TRACKS && state.frame >= state.redetect_at {
+            // Landmarks only run once palm finds a hand, so on its own the hand
+            // model idles out while palm keeps running. Load and touch it with
+            // palm so the first gesture never pays a model load on this thread.
+            let _ = state.engine.hand();
             let palms = match state.engine.palm() {
                 Some(model) => model
                     .detect(img, w, h, stride, PALM_SCORE_THRESH)
