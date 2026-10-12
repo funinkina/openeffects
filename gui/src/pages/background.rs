@@ -1,7 +1,7 @@
-//! Background page: a master switch plus a Blur/Replace mode toggle that
-//! drives the two underlying effects — `portrait_blur` and `bg_replace`.
-//! Only the controls for the active mode are shown, and everything below the
-//! master switch is disabled while it's off.
+//! Background page: a master switch plus a "Style" group (Blur/Replace mode and,
+//! in Blur mode, a strength row) that drives the two underlying effects —
+//! `portrait_blur` and `bg_replace`. Only the controls for the active mode are
+//! shown, and everything below the master switch is disabled while it's off.
 //!
 //! The mode is *virtual*: `bg_replace.enabled` means Replace, otherwise
 //! Blur, and changing it just toggles those two effects' `enabled` flags
@@ -19,11 +19,9 @@ use gtk::gdk::RGBA;
 use gtk::gio;
 use shared::dbus::{VariantMap, value_as_bool, value_as_string, value_as_u32};
 
-use crate::constants::{
-    BG_BLUR, BG_IMAGE_PRESETS, BG_MODE_ICONS, BG_MODES, BG_PRESETS, BG_REPLACE, BLUR_LEVELS,
-};
+use crate::constants::{BG_BLUR, BG_IMAGE_PRESETS, BG_MODES, BG_PRESETS, BG_REPLACE, BLUR_LEVELS};
 use crate::dbus_client::{CmdTx, GuiCommand};
-use crate::widgets::{ToggleCtl, pref_group, toggle_group, toggle_group_stacked};
+use crate::widgets::{ToggleCtl, pref_group, toggle_row};
 
 const CUSTOM_SWATCH_CLASS: &str = "oe-custom-swatch";
 const CUSTOM_IMAGE_CLASS: &str = "oe-custom-image";
@@ -37,9 +35,10 @@ const IMAGE_THUMB_HEIGHT: i32 = 52;
 pub struct Widgets {
     switch: adw::SwitchRow,
     switch_handler: glib::SignalHandlerId,
-    mode_group: adw::PreferencesGroup,
+    style_group: adw::PreferencesGroup,
     mode: ToggleCtl,
-    blur_group: adw::PreferencesGroup,
+    /// Blur-strength row, shown only in Blur mode.
+    blur_row: adw::ActionRow,
     blur_strength: ToggleCtl,
     /// Groups shown only in Replace mode (image picker + color swatches).
     replace_groups: Vec<adw::PreferencesGroup>,
@@ -59,26 +58,44 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     let page = adw::PreferencesPage::new();
     let applying = Rc::new(Cell::new(false));
 
-    // mode toggle: blur / replace
-    // Built before the master switch so its closure can capture the group.
-    let mode_group = pref_group("Mode", "Blur or replace everything behind the subject");
-    let mode = {
+    // Style: mode toggle (blur / replace) and, for Blur, a strength row.
+    // Built before the master switch so its closure can capture the toggle.
+    let style_group = pref_group("Style", "");
+    let (mode_row, mode) = {
         let cmd_tx = cmd_tx.clone();
         let applying = applying.clone();
-        toggle_group_stacked(BG_MODES, BG_MODE_ICONS, move |value| {
+        toggle_row(
+            "Mode",
+            "Blur or replace what is behind you",
+            BG_MODES,
+            move |value| {
+                if applying.get() {
+                    return;
+                }
+                set_mode(&cmd_tx, value == BG_REPLACE);
+            },
+        )
+    };
+    let (blur_row, blur_strength) = {
+        let cmd_tx = cmd_tx.clone();
+        let applying = applying.clone();
+        toggle_row("Blur Strength", "", BLUR_LEVELS, move |value| {
             if applying.get() {
                 return;
             }
-            set_mode(&cmd_tx, value == BG_REPLACE);
+            let strength: u32 = value.parse().unwrap_or(66);
+            let _ = cmd_tx.send(GuiCommand::SetParam {
+                id: "portrait_blur".into(),
+                key: "strength".into(),
+                value: shared::dbus::u32_value(strength),
+            });
         })
     };
-    mode_group.add(&mode.group);
+    style_group.add(&mode_row);
+    style_group.add(&blur_row);
 
-    // master switch
-    let main = pref_group(
-        "Background",
-        "Blur or replace everything behind the subject",
-    );
+    // master switch (no group title: the page tab already says "Background")
+    let main = adw::PreferencesGroup::new();
     let switch = adw::SwitchRow::builder()
         .title("Background")
         .subtitle("Off shows the camera feed unmodified")
@@ -86,13 +103,13 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     let switch_handler = {
         let cmd_tx = cmd_tx.clone();
         let applying = applying.clone();
-        let mode_group = mode.group.clone();
+        let mode_toggle = mode.group.clone();
         switch.connect_active_notify(move |row| {
             if applying.get() {
                 return;
             }
             if row.is_active() {
-                let replace = mode_group.active_name().as_deref() == Some(BG_REPLACE);
+                let replace = mode_toggle.active_name().as_deref() == Some(BG_REPLACE);
                 set_mode(&cmd_tx, replace);
             } else {
                 let _ = cmd_tx.send(GuiCommand::SetEnabled {
@@ -108,27 +125,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     };
     main.add(&switch);
     page.add(&main);
-    page.add(&mode_group);
-
-    //blur strenght: low / medium/ high
-    let blur_group = pref_group("Blur", "How strongly to blur the background");
-    let blur_strength = {
-        let cmd_tx = cmd_tx.clone();
-        let applying = applying.clone();
-        toggle_group(BLUR_LEVELS, move |value| {
-            if applying.get() {
-                return;
-            }
-            let strength: u32 = value.parse().unwrap_or(66);
-            let _ = cmd_tx.send(GuiCommand::SetParam {
-                id: "portrait_blur".into(),
-                key: "strength".into(),
-                value: shared::dbus::u32_value(strength),
-            });
-        })
-    };
-    blur_group.add(&blur_strength.group);
-    page.add(&blur_group);
+    page.add(&style_group);
 
     // Image presets and color swatches share one radio group, so picking
     // either kind of background visually deselects the other.
@@ -136,13 +133,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
 
     // replace: image presets
     let image_group = pref_group("Image", "Use a built-in image or pick your own");
-    let image_box = gtk::Box::builder()
-        .orientation(gtk::Orientation::Horizontal)
-        .spacing(8)
-        .halign(gtk::Align::Center)
-        .margin_top(6)
-        .margin_bottom(6)
-        .build();
+    let image_box = wrapping_grid();
 
     let mut image_presets = Vec::new();
     for (label, path) in ensure_preset_images() {
@@ -191,14 +182,8 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     page.add(&image_group);
 
     // replace: color swatches
-    let color_group = pref_group("Color", "Pick a solid background color");
-    let swatch_box = gtk::Box::builder()
-        .orientation(gtk::Orientation::Horizontal)
-        .spacing(8)
-        .halign(gtk::Align::Center)
-        .margin_top(6)
-        .margin_bottom(6)
-        .build();
+    let color_group = pref_group("Solid Color", "Pick a solid background color");
+    let swatch_box = wrapping_grid();
 
     let mut swatches = Vec::new();
     for (i, (label, hex)) in BG_PRESETS.iter().enumerate() {
@@ -244,9 +229,9 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     let widgets = Widgets {
         switch,
         switch_handler,
-        mode_group,
+        style_group,
         mode,
-        blur_group,
+        blur_row,
         blur_strength,
         replace_groups: vec![image_group, color_group],
         image_row,
@@ -313,9 +298,8 @@ impl Widgets {
         self.switch.unblock_signal(&self.switch_handler);
 
         self.mode.set_value(mode);
-        self.mode_group.set_sensitive(on);
-        self.blur_group.set_sensitive(on);
-        self.blur_group.set_visible(mode == BG_BLUR);
+        self.style_group.set_sensitive(on);
+        self.blur_row.set_visible(mode == BG_BLUR);
         for group in &self.replace_groups {
             group.set_sensitive(on);
             group.set_visible(mode == BG_REPLACE);
@@ -443,6 +427,23 @@ fn rgba_to_hex(rgba: &RGBA) -> String {
 }
 
 // swatch widgets & CSS
+
+/// A grid that wraps its swatches/thumbnails onto extra rows when the window
+/// is narrow, instead of forcing a minimum window width like a plain `Box`.
+fn wrapping_grid() -> gtk::FlowBox {
+    gtk::FlowBox::builder()
+        .selection_mode(gtk::SelectionMode::None)
+        .homogeneous(true)
+        .min_children_per_line(2)
+        .max_children_per_line(8)
+        .row_spacing(8)
+        .column_spacing(8)
+        .halign(gtk::Align::Center)
+        .margin_top(6)
+        .margin_bottom(6)
+        .build()
+}
+
 fn swatch_button(class: &str, tooltip: &str) -> gtk::ToggleButton {
     let button = gtk::ToggleButton::builder()
         .tooltip_text(tooltip)

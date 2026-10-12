@@ -1,4 +1,4 @@
-//! Shared `AdwPreferencesGroup` row builders and reusable toggle-group /
+//! Shared `AdwPreferencesGroup` row builders and reusable segmented-control /
 //! slider controls used by the effect pages.
 //!
 //! [`add_switch`] wires a row's change signal straight to a `GuiCommand` on
@@ -30,7 +30,8 @@ const SLIDER_ECHO_HOLDOFF: Duration = Duration::from_millis(1000);
 /// effect id -> (enable switch, its notify::active handler)
 pub type Switches = HashMap<&'static str, (adw::SwitchRow, glib::SignalHandlerId)>;
 
-/// An `AdwToggleGroup` whose selection change is forwarded as a string value.
+/// An `AdwToggleGroup` (built by [`toggle_row`]) whose selection change is
+/// forwarded as a string value.
 /// State sync goes through [`ToggleCtl::set_value`], which blocks the change
 /// handler so it doesn't echo back to the daemon.
 pub struct ToggleCtl {
@@ -47,62 +48,37 @@ impl ToggleCtl {
     }
 }
 
-/// Build a homogeneous toggle group from `(name, label)` options. `on_change`
-/// receives the active toggle's name whenever the user changes the selection.
-pub fn toggle_group(
+/// Build a settings row with the title/subtitle on the left and a compact,
+/// rounded segmented control on the right. `on_change` receives the active
+/// toggle's name whenever the user changes the selection. Prefer this over a
+/// full-width toggle group: it keeps related options on one line each and the
+/// row shrinks gracefully at narrow window widths.
+pub fn toggle_row(
+    title: &str,
+    subtitle: &str,
     options: &[(&'static str, &'static str)],
     on_change: impl Fn(&str) + 'static,
-) -> ToggleCtl {
+) -> (adw::ActionRow, ToggleCtl) {
     let group = adw::ToggleGroup::builder()
-        .homogeneous(true)
-        .halign(gtk::Align::Fill)
+        .valign(gtk::Align::Center)
+        .css_classes(["round"])
         .build();
     for (name, label) in options {
         group.add(adw::Toggle::builder().name(*name).label(*label).build());
     }
-    finish_toggle_group(group, on_change)
-}
-
-/// Build a homogeneous toggle group whose toggles show a symbolic icon
-/// stacked above a centered label, one icon per option (same order).
-pub fn toggle_group_stacked(
-    options: &[(&'static str, &'static str)],
-    icons: &[&'static str],
-    on_change: impl Fn(&str) + 'static,
-) -> ToggleCtl {
-    let group = adw::ToggleGroup::builder()
-        .homogeneous(true)
-        .halign(gtk::Align::Fill)
-        .build();
-    for (i, (name, label)) in options.iter().enumerate() {
-        let content = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(4)
-            .halign(gtk::Align::Center)
-            .valign(gtk::Align::Center)
-            .margin_top(8)
-            .margin_bottom(8)
-            .margin_start(8)
-            .margin_end(8)
-            .build();
-        let image = gtk::Image::from_icon_name(icons[i]);
-        image.set_pixel_size(32);
-        content.append(&image);
-        content.append(&gtk::Label::new(Some(label)));
-        let toggle = adw::Toggle::builder().name(*name).label(*label).build();
-        toggle.set_child(Some(&content));
-        group.add(toggle);
-    }
-    finish_toggle_group(group, on_change)
-}
-
-fn finish_toggle_group(group: adw::ToggleGroup, on_change: impl Fn(&str) + 'static) -> ToggleCtl {
     let handler = group.connect_active_notify(move |group| {
         if let Some(name) = group.active_name() {
             on_change(name.as_str());
         }
     });
-    ToggleCtl { group, handler }
+    let ctl = ToggleCtl { group, handler };
+
+    let row = adw::ActionRow::builder()
+        .title(title)
+        .subtitle(subtitle)
+        .build();
+    row.add_suffix(&ctl.group);
+    (row, ctl)
 }
 
 /// A slider row paired with the signal handler for its adjustment's

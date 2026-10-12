@@ -1,5 +1,5 @@
-//! Reactions page: a always-available emoji burst picker plus the
-//! gesture-triggered overlay toggle.
+//! Reactions page: the gesture-triggered overlay toggle, then an
+//! always-available emoji burst picker that wraps to fit the window width.
 //!
 //! The emoji buttons send a one-shot `TriggerReaction` regardless of the
 //! switch; the switch enables the hand-gesture pipeline that fires the matching
@@ -32,14 +32,31 @@ pub fn build(cmd_tx: &CmdTx, switches: &mut Switches) -> adw::PreferencesPage {
     install_css();
     let page = adw::PreferencesPage::new();
 
-    // Manual burst picker (always visible, always sensitive)
+    // gesture auto-trigger toggle (the setting people change, so it leads)
+    let group = adw::PreferencesGroup::new();
+    add_switch(
+        &group,
+        "Gesture Reactions",
+        "Trigger reactions automatically from hand gestures",
+        "reactions",
+        cmd_tx,
+        switches,
+    );
+    page.add(&group);
+
+    // Manual burst picker (always visible, always sensitive). A FlowBox wraps
+    // the buttons instead of forcing a minimum window width.
     let send_group = pref_group(
         "Send a Reaction",
         "Play a one-shot emoji burst in the video",
     );
-    let emoji_box = gtk::Box::builder()
-        .orientation(gtk::Orientation::Horizontal)
-        .spacing(8)
+    let emoji_flow = gtk::FlowBox::builder()
+        .selection_mode(gtk::SelectionMode::None)
+        .homogeneous(true)
+        .min_children_per_line(2)
+        .max_children_per_line(5)
+        .row_spacing(8)
+        .column_spacing(8)
         .halign(gtk::Align::Center)
         .margin_top(6)
         .margin_bottom(6)
@@ -55,25 +72,10 @@ pub fn build(cmd_tx: &CmdTx, switches: &mut Switches) -> adw::PreferencesPage {
         button.connect_clicked(move |_| {
             let _ = cmd_tx.send(GuiCommand::TriggerReaction { id: id.clone() });
         });
-        emoji_box.append(&button);
+        emoji_flow.append(&button);
     }
-    send_group.add(&emoji_box);
+    send_group.add(&emoji_flow);
     page.add(&send_group);
-
-    // gesture auto-trigger toggle
-    let group = pref_group(
-        "Automatic Reactions",
-        "Trigger reactions with hand gestures",
-    );
-    add_switch(
-        &group,
-        "Gesture Reactions",
-        "Enable to automatically trigger the reaction based on hand gestures.",
-        "reactions",
-        cmd_tx,
-        switches,
-    );
-    page.add(&group);
 
     page
 }

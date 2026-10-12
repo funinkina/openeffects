@@ -95,9 +95,16 @@ pub fn build_window(
         })
     };
 
+    // Label the master switch so its meaning is clear without hovering.
+    let bypass_label = gtk::Label::builder()
+        .label("Effects")
+        .css_classes(["dim-label"])
+        .build();
+
     let header = adw::HeaderBar::builder().title_widget(&switcher).build();
     header.pack_end(&menu_button);
     header.pack_end(&bypass_switch);
+    header.pack_end(&bypass_label);
 
     // Connection-trouble banner, sits just under the header.
     let banner = adw::Banner::builder().revealed(false).build();
@@ -267,11 +274,18 @@ fn apply_capabilities(w: &Widgets, caps: &VariantMap) {
 
     w.prefs.virtual_cam_row.set_subtitle(&vcam);
 
-    let pill_text = if ready { "Ready" } else { "Missing" };
+    let (pill_text, pill_class, stale_class) = if ready {
+        ("Ready", "success", "warning")
+    } else {
+        ("Missing", "warning", "success")
+    };
     for row in w.prefs.model_rows.values() {
         if let Some(pill) = unsafe { row.data::<gtk::Label>("pill") } {
             let pill = unsafe { pill.as_ref() };
             pill.set_label(pill_text);
+            pill.remove_css_class("dim-label");
+            pill.remove_css_class(stale_class);
+            pill.add_css_class(pill_class);
         }
     }
 }

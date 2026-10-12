@@ -17,10 +17,7 @@ pub const FRAMING_LEVELS: &[(&str, &str)] = &[
 ];
 
 /// Center Stage tracking mode (stored value, display label).
-pub const FRAMING_MODES: &[(&str, &str)] = &[("single", "Single Face"), ("group", "Group Framing")];
-
-/// Symbolic icons for [`FRAMING_MODES`], same order.
-pub const FRAMING_MODE_ICONS: &[&str] = &["avatar-default-symbolic", "system-users-symbolic"];
+pub const FRAMING_MODES: &[(&str, &str)] = &[("single", "Single"), ("group", "Group")];
 
 /// Background page modes (stored value, display label). These are virtual:
 /// they map onto the `portrait_blur` / `bg_replace` enable flags. The page's
@@ -28,9 +25,6 @@ pub const FRAMING_MODE_ICONS: &[&str] = &["avatar-default-symbolic", "system-use
 pub const BG_BLUR: &str = "blur";
 pub const BG_REPLACE: &str = "replace";
 pub const BG_MODES: &[(&str, &str)] = &[(BG_BLUR, "Blur"), (BG_REPLACE, "Replace")];
-
-/// Symbolic icons for [`BG_MODES`], same order.
-pub const BG_MODE_ICONS: &[&str] = &["view-conceal-symbolic", "image-x-generic-symbolic"];
 
 /// Blur strength buckets: toggle name (the stored `portrait_blur.strength`
 /// value as a string) and display label.

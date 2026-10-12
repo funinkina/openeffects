@@ -34,10 +34,17 @@ pub struct Preview {
 /// and `preview.toggle` into the header bar.
 pub fn build(content: &impl IsA<gtk::Widget>) -> Rc<Preview> {
     // Pane body: the live preview surface
+    // Framed as a rounded card inset from the pane edges.
     let picture = gtk::Picture::builder()
         .content_fit(gtk::ContentFit::Contain)
         .hexpand(true)
         .vexpand(true)
+        .margin_top(12)
+        .margin_bottom(12)
+        .margin_start(12)
+        .margin_end(12)
+        .overflow(gtk::Overflow::Hidden)
+        .css_classes(["card"])
         .build();
 
     let status = gtk::Label::builder()

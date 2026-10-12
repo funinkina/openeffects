@@ -1,13 +1,14 @@
-//! Center Stage page: a master switch plus framing (zoom) and tracking-mode
-//! toggle groups. Turning the switch off disables the framing/mode controls.
+//! Center Stage page: a master switch, then one "Framing" group holding the
+//! zoom and tracking-mode segmented controls. Turning the switch off disables
+//! the framing group.
 
 use adw::glib;
 use adw::prelude::*;
 use shared::dbus::{VariantMap, value_as_bool, value_as_string};
 
-use crate::constants::{FRAMING_LEVELS, FRAMING_MODE_ICONS, FRAMING_MODES};
+use crate::constants::{FRAMING_LEVELS, FRAMING_MODES};
 use crate::dbus_client::{CmdTx, GuiCommand};
-use crate::widgets::{ToggleCtl, pref_group, toggle_group, toggle_group_stacked};
+use crate::widgets::{ToggleCtl, pref_group, toggle_row};
 
 /// Widgets the state-sync layer keeps in sync with the daemon.
 pub struct Widgets {
@@ -15,21 +16,18 @@ pub struct Widgets {
     switch_handler: glib::SignalHandlerId,
     framing: ToggleCtl,
     mode: ToggleCtl,
-    /// Groups dimmed while Center Stage is off.
-    controls: Vec<adw::PreferencesGroup>,
+    /// Dimmed while Center Stage is off.
+    controls: adw::PreferencesGroup,
 }
 
 pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     let page = adw::PreferencesPage::new();
 
-    // master switch
-    let main = pref_group(
-        "Center Stage",
-        "Keep the subject framed and centered as they move",
-    );
+    // master switch (no group title: the page tab already says "Center Stage")
+    let main = adw::PreferencesGroup::new();
     let switch = adw::SwitchRow::builder()
         .title("Center Stage")
-        .subtitle("Track and crop to keep the subject in frame")
+        .subtitle("Keep you framed and centered as you move")
         .build();
     let switch_handler = {
         let cmd_tx = cmd_tx.clone();
@@ -43,42 +41,48 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     main.add(&switch);
     page.add(&main);
 
-    // framing - zoom
-    let framing_group = pref_group("Framing", "How tightly to crop around the subject");
-    let framing = {
+    // framing: zoom + tracking mode, one line each
+    let controls = pref_group("Framing", "");
+    let (zoom_row, framing) = {
         let cmd_tx = cmd_tx.clone();
-        toggle_group(FRAMING_LEVELS, move |value| {
-            let _ = cmd_tx.send(GuiCommand::SetParam {
-                id: "center_stage".into(),
-                key: "zoom".into(),
-                value: shared::dbus::str_value(value),
-            });
-        })
+        toggle_row(
+            "Zoom",
+            "How tightly to crop",
+            FRAMING_LEVELS,
+            move |value| {
+                let _ = cmd_tx.send(GuiCommand::SetParam {
+                    id: "center_stage".into(),
+                    key: "zoom".into(),
+                    value: shared::dbus::str_value(value),
+                });
+            },
+        )
     };
-    framing_group.add(&framing.group);
-    page.add(&framing_group);
-
-    // tracking mode
-    let mode_group = pref_group("Mode", "Track one face or frame the whole group");
-    let mode = {
+    let (mode_row, mode) = {
         let cmd_tx = cmd_tx.clone();
-        toggle_group_stacked(FRAMING_MODES, FRAMING_MODE_ICONS, move |value| {
-            let _ = cmd_tx.send(GuiCommand::SetParam {
-                id: "center_stage".into(),
-                key: "mode".into(),
-                value: shared::dbus::str_value(value),
-            });
-        })
+        toggle_row(
+            "Tracking",
+            "Follow one face or frame everyone",
+            FRAMING_MODES,
+            move |value| {
+                let _ = cmd_tx.send(GuiCommand::SetParam {
+                    id: "center_stage".into(),
+                    key: "mode".into(),
+                    value: shared::dbus::str_value(value),
+                });
+            },
+        )
     };
-    mode_group.add(&mode.group);
-    page.add(&mode_group);
+    controls.add(&zoom_row);
+    controls.add(&mode_row);
+    page.add(&controls);
 
     let widgets = Widgets {
         switch,
         switch_handler,
         framing,
         mode,
-        controls: vec![framing_group, mode_group],
+        controls,
     };
     (page, widgets)
 }
@@ -89,9 +93,7 @@ impl Widgets {
             self.switch.block_signal(&self.switch_handler);
             self.switch.set_active(on);
             self.switch.unblock_signal(&self.switch_handler);
-            for group in &self.controls {
-                group.set_sensitive(on);
-            }
+            self.controls.set_sensitive(on);
         }
         if let Some(zoom) = params.get("zoom").and_then(value_as_string) {
             self.framing.set_value(&zoom);

@@ -1,8 +1,8 @@
-//! Studio Light page: a master switch plus brightness/contrast/intensity
-//! sliders for the subject, plus a background brightness slider. The lift is
-//! applied to the person only (foreground) and the background brightness is
-//! applied to the complementary area (inverted mask). Turning the switch off
-//! disables the sliders.
+//! Studio Light page: a master switch, a "Subject" group (intensity,
+//! brightness, contrast) and a separate "Background" group (brightness). The
+//! lift is applied to the person only (foreground) and the background
+//! brightness to the complementary area (inverted mask). Turning the switch
+//! off disables both groups.
 
 use adw::glib;
 use adw::prelude::*;
@@ -19,17 +19,18 @@ pub struct Widgets {
     brightness: SliderCtl,
     contrast: SliderCtl,
     bg_brightness: SliderCtl,
-    controls: adw::PreferencesGroup,
+    /// Dimmed while Studio Light is off.
+    controls: [adw::PreferencesGroup; 2],
 }
 
 pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     let page = adw::PreferencesPage::new();
 
-    // master switch
-    let main = pref_group("Studio Light", "Subtly brighten and separate the subject");
+    // master switch (no group title: the page tab already says "Studio Light")
+    let main = adw::PreferencesGroup::new();
     let switch = adw::SwitchRow::builder()
         .title("Studio Light")
-        .subtitle("Brighten and add contrast to the subject")
+        .subtitle("Brighten and separate you from the background")
         .build();
     let switch_handler = {
         let cmd_tx = cmd_tx.clone();
@@ -43,12 +44,12 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
     main.add(&switch);
     page.add(&main);
 
-    // adjustments
-    let controls = pref_group("Adjustments", "");
+    // subject adjustments
+    let subject = pref_group("Subject", "Applied to you");
     let intensity = add_slider_u32(
-        &controls,
+        &subject,
         "Intensity",
-        "Overall effect strength, 0–100",
+        "Overall strength of the effect",
         0.0,
         100.0,
         1.0,
@@ -57,9 +58,9 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
         cmd_tx,
     );
     let brightness = add_slider_i32(
-        &controls,
+        &subject,
         "Brightness",
-        "-100 (darker) to 100 (brighter)",
+        "",
         -100.0,
         100.0,
         1.0,
@@ -68,9 +69,9 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
         cmd_tx,
     );
     let contrast = add_slider_u32(
-        &controls,
+        &subject,
         "Contrast",
-        "0–100",
+        "",
         0.0,
         100.0,
         1.0,
@@ -78,10 +79,14 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
         "contrast",
         cmd_tx,
     );
+    page.add(&subject);
+
+    // background adjustment
+    let background = pref_group("Background", "Applied to everything behind you");
     let bg_brightness = add_slider_i32(
-        &controls,
-        "Background Brightness",
-        "Darken or brighten the background to make the subject stand out",
+        &background,
+        "Brightness",
+        "Darken or brighten the background so you stand out",
         -100.0,
         100.0,
         1.0,
@@ -89,7 +94,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
         "bg_brightness",
         cmd_tx,
     );
-    page.add(&controls);
+    page.add(&background);
 
     let widgets = Widgets {
         switch,
@@ -98,7 +103,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
         brightness,
         contrast,
         bg_brightness,
-        controls,
+        controls: [subject, background],
     };
     (page, widgets)
 }
@@ -109,7 +114,9 @@ impl Widgets {
             self.switch.block_signal(&self.switch_handler);
             self.switch.set_active(on);
             self.switch.unblock_signal(&self.switch_handler);
-            self.controls.set_sensitive(on);
+            for group in &self.controls {
+                group.set_sensitive(on);
+            }
         }
         if let Some(v) = params.get("intensity").and_then(value_as_u32) {
             self.intensity.set_value(v as f64);
