@@ -1,54 +1,43 @@
-//! Studio Light page: a master switch plus brightness/contrast/intensity
-//! sliders for the subject, plus a background brightness slider. The lift is
-//! applied to the person only (foreground) and the background brightness is
-//! applied to the complementary area (inverted mask). Turning the switch off
-//! disables the sliders.
+//! Studio Light card: the effect switch in the header, then an "On you"
+//! section (intensity, brightness, contrast) and a "Behind you" section
+//! (background brightness). The lift is applied to the person only
+//! (foreground) and the background brightness to the complementary area
+//! (inverted mask). Turning the switch off disables the sliders.
 
-use adw::glib;
 use adw::prelude::*;
 use shared::dbus::{VariantMap, value_as_bool, value_as_i32, value_as_u32};
 
 use crate::dbus_client::{CmdTx, GuiCommand};
-use crate::widgets::{SliderCtl, add_slider_i32, add_slider_u32, pref_group};
+use crate::widgets::{
+    EffectCard, SliderCtl, plain_row, section_label, slider_row_i32, slider_row_u32,
+};
 
 /// Widgets the state-sync layer keeps in sync with the daemon.
 pub struct Widgets {
-    switch: adw::SwitchRow,
-    switch_handler: glib::SignalHandlerId,
+    pub card: EffectCard,
     intensity: SliderCtl,
     brightness: SliderCtl,
     contrast: SliderCtl,
     bg_brightness: SliderCtl,
-    controls: adw::PreferencesGroup,
+    /// Dimmed while Studio Light is off.
+    rows: Vec<gtk::ListBoxRow>,
 }
 
-pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
-    let page = adw::PreferencesPage::new();
-
-    // master switch
-    let main = pref_group("Studio Light", "Subtly brighten and separate the subject");
-    let switch = adw::SwitchRow::builder()
-        .title("Studio Light")
-        .subtitle("Brighten and add contrast to the subject")
-        .build();
-    let switch_handler = {
+pub fn build(cmd_tx: &CmdTx) -> Widgets {
+    let card = {
         let cmd_tx = cmd_tx.clone();
-        switch.connect_active_notify(move |row| {
+        EffectCard::new("Studio Light", "display-brightness-symbolic", move |on| {
             let _ = cmd_tx.send(GuiCommand::SetEnabled {
                 id: "studio_light".into(),
-                on: row.is_active(),
+                on,
             });
         })
     };
-    main.add(&switch);
-    page.add(&main);
 
-    // adjustments
-    let controls = pref_group("Adjustments", "");
-    let intensity = add_slider_u32(
-        &controls,
+    let on_you = plain_row(&section_label("On you"));
+    let (intensity_row, intensity) = slider_row_u32(
         "Intensity",
-        "Overall effect strength, 0–100",
+        "",
         0.0,
         100.0,
         1.0,
@@ -56,10 +45,9 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
         "intensity",
         cmd_tx,
     );
-    let brightness = add_slider_i32(
-        &controls,
+    let (brightness_row, brightness) = slider_row_i32(
         "Brightness",
-        "-100 (darker) to 100 (brighter)",
+        "",
         -100.0,
         100.0,
         1.0,
@@ -67,10 +55,9 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
         "brightness",
         cmd_tx,
     );
-    let contrast = add_slider_u32(
-        &controls,
+    let (contrast_row, contrast) = slider_row_u32(
         "Contrast",
-        "0–100",
+        "",
         0.0,
         100.0,
         1.0,
@@ -78,10 +65,10 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
         "contrast",
         cmd_tx,
     );
-    let bg_brightness = add_slider_i32(
-        &controls,
-        "Background Brightness",
-        "Darken or brighten the background to make the subject stand out",
+    let behind_you = plain_row(&section_label("Behind you"));
+    let (bg_row, bg_brightness) = slider_row_i32(
+        "Brightness",
+        "Darken or brighten the room so you stand out",
         -100.0,
         100.0,
         1.0,
@@ -89,27 +76,41 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
         "bg_brightness",
         cmd_tx,
     );
-    page.add(&controls);
 
-    let widgets = Widgets {
-        switch,
-        switch_handler,
+    let rows = vec![
+        on_you,
+        intensity_row,
+        brightness_row,
+        contrast_row,
+        behind_you,
+        bg_row,
+    ];
+    for row in &rows {
+        card.add_row(row);
+    }
+
+    Widgets {
+        card,
         intensity,
         brightness,
         contrast,
         bg_brightness,
-        controls,
-    };
-    (page, widgets)
+        rows,
+    }
 }
 
 impl Widgets {
     pub fn apply(&self, params: &VariantMap) {
         if let Some(on) = params.get("enabled").and_then(value_as_bool) {
-            self.switch.block_signal(&self.switch_handler);
-            self.switch.set_active(on);
-            self.switch.unblock_signal(&self.switch_handler);
-            self.controls.set_sensitive(on);
+            self.card.set_on(on);
+            self.card.set_summary(if on {
+                "Lifts you, settles the room"
+            } else {
+                "Off"
+            });
+            for row in &self.rows {
+                row.set_sensitive(on);
+            }
         }
         if let Some(v) = params.get("intensity").and_then(value_as_u32) {
             self.intensity.set_value(v as f64);

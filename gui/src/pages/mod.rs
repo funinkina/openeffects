@@ -1,7 +1,6 @@
-//! One module per view-stack page. Each `build()` returns an
-//! `adw::PreferencesPage` ready to be added to the content stack. Effect pages
-//! also return a widget bundle the state-sync layer keeps in sync with the
-//! daemon.
+//! One module per effect card in the controls column. Each `build()` returns
+//! a widget bundle holding the card (`card.list`, ready to be added to the
+//! column) that the state-sync layer keeps in sync with the daemon.
 
 pub mod background;
 pub mod center_stage;
