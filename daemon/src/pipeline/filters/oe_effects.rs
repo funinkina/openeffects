@@ -46,6 +46,7 @@ glib::wrapper! {
 
 mod imp {
     use std::sync::{LazyLock, Mutex};
+    use std::time::{Duration, Instant};
 
     use gst::glib;
     use gst_base::subclass::BaseTransformMode;
@@ -227,71 +228,93 @@ mod imp {
         rgba: Vec<u8>,
     }
 
-    /// Lazily-loaded models, with a one-shot failure memo so a missing model is
-    /// logged once rather than retried every frame.
+    /// A lazily-loaded model, with a one-shot failure memo so a missing model
+    /// is logged once rather than retried every frame, and a last-use stamp so
+    /// an idle model can be dropped and reloaded on demand.
+    struct Slot<T> {
+        model: Option<T>,
+        failed: bool,
+        used: Instant,
+    }
+
+    impl<T> Default for Slot<T> {
+        fn default() -> Self {
+            Self {
+                model: None,
+                failed: false,
+                used: Instant::now(),
+            }
+        }
+    }
+
+    impl<T> Slot<T> {
+        fn get(&mut self, load: fn() -> anyhow::Result<T>, unavailable: &str) -> Option<&mut T> {
+            if self.model.is_none() && !self.failed {
+                match load() {
+                    Ok(m) => self.model = Some(m),
+                    Err(err) => {
+                        warn!(%err, "{unavailable}");
+                        self.failed = true;
+                    }
+                }
+            }
+            self.used = Instant::now();
+            self.model.as_mut()
+        }
+
+        fn unload_idle(&mut self, max_idle: Duration) -> bool {
+            if self.model.is_some() && self.used.elapsed() >= max_idle {
+                self.model = None;
+                return true;
+            }
+            false
+        }
+    }
+
     #[derive(Default)]
     struct Engine {
-        selfie: Option<SelfieSeg>,
-        selfie_failed: bool,
-        yunet: Option<YuNet>,
-        yunet_failed: bool,
-        palm: Option<PalmDetector>,
-        palm_failed: bool,
-        hand: Option<HandLandmarker>,
-        hand_failed: bool,
+        selfie: Slot<SelfieSeg>,
+        yunet: Slot<YuNet>,
+        palm: Slot<PalmDetector>,
+        hand: Slot<HandLandmarker>,
     }
 
     impl Engine {
         fn selfie(&mut self) -> Option<&mut SelfieSeg> {
-            if self.selfie.is_none() && !self.selfie_failed {
-                match SelfieSeg::load() {
-                    Ok(m) => self.selfie = Some(m),
-                    Err(err) => {
-                        warn!(%err, "selfie segmentation unavailable; portrait blur / bg replace disabled");
-                        self.selfie_failed = true;
-                    }
-                }
-            }
-            self.selfie.as_mut()
+            self.selfie.get(
+                SelfieSeg::load,
+                "selfie segmentation unavailable; portrait blur / bg replace disabled",
+            )
         }
 
         fn yunet(&mut self) -> Option<&mut YuNet> {
-            if self.yunet.is_none() && !self.yunet_failed {
-                match YuNet::load() {
-                    Ok(m) => self.yunet = Some(m),
-                    Err(err) => {
-                        warn!(%err, "yunet unavailable; center stage cannot track a subject");
-                        self.yunet_failed = true;
-                    }
-                }
-            }
-            self.yunet.as_mut()
+            self.yunet.get(
+                YuNet::load,
+                "yunet unavailable; center stage cannot track a subject",
+            )
         }
 
         fn palm(&mut self) -> Option<&mut PalmDetector> {
-            if self.palm.is_none() && !self.palm_failed {
-                match PalmDetector::load() {
-                    Ok(m) => self.palm = Some(m),
-                    Err(err) => {
-                        warn!(%err, "palm detection unavailable; gesture reactions disabled");
-                        self.palm_failed = true;
-                    }
-                }
-            }
-            self.palm.as_mut()
+            self.palm.get(
+                PalmDetector::load,
+                "palm detection unavailable; gesture reactions disabled",
+            )
         }
 
         fn hand(&mut self) -> Option<&mut HandLandmarker> {
-            if self.hand.is_none() && !self.hand_failed {
-                match HandLandmarker::load() {
-                    Ok(m) => self.hand = Some(m),
-                    Err(err) => {
-                        warn!(%err, "hand landmark model unavailable; gesture reactions disabled");
-                        self.hand_failed = true;
-                    }
-                }
-            }
-            self.hand.as_mut()
+            self.hand.get(
+                HandLandmarker::load,
+                "hand landmark model unavailable; gesture reactions disabled",
+            )
+        }
+
+        /// Drop every model unused for `max_idle`; true if any was freed.
+        fn unload_idle(&mut self, max_idle: Duration) -> bool {
+            let selfie = self.selfie.unload_idle(max_idle);
+            let yunet = self.yunet.unload_idle(max_idle);
+            let palm = self.palm.unload_idle(max_idle);
+            let hand = self.hand.unload_idle(max_idle);
+            selfie || yunet || palm || hand
         }
     }
 
@@ -375,6 +398,31 @@ mod imp {
         cooldown_until: u64,
         width: usize,
         height: usize,
+    }
+
+    /// How long a model may sit unused before its session is freed. Passthrough
+    /// stops frames reaching the filter, so this runs on a timer, not per frame.
+    const MODEL_IDLE_UNLOAD: Duration = Duration::from_secs(60);
+    const REAP_INTERVAL: Duration = Duration::from_secs(5);
+
+    fn spawn_model_reaper(weak: glib::WeakRef<super::OeEffects>) {
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(REAP_INTERVAL);
+                let Some(obj) = weak.upgrade() else { return };
+                let freed = obj
+                    .imp()
+                    .state
+                    .lock()
+                    .unwrap()
+                    .engine
+                    .unload_idle(MODEL_IDLE_UNLOAD);
+                if freed {
+                    tracing::info!("unloaded idle models");
+                    unsafe { libc::malloc_trim(0) };
+                }
+            }
+        });
     }
 
     #[derive(Default)]
@@ -509,6 +557,7 @@ mod imp {
             self.parent_constructed();
             let active = self.state.lock().unwrap().settings.active();
             self.obj().set_passthrough(!active);
+            spawn_model_reaper(self.obj().downgrade());
         }
     }
 
@@ -1661,6 +1710,23 @@ mod imp {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn idle_slot_unloads_then_reloads_on_demand() {
+            let mut slot: Slot<u32> = Slot::default();
+            assert_eq!(slot.get(|| Ok(7), "x"), Some(&mut 7));
+            assert!(!slot.unload_idle(Duration::from_secs(60)));
+            assert!(slot.unload_idle(Duration::ZERO));
+            assert!(!slot.unload_idle(Duration::ZERO));
+            assert_eq!(slot.get(|| Ok(8), "x"), Some(&mut 8));
+        }
+
+        #[test]
+        fn failed_slot_is_not_retried() {
+            let mut slot: Slot<u32> = Slot::default();
+            assert!(slot.get(|| anyhow::bail!("missing"), "x").is_none());
+            assert!(slot.get(|| Ok(1), "x").is_none());
+        }
 
         /// Regression for #1: portrait blur must not bleed the subject's color
         /// into the blurred background (the halo). A red subject on a blue
