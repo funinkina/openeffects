@@ -21,6 +21,9 @@ fn main() -> glib::ExitCode {
         .with_writer(std::io::stderr)
         .init();
 
+    // Move pre-fork `openeffects` state first, before GuiConfig is read.
+    shared::migrate::migrate_legacy_paths().log();
+
     if let Err(err) = gstreamer::init() {
         tracing::warn!("GStreamer init failed, live preview disabled: {err}");
     }

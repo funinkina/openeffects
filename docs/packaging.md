@@ -38,6 +38,25 @@ vinoOpenEffects is a hard fork of `openeffects`; every installed name changed:
 The camera picker in apps shows "vinoOpenEffects" instead of "OpenEffects Virtual
 Camera". `openeffectsctl` is gone; there is no alias, use `vinoopeneffects-ctl`.
 
+### Migration
+
+On first start the daemon and the GUI move existing per-user state to the new
+names, logging each move:
+
+- `~/.config/openeffects/` (`state.toml`, `gui.toml`) to `~/.config/vinoopeneffects/`
+- `~/.local/share/openeffects/` (models, backgrounds) to `~/.local/share/vinoopeneffects/`
+- `~/.config/systemd/user/openeffectsd.service.d/` to
+  `~/.config/systemd/user/vinoopeneffects-daemon.service.d/`, with `OE_EP` and
+  `OE_MODELS_DEST` in its `*.conf` files renamed to `VINOOPENEFFECTS_EP` and
+  `VINOOPENEFFECTS_MODELS_DEST`
+- user enablement links `*.wants/openeffectsd.service` are re-created as
+  `*.wants/vinoopeneffects-daemon.service`
+
+An item is skipped, with a warning, if its destination already exists; old and
+new are never merged. A user-installed `~/.config/systemd/user/openeffectsd.service`
+is left alone with a warning. `~/.local/lib/openeffects-ort` (a benchmark
+cache) is not migrated. Run `systemctl --user daemon-reload` after upgrading.
+
 Each new package declares `replaces`/`conflicts` (deb/Arch) and `Obsoletes` (rpm,
 via nfpm `replaces`) on its old counterpart, and `packaging/postinstall.sh` sweeps
 whatever the old packages (or a source install) left behind: the old user unit,

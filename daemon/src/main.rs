@@ -44,6 +44,9 @@ async fn run() -> anyhow::Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
+    // Move pre-fork `openeffects` state first, before config and models are read.
+    shared::migrate::migrate_legacy_paths().log();
+
     let start_pipeline = std::env::args().any(|arg| arg == "--start");
     let mut app = AppState::load_or_default().unwrap_or_else(|err| {
         error!(%err, "failed to load config, using defaults");
