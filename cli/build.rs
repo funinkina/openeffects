@@ -29,15 +29,17 @@ fn generate_proxies() -> Result<(), Box<dyn Error>> {
         input_srcs.push(file);
     }
 
-    let generated = zbus_xmlgen::write_interfaces(
-        &interfaces,
-        &[],
-        Some(service),
-        Some(path),
-        &input_srcs.join(", "),
-        env!("CARGO_PKG_NAME"),
-        env!("CARGO_PKG_VERSION"),
-    )?;
+    let generated = zbus_xmlgen::CodeGenerator::new()
+        .with_service(Some(&service))
+        .with_path(Some(&path))
+        .with_format(true)
+        .file_code(
+            &interfaces,
+            &[],
+            &input_srcs.join(", "),
+            env!("CARGO_PKG_NAME"),
+            env!("CARGO_PKG_VERSION"),
+        )?;
 
     fs::write(out_file, generated)?;
     Ok(())
