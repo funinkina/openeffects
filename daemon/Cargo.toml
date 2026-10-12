@@ -9,6 +9,11 @@ authors.workspace = true
 name = "openeffectsd"
 path = "src/main.rs"
 
+[features]
+# Opt-in OpenVINO execution provider (NPU/GPU). Switches ONNX Runtime from the
+# bundled CPU download to loading the library named by ORT_DYLIB_PATH.
+npu = ["ort/load-dynamic", "ort/openvino"]
+
 [dependencies]
 shared = { path = "../shared" }
 
