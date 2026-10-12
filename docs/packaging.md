@@ -211,14 +211,15 @@ systemctl --user enable --now vinoopeneffects-daemon.service   # optional; D-Bus
 
 ## Version bump
 
-Version lives in two hard-coded spots (`Cargo.toml`, `meson.build`); all crates
-inherit via `version.workspace = true`. One script keeps them in sync:
+Version lives in one place, the workspace version in `Cargo.toml`; all crates
+inherit via `version.workspace = true`, and nfpm and `build-packages.sh` read it from
+there. One script bumps it:
 
 ```bash
 ./scripts/bump-version.sh 0.2.0
 ```
 
-It rewrites both files, runs `cargo update --workspace` to sync `Cargo.lock`,
+It rewrites `Cargo.toml`, runs `cargo update --workspace` to sync `Cargo.lock`,
 commits `chore: release v0.2.0`, and tags `v0.2.0`. It does **not** push.
 
 ```bash
@@ -232,17 +233,24 @@ build deps + Rust + nfpm, runs `scripts/build-packages.sh`, and attaches
 `dist/*.{deb,rpm,pkg.tar.zst}` to the GitHub Release via `softprops/action-gh-release`.
 nfpm builds the Arch `.zst` fine on Ubuntu — no Arch host required.
 
-## Source build (no packaging)
+## Source install (no packaging)
 
-For dev / non-packaged installs use meson; models come from `fetch-models.sh`:
+`scripts/install.sh` builds from the checkout and installs for the current user:
 
 ```bash
-meson setup build && meson install -C build   # binaries + dbus/systemd/desktop/icon
-./scripts/fetch-models.sh                      # models → ~/.local/share/vinoopeneffects/models
+scripts/install.sh                          # ~/.local: binaries, D-Bus, systemd unit, desktop entry, icons, models
+scripts/install.sh --no-gui                 # daemon and CLI only (no GTK needed)
+sudo scripts/install.sh --prefix /usr/local # system-wide
+scripts/uninstall.sh [--prefix DIR] [--purge]
 ```
 
-`meson install` does **not** ship models (they aren't in the source tree) — run
-`fetch-models.sh` for the per-user model dir.
+It renders `@bindir@` into the D-Bus activation file and the unit, fetches the
+sha256-verified models (`fetch-models.sh`), and asks the bus to reload so D-Bus
+activation works immediately. `--purge` also removes models and per-user config.
+The `npu` build is not handled here; see #21.
+
+The GUI needs libadwaita 1.7 or newer (`AdwToggleGroup`); on older systems use
+`--no-gui`.
 
 ## Verifying a package without installing
 

@@ -91,6 +91,36 @@ jobs:
       - *cache
       - run: cargo +1.92 check --workspace
 
+  # scripts/install.sh is the documented source install; this keeps it honest.
+  install:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install stable --profile minimal
+      - *apt
+      - *cache
+      - run: shellcheck scripts/install.sh scripts/uninstall.sh
+      - name: Install into a scratch prefix, then remove it
+        run: |
+          prefix="$RUNNER_TEMP/prefix"
+          scripts/install.sh --prefix "$prefix" --no-models
+          id=io.github.karanshukla.vinoopeneffects
+          for f in bin/vinoopeneffects-daemon bin/vinoopeneffects-ctl bin/vinoopeneffects \
+              share/dbus-1/services/$id.Daemon.service \
+              share/dbus-1/interfaces/$id.Daemon1.xml \
+              share/systemd/user/vinoopeneffects-daemon.service \
+              share/applications/$id.desktop \
+              share/icons/hicolor/scalable/apps/$id.svg; do
+            test -e "$prefix/$f" || { echo "missing: $f"; exit 1; }
+          done
+          grep -qx "Exec=$prefix/bin/vinoopeneffects-daemon" "$prefix/share/dbus-1/services/$id.Daemon.service"
+          scripts/uninstall.sh --prefix "$prefix"
+          leftover="$(find "$prefix" -type f)"
+          test -z "$leftover" || { echo "left behind:"; echo "$leftover"; exit 1; }
+
   deny:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
