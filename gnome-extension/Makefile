@@ -1,6 +1,6 @@
-# OpenEffects GNOME Shell extension — install / pack / lint helpers.
+# vinoOpenEffects GNOME Shell extension — install / pack / lint helpers.
 
-NAME = openeffects@funinkina.co.in
+NAME = vinoopeneffects@karanshukla.github.io
 SRC  = $(NAME)
 DEST = $(HOME)/.local/share/gnome-shell/extensions/$(NAME)
 

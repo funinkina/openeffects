@@ -1,12 +1,12 @@
 [package]
-name    = "openeffectsd"
+name    = "vinoopeneffects-daemon"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
 [[bin]]
-name = "openeffectsd"
+name = "vinoopeneffects-daemon"
 path = "src/main.rs"
 
 [features]
@@ -15,7 +15,7 @@ path = "src/main.rs"
 npu = ["ort/load-dynamic", "ort/openvino"]
 
 [dependencies]
-shared = { path = "../shared" }
+shared = { package = "vinoopeneffects-shared", path = "../shared" }
 
 anyhow.workspace    = true
 thiserror.workspace = true

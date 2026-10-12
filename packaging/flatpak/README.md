@@ -1,9 +1,9 @@
 # Flatpak packaging
 
-A single sandboxed app (`in.co.funinkina.OpenEffects`) bundling the **GUI + daemon**
+A single sandboxed app (`io.github.karanshukla.vinoopeneffects`) bundling the **GUI + daemon**
 as one tightly-coupled unit. This is the Flathub-targeted build.
 
-The **CLI (`openeffectsctl`) is intentionally not shipped** in the Flatpak — it's a
+The **CLI (`vinoopeneffects-ctl`) is intentionally not shipped** in the Flatpak — it's a
 scripting/WM-styling tool that belongs in the native package. The sandbox ships
 only the GUI and the daemon it controls.
 
@@ -11,9 +11,9 @@ only the GUI and the daemon it controls.
 
 | File                                       | Purpose                                                          |
 | ------------------------------------------ | ---------------------------------------------------------------- |
-| `in.co.funinkina.OpenEffects.yaml`         | flatpak-builder manifest                                         |
-| `in.co.funinkina.OpenEffects.metainfo.xml` | AppStream metadata (Flathub-required)                            |
-| `openeffects-launcher.sh`                  | starts the daemon, then runs the GUI (no systemd in the sandbox) |
+| `io.github.karanshukla.vinoopeneffects.yaml`         | flatpak-builder manifest                                         |
+| `io.github.karanshukla.vinoopeneffects.metainfo.xml` | AppStream metadata (Flathub-required)                            |
+| `vinoopeneffects-launcher.sh`                  | starts the daemon, then runs the GUI (no systemd in the sandbox) |
 | `Cargo.lock`                               | lockfile resolved for the `load-dynamic` ort build               |
 | `cargo-sources.json`                       | vendored crate sources for the offline build                     |
 | `generate-cargo-sources.sh`                | regenerates `Cargo.lock` + `cargo-sources.json`                  |
@@ -26,10 +26,10 @@ flatpak install -y flathub org.gnome.Platform//50 org.gnome.Sdk//50 \
     org.freedesktop.Sdk.Extension.llvm20//25.08    # 25.08 = GNOME 50's freedesktop base
 
 cd packaging/flatpak
-flatpak-builder --user --install --force-clean build-dir in.co.funinkina.OpenEffects.yaml
+flatpak-builder --user --install --force-clean build-dir io.github.karanshukla.vinoopeneffects.yaml
 
-flatpak run in.co.funinkina.OpenEffects                                # GUI (+ daemon)
-flatpak run --command=openeffectsd in.co.funinkina.OpenEffects --start # headless daemon only
+flatpak run io.github.karanshukla.vinoopeneffects                                # GUI (+ daemon)
+flatpak run --command=vinoopeneffects-daemon io.github.karanshukla.vinoopeneffects --start # headless daemon only
 ```
 
 The `type: dir` source builds from the working tree, so local rebuilds pick up
@@ -56,11 +56,11 @@ your changes with no commit needed.
   shows up in GNOME Shell's **Background Apps** menu and keeps applying effects.
   The shell's "Quit" there sends `SIGTERM`, which the daemon handles for a clean
   shutdown (tearing down the sandbox).
-- **No systemd.** The daemon is started by `openeffects-launcher.sh` (it does
+- **No systemd.** The daemon is started by `vinoopeneffects-launcher.sh` (it does
   **not** kill it on GUI exit). The GUI's systemd autostart toggle is replaced by
   an explanatory row in the sandbox.
 - **Models.** All four ONNX models (~8 MB) are bundled into
-  `/app/share/openeffects/models`, which `registry::search_dirs()` already
+  `/app/share/vinoopeneffects/models`, which `registry::search_dirs()` already
   searches under `FLATPAK_ID`. No runtime network, consistent with the app's
   "no network calls" privacy claim.
 
@@ -100,7 +100,7 @@ It patches a throwaway copy to `load-dynamic`, re-resolves the lockfile, writes
 2. **Pin the source.** Replace the `type: dir` source with a tagged release:
    ```yaml
    - type: git
-     url: https://github.com/funinkina/openeffects.git
+     url: https://github.com/karanshukla/vinoOpenEffects.git
      tag: v0.1.2
      commit: <full 40-char sha>
    ```
@@ -108,18 +108,18 @@ It patches a throwaway copy to `load-dynamic`, re-resolves the lockfile, writes
    the install command above) to the GNOME runtime Flathub currently ships.
 4. **Validate.**
    ```bash
-   appstreamcli validate in.co.funinkina.OpenEffects.metainfo.xml
-   desktop-file-validate ../../data/applications/in.co.funinkina.OpenEffects.desktop
-   flatpak run org.flatpak.Builder --show-manifest in.co.funinkina.OpenEffects.yaml
+   appstreamcli validate io.github.karanshukla.vinoopeneffects.metainfo.xml
+   desktop-file-validate ../../data/applications/io.github.karanshukla.vinoopeneffects.desktop
+   flatpak run org.flatpak.Builder --show-manifest io.github.karanshukla.vinoopeneffects.yaml
    ```
    Flathub CI also runs `flatpak-builder-lint manifest` and `...lint repo`.
-5. **Submit.** Open a PR adding `in.co.funinkina.OpenEffects.yaml` (+ this dir's
+5. **Submit.** Open a PR adding `io.github.karanshukla.vinoopeneffects.yaml` (+ this dir's
    sources) to the [`flathub/flathub`](https://github.com/flathub/flathub)
    `new-pr` branch. See <https://docs.flathub.org/docs/for-app-authors/submission>.
 
 ## Why `--socket=pipewire` (and not just the Camera portal)
 
-OpenEffects **creates** a virtual PipeWire camera node — that's the whole point.
+vinoOpenEffects **creates** a virtual PipeWire camera node — that's the whole point.
 The Camera portal only grants restricted *read* access to existing camera nodes;
 it cannot create nodes. So the full PipeWire socket is required for the output
 side regardless. Capture still goes through the Camera portal (above) for the

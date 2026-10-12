@@ -1,26 +1,73 @@
 # Packaging & Release Guide
 
-How OpenEffects is built into native packages (`.deb`, `.rpm`, Arch `.pkg.tar.zst`),
+How vinoOpenEffects is built into native packages (`.deb`, `.rpm`, Arch `.pkg.tar.zst`),
 how ML models and background images become available after install, and how to cut
 a release.
 
 ## Package layout
 
-OpenEffects ships as **three** packages so users install only what they need:
+vinoOpenEffects ships as **three** packages so users install only what they need:
 
 | Package          | Contents                                                            | Depends on                           |
 | ---------------- | ------------------------------------------------------------------- | ------------------------------------ |
-| `openeffectsd`   | daemon binary, D-Bus service + systemd user unit, bundled ML models | pipewire/gstreamer stack, dbus       |
-| `openeffectsctl` | CLI binary                                                          | **`openeffectsd`**, dbus             |
-| `openeffects`    | GTK4/libadwaita GUI binary, `.desktop` + icon                       | **`openeffectsd`**, gtk4, libadwaita |
+| `vinoopeneffects-daemon`   | daemon binary, D-Bus service + systemd user unit, bundled ML models | pipewire/gstreamer stack, dbus       |
+| `vinoopeneffects-ctl` | CLI binary                                                          | **`vinoopeneffects-daemon`**, dbus             |
+| `vinoopeneffects`    | GTK4/libadwaita GUI binary, `.desktop` + icon                       | **`vinoopeneffects-daemon`**, gtk4, libadwaita |
 
 The daemon is the only process that touches the pipeline, so both clients declare a
-hard dependency on it. The dependency is unversioned (`Depends: openeffectsd`) and is
+hard dependency on it. The dependency is unversioned (`Depends: vinoopeneffects-daemon`) and is
 resolved automatically whether installing from local package files (pass them on the
 same command line) or from a configured repository — see [Install](#install-the-built-packages).
 
 Each package is built from its own nfpm config: `packaging/nfpm-daemon.yaml`,
 `nfpm-cli.yaml`, `nfpm-gui.yaml`.
+
+## Upgrading from openeffects
+
+vinoOpenEffects is a hard fork of `openeffects`; every installed name changed:
+
+| Old | New |
+| --- | --- |
+| packages `openeffectsd` / `openeffectsctl` / `openeffects` | `vinoopeneffects-daemon` / `vinoopeneffects-ctl` / `vinoopeneffects` |
+| `openeffectsd.service` | `vinoopeneffects-daemon.service` |
+| `in.co.funinkina.Daemon.service` (D-Bus) | `io.github.karanshukla.vinoopeneffects.Daemon.service` |
+| `in.co.funinkina.OpenEffects.desktop` + icon | `io.github.karanshukla.vinoopeneffects.desktop` + icon |
+| `/usr/share/openeffects/models` | `/usr/share/vinoopeneffects/models` |
+| `OE_EP`, `OE_MODELS_DEST` | `VINOOPENEFFECTS_EP`, `VINOOPENEFFECTS_MODELS_DEST` |
+
+The camera picker in apps shows "vinoOpenEffects Virtual Camera" instead of "OpenEffects Virtual
+Camera". `openeffectsctl` is gone; there is no alias, use `vinoopeneffects-ctl`.
+
+### Migration
+
+On first start the daemon and the GUI move existing per-user state to the new
+names, logging each move:
+
+- `~/.config/openeffects/` (`state.toml`, `gui.toml`) to `~/.config/vinoopeneffects/`
+- `~/.local/share/openeffects/` (models, backgrounds) to `~/.local/share/vinoopeneffects/`
+- `~/.config/systemd/user/openeffectsd.service.d/` to
+  `~/.config/systemd/user/vinoopeneffects-daemon.service.d/`, with `OE_EP` and
+  `OE_MODELS_DEST` in its `*.conf` files renamed to `VINOOPENEFFECTS_EP` and
+  `VINOOPENEFFECTS_MODELS_DEST`
+- user enablement links `*.wants/openeffectsd.service` are re-created as
+  `*.wants/vinoopeneffects-daemon.service`
+
+An item is skipped, with a warning, if its destination already exists; old and
+new are never merged. A user-installed `~/.config/systemd/user/openeffectsd.service`
+is left alone with a warning. `~/.local/lib/openeffects-ort` (a benchmark
+cache) is not migrated. Run `systemctl --user daemon-reload` after upgrading.
+
+Each new package declares `replaces`/`conflicts` (deb/Arch) and `Obsoletes` (rpm,
+via nfpm `replaces`) on its old counterpart, and `packaging/postinstall.sh` sweeps
+whatever the old packages (or a source install) left behind: the old user unit,
+D-Bus service file and interface XMLs, desktop entry, icon, binaries and bundled
+models. It is POSIX sh and idempotent (`rm -f`). Arch packages rely on
+`replaces`/`conflicts` only; they have no install script.
+
+Per-user config (`~/.config/openeffects`), data (`~/.local/share/openeffects`) and
+the `npu.conf` systemd drop-in (with `OE_EP` rewritten to `VINOOPENEFFECTS_EP`) are
+migrated automatically on first start of the new daemon/GUI; nothing is
+overwritten if the new location already exists.
 
 ## How runtime data resolves after install
 
@@ -29,19 +76,19 @@ You do **not** package these by hand — they resolve automatically:
 - **Background images.** Compiled into the GUI binary via `include_bytes!`
   (`gui/src/constants.rs`). On first GUI launch `ensure_preset_images()`
   (`gui/src/pages/background.rs`) extracts them to
-  `~/.local/share/openeffects/backgrounds/`. The daemon receives the absolute path
+  `~/.local/share/vinoopeneffects/backgrounds/`. The daemon receives the absolute path
   over D-Bus (`bg_replace.background`). Nothing to install.
 - **ML models.** Bundled into the package at build time. `scripts/build-packages.sh`
   downloads + sha256-verifies the 4 ONNX models and installs them to
-  `/usr/share/openeffects/models/<id>/`. The daemon's `search_dirs()`
+  `/usr/share/vinoopeneffects/models/<id>/`. The daemon's `search_dirs()`
   (`daemon/src/inference/registry.rs`) already searches:
-  1. `~/.local/share/openeffects/models` (per-user)
-  2. `/usr/share/openeffects/models` (system — where packages put them)
-  3. `/app/share/openeffects/models` (Flatpak)
+  1. `~/.local/share/vinoopeneffects/models` (per-user)
+  2. `/usr/share/vinoopeneffects/models` (system — where packages put them)
+  3. `/app/share/vinoopeneffects/models` (Flatpak)
 
   So an installed package reports `Capabilities.models_ready = true` immediately,
   offline, with no user step. Model licenses are Apache-2.0 / MIT (redistributable).
-- **Config.** Per-user at `~/.config/openeffects/state.toml` — never packaged.
+- **Config.** Per-user at `~/.config/vinoopeneffects/state.toml` — never packaged.
 
 ## Build dependencies
 
@@ -82,60 +129,60 @@ export PATH="$HOME/go/bin:$PATH"
 What it does:
 1. Read `VERSION` from `Cargo.toml` (`[workspace.package].version`), `ARCH=amd64`.
 2. `cargo build --release --workspace`.
-3. `ldd` guard — fail if `openeffectsd` dynamically links onnxruntime.
+3. `ldd` guard — fail if `vinoopeneffects-daemon` dynamically links onnxruntime.
 4. Render the `@bindir@` service templates (`data/{dbus-services,systemd}/*.in`)
    into `dist/` with `@bindir@ → /usr/bin`.
-5. Stage models: `OE_MODELS_DEST=dist/models ./scripts/fetch-models.sh`
+5. Stage models: `VINOOPENEFFECTS_MODELS_DEST=dist/models ./scripts/fetch-models.sh`
    (downloads + sha256-verifies into the package staging tree).
 6. `nfpm pkg` for each of the 3 configs × each format → `dist/`.
 
 Output (3 packages × N formats):
 
 ```
-dist/openeffectsd_<ver>_amd64.deb     openeffectsctl_<ver>_amd64.deb     openeffects_<ver>_amd64.deb
-dist/openeffectsd-<ver>-1.x86_64.rpm  openeffectsctl-<ver>-1.x86_64.rpm  openeffects-<ver>-1.x86_64.rpm
-dist/openeffectsd-<ver>-1-x86_64.pkg.tar.zst  ...ctl...  ...openeffects...
+dist/vinoopeneffects-daemon_<ver>_amd64.deb     vinoopeneffects-ctl_<ver>_amd64.deb     vinoopeneffects_<ver>_amd64.deb
+dist/vinoopeneffects-daemon-<ver>-1.x86_64.rpm  vinoopeneffects-ctl-<ver>-1.x86_64.rpm  vinoopeneffects-<ver>-1.x86_64.rpm
+dist/vinoopeneffects-daemon-<ver>-1-x86_64.pkg.tar.zst  ...ctl...  ...vinoopeneffects...
 ```
 
 `dist/` is gitignored.
 
 ### What lands in each package
 
-**`openeffectsd`** (daemon + everything the pipeline needs):
+**`vinoopeneffects-daemon`** (daemon + everything the pipeline needs):
 
 | Path                                                        | Source                                 |
 | ----------------------------------------------------------- | -------------------------------------- |
-| `/usr/bin/openeffectsd`                                     | `target/release/openeffectsd`          |
-| `/usr/share/dbus-1/interfaces/in.co.funinkina.*.xml`        | `data/dbus/*.xml`                      |
-| `/usr/share/dbus-1/services/in.co.funinkina.Daemon.service` | rendered template                      |
-| `/usr/lib/systemd/user/openeffectsd.service`                | rendered template                      |
-| `/usr/share/openeffects/models/<id>/`                       | `dist/models/` (downloaded + verified) |
+| `/usr/bin/vinoopeneffects-daemon`                                     | `target/release/vinoopeneffects-daemon`          |
+| `/usr/share/dbus-1/interfaces/io.github.karanshukla.vinoopeneffects.*.xml`        | `data/dbus/*.xml`                      |
+| `/usr/share/dbus-1/services/io.github.karanshukla.vinoopeneffects.Daemon.service` | rendered template                      |
+| `/usr/lib/systemd/user/vinoopeneffects-daemon.service`                | rendered template                      |
+| `/usr/share/vinoopeneffects/models/<id>/`                       | `dist/models/` (downloaded + verified) |
 
-**`openeffectsctl`** (CLI): `/usr/bin/openeffectsctl`.
+**`vinoopeneffects-ctl`** (CLI): `/usr/bin/vinoopeneffects-ctl`.
 
-**`openeffects`** (GUI):
+**`vinoopeneffects`** (GUI):
 
 | Path                                                                     | Source                                                  |
 | ------------------------------------------------------------------------ | ------------------------------------------------------- |
-| `/usr/bin/openeffects`                                                   | `target/release/openeffects`                            |
-| `/usr/share/icons/hicolor/scalable/apps/in.co.funinkina.OpenEffects.svg` | `data/icons/in.co.funinkina.OpenEffects.svg`            |
-| `/usr/share/applications/in.co.funinkina.OpenEffects.desktop`            | `data/applications/in.co.funinkina.OpenEffects.desktop` |
+| `/usr/bin/vinoopeneffects`                                                   | `target/release/vinoopeneffects`                            |
+| `/usr/share/icons/hicolor/scalable/apps/io.github.karanshukla.vinoopeneffects.svg` | `data/icons/io.github.karanshukla.vinoopeneffects.svg`            |
+| `/usr/share/applications/io.github.karanshukla.vinoopeneffects.desktop`            | `data/applications/io.github.karanshukla.vinoopeneffects.desktop` |
 
 The GUI package's deb/rpm run `packaging/postinstall.sh` / `postremove.sh` (icon cache +
 `update-desktop-database`). Arch handles those via pacman hooks — no scriptlet.
 
 ## Install the built packages
 
-The CLI and GUI packages declare `Depends: openeffectsd`. There are two ways the
+The CLI and GUI packages declare `Depends: vinoopeneffects-daemon`. There are two ways the
 dependency is satisfied:
 
 **From a repository** — the daemon is in a configured repo, so installing only a
 client pulls it in automatically:
 
 ```bash
-sudo apt install openeffects          # Debian/Ubuntu — pulls openeffectsd
-sudo dnf install openeffects          # Fedora/RHEL
-sudo pacman -S openeffects            # Arch
+sudo apt install vinoopeneffects          # Debian/Ubuntu — pulls vinoopeneffects-daemon
+sudo dnf install vinoopeneffects          # Fedora/RHEL
+sudo pacman -S vinoopeneffects            # Arch
 ```
 
 **From local package files** — pass the daemon file on the same command line so the
@@ -143,24 +190,24 @@ resolver sees it. The package managers' file-install mode resolves inter-file de
 
 ```bash
 # Debian/Ubuntu (use apt, not `dpkg -i` — dpkg does NOT resolve deps)
-sudo apt install ./dist/openeffectsd_<ver>_amd64.deb ./dist/openeffects_<ver>_amd64.deb
+sudo apt install ./dist/vinoopeneffects-daemon_<ver>_amd64.deb ./dist/vinoopeneffects_<ver>_amd64.deb
 
 # Fedora/RHEL
-sudo dnf install ./dist/openeffectsd-<ver>-1.x86_64.rpm ./dist/openeffects-<ver>-1.x86_64.rpm
+sudo dnf install ./dist/vinoopeneffects-daemon-<ver>-1.x86_64.rpm ./dist/vinoopeneffects-<ver>-1.x86_64.rpm
 
 # Arch (pacman -U resolves deps among the files given, or from the sync db)
-sudo pacman -U dist/openeffectsd-<ver>-1-x86_64.pkg.tar.zst dist/openeffects-<ver>-1-x86_64.pkg.tar.zst
+sudo pacman -U dist/vinoopeneffects-daemon-<ver>-1-x86_64.pkg.tar.zst dist/vinoopeneffects-<ver>-1-x86_64.pkg.tar.zst
 ```
 
-Install just `openeffectsd` for a headless/CLI-only setup, or add `openeffectsctl`
-the same way. Installing a client without the daemon (e.g. `dpkg -i openeffects.deb`
+Install just `vinoopeneffects-daemon` for a headless/CLI-only setup, or add `vinoopeneffects-ctl`
+the same way. Installing a client without the daemon (e.g. `dpkg -i vinoopeneffects.deb`
 alone) fails the dependency check — that's the resolver doing its job.
 
 Then enable the daemon (D-Bus-activated; the user unit auto-starts it on demand):
 
 ```bash
 systemctl --user daemon-reload
-systemctl --user enable --now openeffectsd.service   # optional; D-Bus activation works without it
+systemctl --user enable --now vinoopeneffects-daemon.service   # optional; D-Bus activation works without it
 ```
 
 ## Version bump
@@ -192,7 +239,7 @@ For dev / non-packaged installs use meson; models come from `fetch-models.sh`:
 
 ```bash
 meson setup build && meson install -C build   # binaries + dbus/systemd/desktop/icon
-./scripts/fetch-models.sh                      # models → ~/.local/share/openeffects/models
+./scripts/fetch-models.sh                      # models → ~/.local/share/vinoopeneffects/models
 ```
 
 `meson install` does **not** ship models (they aren't in the source tree) — run
@@ -201,13 +248,13 @@ meson setup build && meson install -C build   # binaries + dbus/systemd/desktop/
 ## Verifying a package without installing
 
 ```bash
-# Arch / zst — inspect one package (e.g. the GUI, to confirm it depends on openeffectsd)
-tar tf dist/openeffects-*.pkg.tar.zst | grep usr/
-tar xOf dist/openeffects-*.pkg.tar.zst .PKGINFO | grep depend
+# Arch / zst — inspect one package (e.g. the GUI, to confirm it depends on vinoopeneffects-daemon)
+tar tf dist/vinoopeneffects-*.pkg.tar.zst | grep usr/
+tar xOf dist/vinoopeneffects-*.pkg.tar.zst .PKGINFO | grep depend
 
 # deb
-ar p dist/openeffects_*.deb data.tar.gz | bsdtar tf -                 # file list
-ar p dist/openeffects_*.deb control.tar.gz | bsdtar xOf - ./control   # deps + metadata
+ar p dist/vinoopeneffects_*.deb data.tar.gz | bsdtar tf -                 # file list
+ar p dist/vinoopeneffects_*.deb control.tar.gz | bsdtar xOf - ./control   # deps + metadata
 ```
 
 ## Adding architectures

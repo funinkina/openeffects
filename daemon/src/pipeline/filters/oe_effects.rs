@@ -518,7 +518,7 @@ mod imp {
         fn metadata() -> Option<&'static gst::subclass::ElementMetadata> {
             static META: LazyLock<gst::subclass::ElementMetadata> = LazyLock::new(|| {
                 gst::subclass::ElementMetadata::new(
-                    "OpenEffects ML Effects",
+                    "vinoOpenEffects ML Effects",
                     "Filter/Effect/Video",
                     "Portrait blur, background replace, and center stage via ONNX inference",
                     "Aryan <hello@funinkina.co.in>",

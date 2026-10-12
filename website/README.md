@@ -1,6 +1,6 @@
-# OpenEffects — landing page
+# vinoOpenEffects — landing page
 
-Marketing site for [OpenEffects](https://github.com/funinkina/openeffects). Static, single page.
+Marketing site for [vinoOpenEffects](https://github.com/karanshukla/vinoOpenEffects). Static, single page.
 
 **Stack:** [Astro](https://astro.build) 7 + [Tailwind CSS](https://tailwindcss.com) 4. Google Fonts (Space Grotesk / Inter / IBM Plex Mono). No client framework — the only browser JS is copy-to-clipboard and the install tabs.
 
@@ -41,7 +41,7 @@ Output is fully static — host `dist/` anywhere (GitHub Pages, Netlify, Cloudfl
 Before deploying, set your real domain in [`astro.config.mjs`](astro.config.mjs) (`site:`) so canonical + Open Graph URLs are correct.
 
 - **Custom domain or user Pages** (`user.github.io`): paths are root-relative, works as-is.
-- **Project Pages** (`user.github.io/openeffects`): also set `base: '/openeffects'` in `astro.config.mjs`.
+- **Project Pages** (`user.github.io/vinoOpenEffects`): also set `base: '/vinoOpenEffects'` in `astro.config.mjs`.
 
 ## Regenerating the OG image / icons
 

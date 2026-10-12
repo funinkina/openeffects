@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use zvariant::{OwnedValue, Str};
 
-pub const SERVICE_NAME: &str = "in.co.funinkina.Daemon";
-pub const OBJECT_PATH: &str = "/in/co/funinkina/Daemon";
+pub const SERVICE_NAME: &str = "io.github.karanshukla.vinoopeneffects.Daemon";
+pub const OBJECT_PATH: &str = "/io/github/karanshukla/vinoopeneffects/Daemon";
 
-pub const DAEMON_INTERFACE: &str = "in.co.funinkina.Daemon1";
-pub const EFFECTS_INTERFACE: &str = "in.co.funinkina.Effects1";
-pub const DEVICES_INTERFACE: &str = "in.co.funinkina.Devices1";
+pub const DAEMON_INTERFACE: &str = "io.github.karanshukla.vinoopeneffects.Daemon1";
+pub const EFFECTS_INTERFACE: &str = "io.github.karanshukla.vinoopeneffects.Effects1";
+pub const DEVICES_INTERFACE: &str = "io.github.karanshukla.vinoopeneffects.Devices1";
 
 pub const EFFECT_IDS: [&str; 5] = [
     "center_stage",

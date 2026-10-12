@@ -1,41 +1,41 @@
-# `openeffectsctl` — CLI reference
+# `vinoopeneffects-ctl` — CLI reference
 
-`openeffectsctl` is the command-line control surface for the OpenEffects daemon.
-It is a stateless D-Bus client: every command talks to a running `openeffectsd`
+`vinoopeneffects-ctl` is the command-line control surface for the vinoOpenEffects daemon.
+It is a stateless D-Bus client: every command talks to a running `vinoopeneffects-daemon`
 over the session bus, so the daemon must be up first.
 
 ```bash
-systemctl --user start openeffectsd   # or: openeffectsd --start
+systemctl --user start vinoopeneffects-daemon   # or: vinoopeneffects-daemon --start
 ```
 
 Every command prints help with `--help`; effect subcommands print their current
 state when run with no flags.
 
 ```bash
-openeffectsctl --help
-openeffectsctl studio-light --help
+vinoopeneffects-ctl --help
+vinoopeneffects-ctl studio-light --help
 ```
 
 ## Quick start
 
 ```bash
-openeffectsctl start                       # arm the virtual camera
-openeffectsctl portrait-blur --on --strength 70
-openeffectsctl background ~/Pictures/office.jpg
-openeffectsctl studio-light --on --intensity 60 --brightness 10
-openeffectsctl status
+vinoopeneffects-ctl start                       # arm the virtual camera
+vinoopeneffects-ctl portrait-blur --on --strength 70
+vinoopeneffects-ctl background ~/Pictures/office.jpg
+vinoopeneffects-ctl studio-light --on --intensity 60 --brightness 10
+vinoopeneffects-ctl status
 ```
 
 ## Daemon lifecycle
 
 | Command                         | Description                                                                                         |
 | ------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `openeffectsctl start`          | Arm the virtual camera. The real camera opens on demand when a consumer (browser, OBS, …) connects. |
-| `openeffectsctl stop`           | Tear down the pipeline and release the camera.                                                      |
-| `openeffectsctl status`         | Print status plus capabilities (execution provider, model readiness, output sink).            |
-| `openeffectsctl status --short` | One-word status, e.g. for Waybar.                                                                   |
-| `openeffectsctl status --json`  | Machine-readable status.                                                                            |
-| `openeffectsctl watch`          | Stream `EffectChanged` signals until interrupted (Ctrl-C).                                          |
+| `vinoopeneffects-ctl start`          | Arm the virtual camera. The real camera opens on demand when a consumer (browser, OBS, …) connects. |
+| `vinoopeneffects-ctl stop`           | Tear down the pipeline and release the camera.                                                      |
+| `vinoopeneffects-ctl status`         | Print status plus capabilities (execution provider, model readiness, output sink).            |
+| `vinoopeneffects-ctl status --short` | One-word status, e.g. for Waybar.                                                                   |
+| `vinoopeneffects-ctl status --json`  | Machine-readable status.                                                                            |
+| `vinoopeneffects-ctl watch`          | Stream `EffectChanged` signals until interrupted (Ctrl-C).                                          |
 
 Any command that talks to the daemon starts it first if it isn't already running
 (via the systemd user unit, falling back to D-Bus activation).
@@ -43,13 +43,13 @@ Any command that talks to the daemon starts it first if it isn't already running
 ## Autostart
 
 Control whether the daemon starts automatically with your desktop session
-(`systemctl --user enable/disable openeffectsd.service`).
+(`systemctl --user enable/disable vinoopeneffects-daemon.service`).
 
 | Command                        | Description                                                       |
 | ------------------------------ | ---------------------------------------------------------------- |
-| `openeffectsctl autostart enable`  | Start the daemon automatically when the graphical session begins. |
-| `openeffectsctl autostart disable` | Stop starting it automatically.                                   |
-| `openeffectsctl autostart status`  | Show whether autostart is enabled and whether the daemon is running. |
+| `vinoopeneffects-ctl autostart enable`  | Start the daemon automatically when the graphical session begins. |
+| `vinoopeneffects-ctl autostart disable` | Stop starting it automatically.                                   |
+| `vinoopeneffects-ctl autostart status`  | Show whether autostart is enabled and whether the daemon is running. |
 
 ## Effects overview
 
@@ -64,7 +64,7 @@ Control whether the daemon starts automatically with your desktop session
 List every effect with its on/off state:
 
 ```bash
-openeffectsctl effects
+vinoopeneffects-ctl effects
 # [on ] center_stage
 # [off] portrait_blur
 # ...
@@ -75,9 +75,9 @@ openeffectsctl effects
 Works for any effect (effect names are kebab-case):
 
 ```bash
-openeffectsctl enable portrait-blur
-openeffectsctl disable studio-light
-openeffectsctl toggle reactions
+vinoopeneffects-ctl enable portrait-blur
+vinoopeneffects-ctl disable studio-light
+vinoopeneffects-ctl toggle reactions
 ```
 
 ### Master passthrough
@@ -87,9 +87,9 @@ camera passes the real camera through untouched. Per-effect settings are
 preserved, so turning it back off restores exactly what was on before.
 
 ```bash
-openeffectsctl passthrough --on    # bypass all effects (raw camera)
-openeffectsctl passthrough --off   # re-enable effects
-openeffectsctl passthrough         # print current state
+vinoopeneffects-ctl passthrough --on    # bypass all effects (raw camera)
+vinoopeneffects-ctl passthrough --off   # re-enable effects
+vinoopeneffects-ctl passthrough         # print current state
 ```
 
 | Flag    | Notes                                          |
@@ -106,9 +106,9 @@ current state.
 ### Center Stage
 
 ```bash
-openeffectsctl center-stage --on --zoom tight --mode single
-openeffectsctl center-stage --crop-left 40 --crop-right 40
-openeffectsctl center-stage            # print current state
+vinoopeneffects-ctl center-stage --on --zoom tight --mode single
+vinoopeneffects-ctl center-stage --crop-left 40 --crop-right 40
+vinoopeneffects-ctl center-stage            # print current state
 ```
 
 | Flag             | Values                    | Notes                                        |
@@ -124,7 +124,7 @@ openeffectsctl center-stage            # print current state
 ### Portrait Blur
 
 ```bash
-openeffectsctl portrait-blur --on --strength 75
+vinoopeneffects-ctl portrait-blur --on --strength 75
 ```
 
 | Flag             | Values    | Notes             |
@@ -135,11 +135,11 @@ openeffectsctl portrait-blur --on --strength 75
 ### Background replace
 
 ```bash
-openeffectsctl background "#1e1e2e"          # solid color, enables the effect
-openeffectsctl background ~/Pictures/bg.jpg  # image, enables the effect
-openeffectsctl background none               # clear background and disable
-openeffectsctl background --off              # disable, keep stored background
-openeffectsctl background                    # print current background
+vinoopeneffects-ctl background "#1e1e2e"          # solid color, enables the effect
+vinoopeneffects-ctl background ~/Pictures/bg.jpg  # image, enables the effect
+vinoopeneffects-ctl background none               # clear background and disable
+vinoopeneffects-ctl background --off              # disable, keep stored background
+vinoopeneffects-ctl background                    # print current background
 ```
 
 | Argument / flag | Values                              | Notes                                                                                   |
@@ -150,7 +150,7 @@ openeffectsctl background                    # print current background
 ### Studio Light
 
 ```bash
-openeffectsctl studio-light --on --intensity 60 --brightness 10 --contrast 55
+vinoopeneffects-ctl studio-light --on --intensity 60 --brightness 10 --contrast 55
 ```
 
 | Flag             | Values       | Notes              |
@@ -165,9 +165,9 @@ openeffectsctl studio-light --on --intensity 60 --brightness 10 --contrast 55
 Toggle the overlay effect, or fire a one-shot emoji burst with `react`:
 
 ```bash
-openeffectsctl reactions --on
-openeffectsctl react thumbs-up
-openeffectsctl react heart
+vinoopeneffects-ctl reactions --on
+vinoopeneffects-ctl react thumbs-up
+vinoopeneffects-ctl react heart
 ```
 
 Reaction ids: `thumbs-up` `thumbs-down` `heart` `joy` `tada` `clap`.
@@ -176,9 +176,9 @@ Reaction ids: `thumbs-up` `thumbs-down` `heart` `joy` `tada` `clap`.
 ## Camera
 
 ```bash
-openeffectsctl camera list            # active camera marked with '*'
-openeffectsctl camera select /dev/video0
-openeffectsctl camera info            # virtual-camera node details
+vinoopeneffects-ctl camera list            # active camera marked with '*'
+vinoopeneffects-ctl camera select /dev/video0
+vinoopeneffects-ctl camera info            # virtual-camera node details
 ```
 
 | Command              | Description                                                  |
@@ -194,9 +194,9 @@ openeffectsctl camera info            # virtual-camera node details
 mainly an escape hatch / scripting primitive.
 
 ```bash
-openeffectsctl set studio_light.brightness 10
-openeffectsctl set center_stage.zoom tight
-openeffectsctl set bg_replace.background "#000000"
+vinoopeneffects-ctl set studio_light.brightness 10
+vinoopeneffects-ctl set center_stage.zoom tight
+vinoopeneffects-ctl set bg_replace.background "#000000"
 ```
 
 Values are parsed as `true`/`false` → bool, integers → number, everything else →
@@ -207,16 +207,16 @@ string.
 Waybar module:
 
 ```json
-"custom/openeffects": {
-    "exec": "openeffectsctl status --short",
+"custom/vinoopeneffects": {
+    "exec": "vinoopeneffects-ctl status --short",
     "interval": 5,
-    "on-click": "openeffectsctl toggle portrait-blur"
+    "on-click": "vinoopeneffects-ctl toggle portrait-blur"
 }
 ```
 
 Bind keys (Hyprland example):
 
 ```ini
-bind = $mod, F1, exec, openeffectsctl toggle portrait-blur
-bind = $mod, F2, exec, openeffectsctl react thumbs-up
+bind = $mod, F1, exec, vinoopeneffects-ctl toggle portrait-blur
+bind = $mod, F2, exec, vinoopeneffects-ctl react thumbs-up
 ```

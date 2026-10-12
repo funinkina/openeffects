@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=io.github.karanshukla.vinoopeneffects.Daemon
+Exec=@bindir@/vinoopeneffects-daemon
+SystemdService=vinoopeneffects-daemon.service

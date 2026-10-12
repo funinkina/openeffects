@@ -1682,92 +1682,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
-name = "openeffects"
-version = "0.1.3"
-dependencies = [
- "anyhow",
- "ashpd",
- "async-channel",
- "dirs",
- "futures-util",
- "gstreamer",
- "gtk4",
- "libadwaita",
- "serde",
- "shared",
- "tokio",
- "toml",
- "tracing",
- "tracing-subscriber",
- "zbus",
- "zbus_xml",
- "zbus_xmlgen",
- "zvariant",
-]
-
-[[package]]
-name = "openeffects-integration-tests"
-version = "0.1.3"
-dependencies = [
- "anyhow",
- "gstreamer",
- "gstreamer-app",
- "shared",
- "tokio",
- "zbus",
- "zvariant",
-]
-
-[[package]]
-name = "openeffectsctl"
-version = "0.1.3"
-dependencies = [
- "anyhow",
- "clap",
- "futures-util",
- "serde",
- "serde_json",
- "shared",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "zbus",
- "zbus_xml",
- "zbus_xmlgen",
- "zvariant",
-]
-
-[[package]]
-name = "openeffectsd"
-version = "0.1.3"
-dependencies = [
- "anyhow",
- "ashpd",
- "dirs",
- "gstreamer",
- "gstreamer-app",
- "gstreamer-base",
- "gstreamer-video",
- "image",
- "libc",
- "ort",
- "pipewire",
- "serde",
- "sha2",
- "shared",
- "tempfile",
- "thiserror",
- "tokio",
- "toml",
- "tracing",
- "tracing-subscriber",
- "zbus",
- "zbus_xml",
- "zbus_xmlgen",
- "zvariant",
-]
-
-[[package]]
 name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2263,21 +2177,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "shared"
-version = "0.1.3"
-dependencies = [
- "anyhow",
- "dirs",
- "serde",
- "tempfile",
- "thiserror",
- "toml",
- "tracing",
- "zbus",
- "zvariant",
-]
-
-[[package]]
 name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2677,6 +2576,107 @@ name = "version-compare"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03c2856837ef78f57382f06b2b8563a2f512f7185d732608fd9176cb3b8edf0e"
+
+[[package]]
+name = "vinoopeneffects"
+version = "0.1.3"
+dependencies = [
+ "anyhow",
+ "ashpd",
+ "async-channel",
+ "dirs",
+ "futures-util",
+ "gstreamer",
+ "gtk4",
+ "libadwaita",
+ "serde",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "vinoopeneffects-shared",
+ "zbus",
+ "zbus_xml",
+ "zbus_xmlgen",
+ "zvariant",
+]
+
+[[package]]
+name = "vinoopeneffects-ctl"
+version = "0.1.3"
+dependencies = [
+ "anyhow",
+ "clap",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "vinoopeneffects-shared",
+ "zbus",
+ "zbus_xml",
+ "zbus_xmlgen",
+ "zvariant",
+]
+
+[[package]]
+name = "vinoopeneffects-daemon"
+version = "0.1.3"
+dependencies = [
+ "anyhow",
+ "ashpd",
+ "dirs",
+ "gstreamer",
+ "gstreamer-app",
+ "gstreamer-base",
+ "gstreamer-video",
+ "image",
+ "libc",
+ "ort",
+ "pipewire",
+ "serde",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "toml",
+ "tracing",
+ "tracing-subscriber",
+ "vinoopeneffects-shared",
+ "zbus",
+ "zbus_xml",
+ "zbus_xmlgen",
+ "zvariant",
+]
+
+[[package]]
+name = "vinoopeneffects-integration-tests"
+version = "0.1.3"
+dependencies = [
+ "anyhow",
+ "gstreamer",
+ "gstreamer-app",
+ "tokio",
+ "vinoopeneffects-shared",
+ "zbus",
+ "zvariant",
+]
+
+[[package]]
+name = "vinoopeneffects-shared"
+version = "0.1.3"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "serde",
+ "tempfile",
+ "thiserror",
+ "toml",
+ "tracing",
+ "zbus",
+ "zvariant",
+]
 
 [[package]]
 name = "wasi"

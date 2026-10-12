@@ -1,35 +1,50 @@
-# openeffectsctl — the command-line client. Stateless D-Bus consumer; requires
-# the daemon (openeffectsd) to do anything. The openeffectsd dependency resolves
+# vinoopeneffects-ctl — the command-line client. Stateless D-Bus consumer; requires
+# the daemon (vinoopeneffects-daemon) to do anything. The vinoopeneffects-daemon dependency resolves
 # automatically whether installing from local files (pass both) or a repo.
 #
 #   VERSION=0.1.0 ARCH=amd64 nfpm pkg -f packaging/nfpm-cli.yaml -p deb -t dist/
 
-name: openeffectsctl
+name: vinoopeneffects-ctl
 arch: ${ARCH}
 version: ${VERSION}
-maintainer: Aryan <hello@funinkina.co.in>
+maintainer: Karan Shukla
 description: |
-  Command-line control client for the OpenEffects daemon (openeffectsd):
+  Command-line control client for the vinoOpenEffects daemon (vinoopeneffects-daemon):
   start/stop the virtual camera, toggle effects, select the camera.
-homepage: https://github.com/funinkina/openeffects
+homepage: https://github.com/karanshukla/vinoOpenEffects
 license: GPL-3.0-or-later
 section: video
 priority: optional
 
+# Hard fork of funinkina/openeffects: the old package names are superseded.
+# nfpm maps `replaces` to deb Replaces / rpm Obsoletes / arch replaces, and
+# `conflicts` to the matching Conflicts field. Leftover files are also swept by
+# packaging/postinstall.sh.
+replaces:
+  - openeffectsctl
+conflicts:
+  - openeffectsctl
+
 contents:
-  - src: target/release/openeffectsctl
-    dst: /usr/bin/openeffectsctl
+  - src: target/release/vinoopeneffects-ctl
+    dst: /usr/bin/vinoopeneffects-ctl
 
 overrides:
   deb:
     depends:
-      - openeffectsd
+      - vinoopeneffects-daemon
       - dbus
+    scripts:
+      postinstall: packaging/postinstall.sh
+      postremove: packaging/postremove.sh
   rpm:
     depends:
-      - openeffectsd
+      - vinoopeneffects-daemon
       - dbus
+    scripts:
+      postinstall: packaging/postinstall.sh
+      postremove: packaging/postremove.sh
   archlinux:
     depends:
-      - openeffectsd
+      - vinoopeneffects-daemon
       - dbus

@@ -17,9 +17,15 @@ use constants::APP_ID;
 
 fn main() -> glib::ExitCode {
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
         .with_writer(std::io::stderr)
         .init();
+
+    // Move pre-fork `openeffects` state first, before GuiConfig is read.
+    shared::migrate::migrate_legacy_paths().log();
 
     if let Err(err) = gstreamer::init() {
         tracing::warn!("GStreamer init failed, live preview disabled: {err}");

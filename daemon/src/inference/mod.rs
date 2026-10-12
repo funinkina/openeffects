@@ -29,11 +29,11 @@ pub fn build_session() -> anyhow::Result<ort::session::builder::SessionBuilder> 
     with_execution_provider(builder)
 }
 
-/// Execution provider selected by `OE_EP`: `cpu` (default), `npu`, or `gpu`.
+/// Execution provider selected by `VINOOPENEFFECTS_EP`: `cpu` (default), `npu`, or `gpu`.
 /// Anything but `cpu` needs a build with `--features npu` and an
 /// `ORT_DYLIB_PATH` pointing at an OpenVINO-enabled onnxruntime (see ovfetch).
 pub fn requested_ep() -> String {
-    std::env::var("OE_EP")
+    std::env::var("VINOOPENEFFECTS_EP")
         .map(|v| v.trim().to_ascii_lowercase())
         .ok()
         .filter(|v| !v.is_empty())
@@ -50,7 +50,7 @@ fn with_execution_provider(
         "cpu" => return Ok(builder),
         "npu" => "NPU",
         "gpu" => "GPU",
-        other => anyhow::bail!("OE_EP={other:?}: expected cpu, npu or gpu"),
+        other => anyhow::bail!("VINOOPENEFFECTS_EP={other:?}: expected cpu, npu or gpu"),
     };
     let ep = OpenVINO::default().with_device_type(device);
     // OpenVINO silently drops to CPU when it can't register, which would make a
@@ -70,6 +70,6 @@ fn with_execution_provider(
 ) -> anyhow::Result<ort::session::builder::SessionBuilder> {
     match requested_ep().as_str() {
         "cpu" => Ok(builder),
-        other => anyhow::bail!("OE_EP={other:?} needs a build with --features npu"),
+        other => anyhow::bail!("VINOOPENEFFECTS_EP={other:?} needs a build with --features npu"),
     }
 }

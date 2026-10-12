@@ -1,35 +1,46 @@
-# openeffects — the GTK4/libadwaita GUI client. Stateless D-Bus consumer;
-# requires the daemon (openeffectsd). The openeffectsd dependency resolves
+# vinoopeneffects — the GTK4/libadwaita GUI client. Stateless D-Bus consumer;
+# requires the daemon (vinoopeneffects-daemon). The vinoopeneffects-daemon dependency resolves
 # automatically whether installing from local files (pass both) or a repo.
 #
 #   VERSION=0.1.0 ARCH=amd64 nfpm pkg -f packaging/nfpm-gui.yaml -p deb -t dist/
 
-name: openeffects
+name: vinoopeneffects
 arch: ${ARCH}
 version: ${VERSION}
-maintainer: Aryan <hello@funinkina.co.in>
+maintainer: Karan Shukla
 description: |
-  GTK4/libadwaita control surface for the OpenEffects daemon (openeffectsd):
+  GTK4/libadwaita control surface for the vinoOpenEffects daemon (vinoopeneffects-daemon):
   manage webcam effects, backgrounds, camera selection and the ML model library.
-homepage: https://github.com/funinkina/openeffects
+homepage: https://github.com/karanshukla/vinoOpenEffects
 license: GPL-3.0-or-later
 section: video
 priority: optional
 
+# Hard fork of funinkina/openeffects: the old package names are superseded.
+# nfpm maps `replaces` to deb Replaces / rpm Obsoletes / arch replaces, and
+# `conflicts` to the matching Conflicts field. Leftover files are also swept by
+# packaging/postinstall.sh.
+replaces:
+  - openeffects
+conflicts:
+  - openeffects
+
 contents:
-  - src: target/release/openeffects
-    dst: /usr/bin/openeffects
+  - src: target/release/vinoopeneffects
+    dst: /usr/bin/vinoopeneffects
 
   # App icon + desktop entry
-  - src: data/icons/in.co.funinkina.OpenEffects.svg
-    dst: /usr/share/icons/hicolor/scalable/apps/in.co.funinkina.OpenEffects.svg
-  - src: data/applications/in.co.funinkina.OpenEffects.desktop
-    dst: /usr/share/applications/in.co.funinkina.OpenEffects.desktop
+  - src: data/icons/io.github.karanshukla.vinoopeneffects.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/io.github.karanshukla.vinoopeneffects.svg
+  - src: data/icons/io.github.karanshukla.vinoopeneffects-symbolic.svg
+    dst: /usr/share/icons/hicolor/symbolic/apps/io.github.karanshukla.vinoopeneffects-symbolic.svg
+  - src: data/applications/io.github.karanshukla.vinoopeneffects.desktop
+    dst: /usr/share/applications/io.github.karanshukla.vinoopeneffects.desktop
 
 overrides:
   deb:
     depends:
-      - openeffectsd
+      - vinoopeneffects-daemon
       - libgtk-4-1
       - libadwaita-1-0
       # gtk4paintablesink, used by the GUI's live preview
@@ -39,7 +50,7 @@ overrides:
       postremove: packaging/postremove.sh
   rpm:
     depends:
-      - openeffectsd
+      - vinoopeneffects-daemon
       - gtk4
       - libadwaita
       # gtk4paintablesink, used by the GUI's live preview (Fedora: gst-plugins-rs)
@@ -49,7 +60,7 @@ overrides:
       postremove: packaging/postremove.sh
   archlinux:
     depends:
-      - openeffectsd
+      - vinoopeneffects-daemon
       - gtk4
       - libadwaita
       # gtk4paintablesink, used by the GUI's live preview

@@ -1,4 +1,4 @@
-//! GUI-local settings, persisted to `~/.config/openeffects/gui.toml`.
+//! GUI-local settings, persisted to `~/.config/vinoopeneffects/gui.toml`.
 //!
 //! Separate from the daemon's `AppState` (state.toml): these are client-side
 //! behaviour preferences, not pipeline state. Kept tiny and best-effort — a
@@ -18,7 +18,7 @@ pub struct GuiConfig {
 
 impl GuiConfig {
     fn path() -> Option<PathBuf> {
-        dirs::config_dir().map(|d| d.join("openeffects/gui.toml"))
+        dirs::config_dir().map(|d| d.join("vinoopeneffects/gui.toml"))
     }
 
     pub fn load_or_default() -> Self {

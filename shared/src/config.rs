@@ -138,7 +138,7 @@ impl AppState {
 
     pub fn config_path_from(config_dir: Option<PathBuf>) -> Result<PathBuf, ConfigError> {
         config_dir
-            .map(|d| d.join("openeffects/state.toml"))
+            .map(|d| d.join("vinoopeneffects/state.toml"))
             .ok_or(ConfigError::NoConfigDir)
     }
 
@@ -241,7 +241,7 @@ selected = ""
     fn save_creates_parent_dirs() {
         use tempfile::TempDir;
         let tmp = TempDir::new().unwrap();
-        let config_path = tmp.path().join("openeffects/state.toml");
+        let config_path = tmp.path().join("vinoopeneffects/state.toml");
 
         let state = AppState::default();
         state.save_to(config_path.clone()).unwrap();

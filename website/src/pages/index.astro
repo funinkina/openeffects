@@ -46,7 +46,7 @@ const pipeline = [
   {
     n: "01",
     title: "Turn it on",
-    body: "OpenEffects picks up your camera and starts working in the background.",
+    body: "vinoOpenEffects picks up your camera and starts working in the background.",
     state: "Ready",
     icon: `<path d="M12 3v9"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/>`,
   },
@@ -75,19 +75,19 @@ const pipeline = [
 ];
 
 const install = {
-  flatpak: "flatpak install flathub in.co.funinkina.OpenEffects",
-  arch: "sudo pacman -U openeffectsd-*-x86_64.pkg.tar.zst openeffects-*-x86_64.pkg.tar.zst",
+  flatpak: "flatpak install flathub io.github.karanshukla.vinoopeneffects",
+  arch: "sudo pacman -U vinoopeneffects-daemon-*-x86_64.pkg.tar.zst vinoopeneffects-*-x86_64.pkg.tar.zst",
   fedora:
-    "sudo dnf install ./openeffectsd-*.x86_64.rpm ./openeffects-*.x86_64.rpm",
+    "sudo dnf install ./vinoopeneffects-daemon-*.x86_64.rpm ./vinoopeneffects-*.x86_64.rpm",
   ubuntu:
-    "sudo apt install ./openeffectsd_*_amd64.deb ./openeffects_*_amd64.deb",
+    "sudo apt install ./vinoopeneffects-daemon_*_amd64.deb ./vinoopeneffects_*_amd64.deb",
 };
 
-const cli = `openeffectsctl portrait-blur --on --strength 70
-openeffectsctl center-stage --zoom tight
-openeffectsctl background ~/Pictures/office.jpg
-openeffectsctl react thumbs-up
-openeffectsctl toggle reactions`;
+const cli = `vinoopeneffects-ctl portrait-blur --on --strength 70
+vinoopeneffects-ctl center-stage --zoom tight
+vinoopeneffects-ctl background ~/Pictures/office.jpg
+vinoopeneffects-ctl react thumbs-up
+vinoopeneffects-ctl toggle reactions`;
 ---
 
 <Layout>
@@ -177,7 +177,7 @@ openeffectsctl toggle reactions`;
             One helper between your camera and everything else.
           </h2>
           <p class="mt-5 text-lg leading-relaxed text-muted">
-            No extra window to keep open. OpenEffects works quietly in the
+            No extra window to keep open. vinoOpenEffects works quietly in the
             background and hands every app a better version of your camera.
           </p>
         </div>
@@ -330,7 +330,7 @@ openeffectsctl toggle reactions`;
             >
               Then drive it from anywhere
             </p>
-            <CodeBlock code={cli} label="openeffectsctl" />
+            <CodeBlock code={cli} label="vinoopeneffects-ctl" />
           </div>
         </div>
       </div>
@@ -353,7 +353,7 @@ openeffectsctl toggle reactions`;
               Toggle effects from the top bar.
             </h2>
             <p class="mt-5 text-lg leading-relaxed text-muted">
-              The companion GNOME extension drops OpenEffects straight into
+              The companion GNOME extension drops vinoOpenEffects straight into
               Quick Settings. Flip blur, framing, studio light and reactions on
               or off mid-call. No window to find, no command to type.
             </p>
@@ -390,7 +390,7 @@ openeffectsctl toggle reactions`;
           >
             <img
               src="/gnome-extension.png"
-              alt="OpenEffects controls in the GNOME Quick Settings panel"
+              alt="vinoOpenEffects controls in the GNOME Quick Settings panel"
               width="1022"
               height="1453"
               loading="lazy"

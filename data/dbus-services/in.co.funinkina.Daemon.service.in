@@ -1,4 +1,0 @@
-[D-BUS Service]
-Name=in.co.funinkina.Daemon
-Exec=@bindir@/openeffectsd
-SystemdService=openeffectsd.service

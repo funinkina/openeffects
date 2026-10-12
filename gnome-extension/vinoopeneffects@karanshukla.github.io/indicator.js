@@ -14,15 +14,15 @@ import {Client} from './dbus.js';
 import * as Sections from './sections.js';
 
 export const Indicator = GObject.registerClass(
-class OpenEffectsIndicator extends PanelMenu.Button {
+class vinoOpenEffectsIndicator extends PanelMenu.Button {
     _init(extension) {
-        super._init(0.5, 'OpenEffects');
+        super._init(0.5, 'vinoOpenEffects');
         this._extension = extension;
         this._refreshId = 0;
         this._client = new Client();
 
         this._iconFile = Gio.File.new_for_path(
-            GLib.build_filenamev([extension.path, 'icons', 'openeffects.svg']));
+            GLib.build_filenamev([extension.path, 'icons', 'vinoopeneffects.svg']));
         this._panelIcon = new St.Icon({
             gicon: new Gio.FileIcon({ file: this._iconFile }),
             style_class: 'oe-panel-icon',
@@ -56,7 +56,7 @@ class OpenEffectsIndicator extends PanelMenu.Button {
         const titleBox = new St.BoxLayout({
             vertical: true, x_expand: true, y_align: Clutter.ActorAlign.CENTER, style_class: 'oe-titlebox',
         });
-        titleBox.add_child(new St.Label({ text: 'Openeffects', style_class: 'oe-title' }));
+        titleBox.add_child(new St.Label({ text: 'vinoOpenEffects', style_class: 'oe-title' }));
         this._subtitle = new St.Label({ text: '…', style_class: 'oe-subtitle' });
         titleBox.add_child(this._subtitle);
         header.add_child(titleBox);
@@ -82,7 +82,7 @@ class OpenEffectsIndicator extends PanelMenu.Button {
 
         // Daemon-down notice (replaces the controls when unavailable).
         this._notice = new St.Label({
-            text: 'OpenEffects daemon is not running.\nFlip the switch above to start it.',
+            text: 'vinoOpenEffects daemon is not running.\nFlip the switch above to start it.',
             style_class: 'oe-notice',
         });
         this._notice.clutter_text.line_wrap = true;
@@ -121,13 +121,13 @@ class OpenEffectsIndicator extends PanelMenu.Button {
 
     _launchApp() {
         try {
-            const app = Gio.DesktopAppInfo.new('in.co.funinkina.OpenEffects.desktop');
+            const app = Gio.DesktopAppInfo.new('io.github.karanshukla.vinoopeneffects.desktop');
             if (app)
                 app.launch([], null);
             else
-                Gio.Subprocess.new(['openeffects'], Gio.SubprocessFlags.NONE);
+                Gio.Subprocess.new(['vinoopeneffects'], Gio.SubprocessFlags.NONE);
         } catch (e) {
-            logError(e, 'OpenEffects: failed to launch app');
+            logError(e, 'vinoOpenEffects: failed to launch app');
         }
     }
 
@@ -146,7 +146,7 @@ class OpenEffectsIndicator extends PanelMenu.Button {
         try {
             state = await this._client.refresh();
         } catch (e) {
-            logError(e, 'OpenEffects: refresh failed');
+            logError(e, 'vinoOpenEffects: refresh failed');
             return;
         }
         if (!this._masterSwitch)

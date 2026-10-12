@@ -9,9 +9,9 @@ use zvariant::{OwnedValue, Str, Value};
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "openeffectsctl",
-    about = "Control the OpenEffects daemon",
-    long_about = "Control the OpenEffects daemon over D-Bus.\n\n\
+    name = "vinoopeneffects-ctl",
+    about = "Control the vinoOpenEffects daemon",
+    long_about = "Control the vinoOpenEffects daemon over D-Bus.\n\n\
         Effects have friendly subcommands (center-stage, portrait-blur, background,\n\
         studio-light, reactions). Run one with no flags to print its current state,\n\
         or pass flags to change settings. `set` is a low-level escape hatch.",

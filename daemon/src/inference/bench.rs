@@ -1,5 +1,5 @@
-//! `openeffectsd --bench-inference [ITERS] [FRAME.png|jpg]`: times each model
-//! wrapper on one frame under whatever execution provider `OE_EP` selects.
+//! `vinoopeneffects-daemon --bench-inference [ITERS] [FRAME.png|jpg]`: times each model
+//! wrapper on one frame under whatever execution provider `VINOOPENEFFECTS_EP` selects.
 //! Numbers cover the whole wrapper call (resample + `session.run` + decode).
 
 use std::time::{Duration, Instant};
@@ -125,7 +125,7 @@ fn synthetic_frame(w: usize, h: usize) -> (Vec<u8>, usize, usize) {
     (buf, w, h)
 }
 
-/// `openeffectsd --bench-video FILE [--seconds N] [--fps F]`: runs all four
+/// `vinoopeneffects-daemon --bench-video FILE [--seconds N] [--fps F]`: runs all four
 /// models on every frame of a decoded clip for N seconds. `--fps` paces the
 /// loop to a camera rate (sleeping between frames) so power draw reflects a
 /// realistic duty cycle; without it the loop runs flat out and reports

@@ -12,8 +12,8 @@ async function main() {
     console.log("DEVICES: " + devs.filter(d => d.kind === "videoinput").map(d => d.label).join(" | "));
     tmp.getTracks().forEach(t => t.stop());
 
-    const oe = devs.find(d => d.kind === "videoinput" && /openeffects/i.test(d.label));
-    if (!oe) { console.log("RESULT: openeffects device NOT FOUND"); return; }
+    const oe = devs.find(d => d.kind === "videoinput" && /vinoopeneffects/i.test(d.label));
+    if (!oe) { console.log("RESULT: vinoopeneffects device NOT FOUND"); return; }
 
     const stream = await navigator.mediaDevices.getUserMedia({
       video: { deviceId: { exact: oe.deviceId } }

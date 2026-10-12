@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum OpenEffectsError {
+pub enum VinoOpenEffectsError {
     #[error("config error: {0}")]
     Config(#[from] ConfigError),
 

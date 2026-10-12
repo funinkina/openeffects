@@ -41,8 +41,14 @@ fn main() -> anyhow::Result<()> {
 
 async fn run() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+        )
         .init();
+
+    // Move pre-fork `openeffects` state first, before config and models are read.
+    shared::migrate::migrate_legacy_paths().log();
 
     let start_pipeline = std::env::args().any(|arg| arg == "--start");
     let mut app = AppState::load_or_default().unwrap_or_else(|err| {
@@ -162,7 +168,7 @@ async fn run() -> anyhow::Result<()> {
         pipeline_tx.send(PipelineCommand::Start(app)).await?;
     }
 
-    info!("openeffectsd is running on the session bus");
+    info!("vinoopeneffects-daemon is running on the session bus");
     // SIGTERM covers systemd and manual kills; GNOME Shell's "Background Apps
     // -> Quit" ends up as `flatpak kill` (SIGKILL), which needs no handler.
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())

@@ -1,4 +1,4 @@
-# openeffectsd — the daemon package. Owns the GStreamer/PipeWire pipeline,
+# vinoopeneffects-daemon — the daemon package. Owns the GStreamer/PipeWire pipeline,
 # the D-Bus service + systemd user unit, and the bundled ML models. Both the CLI
 # and GUI packages depend on this one.
 #
@@ -8,42 +8,51 @@
 # Run manually:
 #   VERSION=0.1.0 ARCH=amd64 nfpm pkg -f packaging/nfpm-daemon.yaml -p deb -t dist/
 
-name: openeffectsd
+name: vinoopeneffects-daemon
 arch: ${ARCH}
 version: ${VERSION}
-maintainer: Aryan <hello@funinkina.co.in>
+maintainer: Karan Shukla
 description: |
-  OpenEffects daemon — real-time webcam effects for Linux (PipeWire virtual
+  vinoOpenEffects daemon — real-time webcam effects for Linux (PipeWire virtual
   camera): background blur/replace, studio light, portrait blur, center stage.
-  Controlled over D-Bus; install openeffectsctl (CLI) or openeffects (GUI) to
+  Controlled over D-Bus; install vinoopeneffects-ctl (CLI) or vinoopeneffects (GUI) to
   drive it.
-homepage: https://github.com/funinkina/openeffects
+homepage: https://github.com/karanshukla/vinoOpenEffects
 license: GPL-3.0-or-later
 section: video
 priority: optional
 
+# Hard fork of funinkina/openeffects: the old package names are superseded.
+# nfpm maps `replaces` to deb Replaces / rpm Obsoletes / arch replaces, and
+# `conflicts` to the matching Conflicts field. Leftover files are also swept by
+# packaging/postinstall.sh.
+replaces:
+  - openeffectsd
+conflicts:
+  - openeffectsd
+
 contents:
-  - src: target/release/openeffectsd
-    dst: /usr/bin/openeffectsd
+  - src: target/release/vinoopeneffects-daemon
+    dst: /usr/bin/vinoopeneffects-daemon
 
   # D-Bus interface introspection XML
-  - src: data/dbus/in.co.funinkina.Daemon1.xml
-    dst: /usr/share/dbus-1/interfaces/in.co.funinkina.Daemon1.xml
-  - src: data/dbus/in.co.funinkina.Effects1.xml
-    dst: /usr/share/dbus-1/interfaces/in.co.funinkina.Effects1.xml
-  - src: data/dbus/in.co.funinkina.Devices1.xml
-    dst: /usr/share/dbus-1/interfaces/in.co.funinkina.Devices1.xml
+  - src: data/dbus/io.github.karanshukla.vinoopeneffects.Daemon1.xml
+    dst: /usr/share/dbus-1/interfaces/io.github.karanshukla.vinoopeneffects.Daemon1.xml
+  - src: data/dbus/io.github.karanshukla.vinoopeneffects.Effects1.xml
+    dst: /usr/share/dbus-1/interfaces/io.github.karanshukla.vinoopeneffects.Effects1.xml
+  - src: data/dbus/io.github.karanshukla.vinoopeneffects.Devices1.xml
+    dst: /usr/share/dbus-1/interfaces/io.github.karanshukla.vinoopeneffects.Devices1.xml
 
   # D-Bus session service activation (rendered with @bindir@ -> /usr/bin)
-  - src: dist/in.co.funinkina.Daemon.service
-    dst: /usr/share/dbus-1/services/in.co.funinkina.Daemon.service
+  - src: dist/io.github.karanshukla.vinoopeneffects.Daemon.service
+    dst: /usr/share/dbus-1/services/io.github.karanshukla.vinoopeneffects.Daemon.service
 
   # systemd user unit (rendered with @bindir@ -> /usr/bin)
-  - src: dist/openeffectsd.service
-    dst: /usr/lib/systemd/user/openeffectsd.service
+  - src: dist/vinoopeneffects-daemon.service
+    dst: /usr/lib/systemd/user/vinoopeneffects-daemon.service
 
   # Bundled, sha256-verified ML models (staged by build-packages.sh).
-  # Daemon's registry::search_dirs() resolves /usr/share/openeffects/models.
+  # Daemon's registry::search_dirs() resolves /usr/share/vinoopeneffects/models.
   #
   # One glob entry per model id rather than a single `type: tree`: nfpm's tree
   # walker writes the dirs' mode as the raw Go FileMode (mode=20000000755, with
@@ -52,13 +61,13 @@ contents:
   # implicitly, and implicit dirs get a clean 0755 (no warning). Add a line here
   # when a new model id is bundled.
   - src: dist/models/hand_landmark/*
-    dst: /usr/share/openeffects/models/hand_landmark/
+    dst: /usr/share/vinoopeneffects/models/hand_landmark/
   - src: dist/models/palm_detection/*
-    dst: /usr/share/openeffects/models/palm_detection/
+    dst: /usr/share/vinoopeneffects/models/palm_detection/
   - src: dist/models/selfie_segmentation/*
-    dst: /usr/share/openeffects/models/selfie_segmentation/
+    dst: /usr/share/vinoopeneffects/models/selfie_segmentation/
   - src: dist/models/yunet/*
-    dst: /usr/share/openeffects/models/yunet/
+    dst: /usr/share/vinoopeneffects/models/yunet/
 
 overrides:
   deb:
@@ -69,6 +78,9 @@ overrides:
       - gstreamer1.0-plugins-good
       - gstreamer1.0-pipewire
       - dbus
+    scripts:
+      postinstall: packaging/postinstall.sh
+      postremove: packaging/postremove.sh
   rpm:
     depends:
       - pipewire
@@ -77,6 +89,9 @@ overrides:
       - gstreamer1-plugins-good
       - pipewire-gstreamer
       - dbus
+    scripts:
+      postinstall: packaging/postinstall.sh
+      postremove: packaging/postremove.sh
   archlinux:
     depends:
       - pipewire

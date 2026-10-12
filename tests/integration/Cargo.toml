@@ -1,5 +1,5 @@
 [package]
-name = "openeffects-integration-tests"
+name = "vinoopeneffects-integration-tests"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 anyhow.workspace = true
-shared = { path = "../../shared" }
+shared = { package = "vinoopeneffects-shared", path = "../../shared" }
 tokio.workspace = true
 zbus.workspace = true
 zvariant.workspace = true

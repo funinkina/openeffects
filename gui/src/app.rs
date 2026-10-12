@@ -71,7 +71,7 @@ pub fn build_window(
     // Primary menu (Preferences / About), right side of the header
     let menu = gio::Menu::new();
     menu.append(Some("Preferences"), Some("win.preferences"));
-    menu.append(Some("About OpenEffects"), Some("win.about"));
+    menu.append(Some("About vinoOpenEffects"), Some("win.about"));
     let menu_button = gtk::MenuButton::builder()
         .icon_name("open-menu-symbolic")
         .menu_model(&menu)
@@ -113,7 +113,7 @@ pub fn build_window(
 
     let window = ApplicationWindow::builder()
         .application(app)
-        .title("OpenEffects")
+        .title("vinoOpenEffects")
         .default_width(720)
         .default_height(640)
         .content(&preview.split)
@@ -244,7 +244,7 @@ fn apply_status_banner(w: &Widgets, status: &str) {
     let message = match status {
         "stopped" => Some("Pipeline stopped"),
         "error" => Some("The pipeline reported an error"),
-        "disconnected" => Some("OpenEffects daemon is not running, please start it..."),
+        "disconnected" => Some("vinoOpenEffects daemon is not running, please start it..."),
         _ => None,
     };
     match message {

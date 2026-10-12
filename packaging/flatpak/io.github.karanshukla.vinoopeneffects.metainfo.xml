@@ -3,21 +3,21 @@
      Flathub REQUIRES at least one real screenshot (see <screenshots> below) and
      a maintained <releases> list. Update both before submitting. -->
 <component type="desktop-application">
-  <id>in.co.funinkina.OpenEffects</id>
+  <id>io.github.karanshukla.vinoopeneffects</id>
 
-  <name>OpenEffects</name>
+  <name>vinoOpenEffects</name>
   <summary>Apply real-time effects to your webcam</summary>
 
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
 
-  <developer id="in.co.funinkina">
-    <name>Aryan Kushwaha</name>
+  <developer id="io.github.karanshukla">
+    <name>Karan Shukla</name>
   </developer>
 
   <description>
     <p>
-      OpenEffects is a Linux-native, GPU-accelerated webcam effects engine. It
+      vinoOpenEffects is a Linux-native, GPU-accelerated webcam effects engine. It
       brings advanced camera features to any Wayland desktop and works with any
       app that consumes a PipeWire camera node (Zoom, OBS, WebRTC, and more).
     </p>
@@ -35,7 +35,7 @@
     </p>
   </description>
 
-  <launchable type="desktop-id">in.co.funinkina.OpenEffects.desktop</launchable>
+  <launchable type="desktop-id">io.github.karanshukla.vinoopeneffects.desktop</launchable>
 
   <categories>
     <category>AudioVideo</category>
@@ -57,13 +57,13 @@
        raw file committed to the repo). -->
   <screenshots>
     <screenshot type="default">
-      <caption>The OpenEffects control window</caption>
-      <image>https://raw.githubusercontent.com/funinkina/openeffects/main/docs/screenshots/main.png</image>
+      <caption>The vinoOpenEffects control window</caption>
+      <image>https://raw.githubusercontent.com/karanshukla/vinoOpenEffects/main/docs/screenshots/main.png</image>
     </screenshot>
   </screenshots>
 
-  <url type="homepage">https://github.com/funinkina/openeffects</url>
-  <url type="bugtracker">https://github.com/funinkina/openeffects/issues</url>
+  <url type="homepage">https://github.com/karanshukla/vinoOpenEffects</url>
+  <url type="bugtracker">https://github.com/karanshukla/vinoOpenEffects/issues</url>
 
   <content_rating type="oars-1.1" />
 

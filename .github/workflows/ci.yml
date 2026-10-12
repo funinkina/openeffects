@@ -69,7 +69,7 @@ jobs:
       - *apt
       - *cache
       # load-dynamic needs no ONNX Runtime at build time.
-      - run: cargo check -p openeffectsd --features npu
+      - run: cargo check -p vinoopeneffects-daemon --features npu
 
   msrv:
     runs-on: ubuntu-26.04

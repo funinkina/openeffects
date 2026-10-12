@@ -58,7 +58,7 @@ jobs:
         with:
           save-if: ${{ github.event_name != 'pull_request' }}
 
-      # The daemon looks in $XDG_DATA_HOME/openeffects/models, and so does
+      # The daemon looks in $XDG_DATA_HOME/vinoopeneffects/models, and so does
       # scripts/fetch-models.sh, so one variable points both at the cached dir.
       - name: Point the model directory at the runner temp dir
         run: echo "XDG_DATA_HOME=$RUNNER_TEMP/xdg" >> "$GITHUB_ENV"
@@ -70,7 +70,7 @@ jobs:
         if: github.event_name != 'schedule'
         uses: actions/cache/restore@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
-          path: ${{ runner.temp }}/xdg/openeffects/models
+          path: ${{ runner.temp }}/xdg/vinoopeneffects/models
           key: models-${{ hashFiles('data/models/*/manifest.toml', 'scripts/fetch-models.sh') }}
 
       # Idempotent and sha256-verified, so a cache hit costs only the hashing and
@@ -82,7 +82,7 @@ jobs:
         if: github.event_name != 'pull_request' && steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
-          path: ${{ runner.temp }}/xdg/openeffects/models
+          path: ${{ runner.temp }}/xdg/vinoopeneffects/models
           key: models-${{ hashFiles('data/models/*/manifest.toml', 'scripts/fetch-models.sh') }}
 
       # The tests print "skipping: <model> model not installed" and pass, so a green

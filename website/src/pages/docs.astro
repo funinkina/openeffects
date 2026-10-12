@@ -15,61 +15,61 @@ const toc = [
   { id: "scripting", label: "Scripting" },
 ];
 
-const startCmd = `systemctl --user start openeffectsd   # or: openeffectsd --start`;
-const helpCmd = `openeffectsctl --help
-openeffectsctl studio-light --help`;
-const quickStart = `openeffectsctl start                       # arm the virtual camera
-openeffectsctl portrait-blur --on --strength 70
-openeffectsctl background ~/Pictures/office.jpg
-openeffectsctl studio-light --on --intensity 60 --brightness 10
-openeffectsctl status`;
-const effectsList = `openeffectsctl effects
+const startCmd = `systemctl --user start vinoopeneffects-daemon   # or: vinoopeneffects-daemon --start`;
+const helpCmd = `vinoopeneffects-ctl --help
+vinoopeneffects-ctl studio-light --help`;
+const quickStart = `vinoopeneffects-ctl start                       # arm the virtual camera
+vinoopeneffects-ctl portrait-blur --on --strength 70
+vinoopeneffects-ctl background ~/Pictures/office.jpg
+vinoopeneffects-ctl studio-light --on --intensity 60 --brightness 10
+vinoopeneffects-ctl status`;
+const effectsList = `vinoopeneffects-ctl effects
 # [on ] center_stage
 # [off] portrait_blur
 # ...`;
-const genericToggle = `openeffectsctl enable portrait-blur
-openeffectsctl disable studio-light
-openeffectsctl toggle reactions`;
-const passthrough = `openeffectsctl passthrough --on    # bypass all effects (raw camera)
-openeffectsctl passthrough --off   # re-enable effects
-openeffectsctl passthrough         # print current state`;
-const centerStage = `openeffectsctl center-stage --on --zoom tight --mode single
-openeffectsctl center-stage --crop-left 40 --crop-right 40
-openeffectsctl center-stage            # print current state`;
-const portraitBlur = `openeffectsctl portrait-blur --on --strength 75`;
-const background = `openeffectsctl background "#1e1e2e"          # solid color, enables the effect
-openeffectsctl background ~/Pictures/bg.jpg  # image, enables the effect
-openeffectsctl background none               # clear background and disable
-openeffectsctl background --off              # disable, keep stored background
-openeffectsctl background                    # print current background`;
-const studioLight = `openeffectsctl studio-light --on --intensity 60 --brightness 10 --contrast 55`;
-const reactions = `openeffectsctl reactions --on
-openeffectsctl react thumbs-up
-openeffectsctl react heart`;
-const camera = `openeffectsctl camera list            # active camera marked with '*'
-openeffectsctl camera select /dev/video0
-openeffectsctl camera info            # virtual-camera node details`;
-const lowLevelSet = `openeffectsctl set studio_light.brightness 10
-openeffectsctl set center_stage.zoom tight
-openeffectsctl set bg_replace.background "#000000"`;
-const waybar = `"custom/openeffects": {
-    "exec": "openeffectsctl status --short",
+const genericToggle = `vinoopeneffects-ctl enable portrait-blur
+vinoopeneffects-ctl disable studio-light
+vinoopeneffects-ctl toggle reactions`;
+const passthrough = `vinoopeneffects-ctl passthrough --on    # bypass all effects (raw camera)
+vinoopeneffects-ctl passthrough --off   # re-enable effects
+vinoopeneffects-ctl passthrough         # print current state`;
+const centerStage = `vinoopeneffects-ctl center-stage --on --zoom tight --mode single
+vinoopeneffects-ctl center-stage --crop-left 40 --crop-right 40
+vinoopeneffects-ctl center-stage            # print current state`;
+const portraitBlur = `vinoopeneffects-ctl portrait-blur --on --strength 75`;
+const background = `vinoopeneffects-ctl background "#1e1e2e"          # solid color, enables the effect
+vinoopeneffects-ctl background ~/Pictures/bg.jpg  # image, enables the effect
+vinoopeneffects-ctl background none               # clear background and disable
+vinoopeneffects-ctl background --off              # disable, keep stored background
+vinoopeneffects-ctl background                    # print current background`;
+const studioLight = `vinoopeneffects-ctl studio-light --on --intensity 60 --brightness 10 --contrast 55`;
+const reactions = `vinoopeneffects-ctl reactions --on
+vinoopeneffects-ctl react thumbs-up
+vinoopeneffects-ctl react heart`;
+const camera = `vinoopeneffects-ctl camera list            # active camera marked with '*'
+vinoopeneffects-ctl camera select /dev/video0
+vinoopeneffects-ctl camera info            # virtual-camera node details`;
+const lowLevelSet = `vinoopeneffects-ctl set studio_light.brightness 10
+vinoopeneffects-ctl set center_stage.zoom tight
+vinoopeneffects-ctl set bg_replace.background "#000000"`;
+const waybar = `"custom/vinoopeneffects": {
+    "exec": "vinoopeneffects-ctl status --short",
     "interval": 5,
-    "on-click": "openeffectsctl toggle portrait-blur"
+    "on-click": "vinoopeneffects-ctl toggle portrait-blur"
 }`;
-const keybinds = `bind = $mod, F1, exec, openeffectsctl toggle portrait-blur
-bind = $mod, F2, exec, openeffectsctl react thumbs-up`;
+const keybinds = `bind = $mod, F1, exec, vinoopeneffects-ctl toggle portrait-blur
+bind = $mod, F2, exec, vinoopeneffects-ctl react thumbs-up`;
 
 // "Open in LLM" links: prefill a prompt that points the assistant at this page.
 const pageUrl = new URL("/docs", Astro.site).href;
-const llmPrompt = `Read ${pageUrl} so you can answer questions about the OpenEffects CLI.`;
+const llmPrompt = `Read ${pageUrl} so you can answer questions about the vinoOpenEffects CLI.`;
 const chatgptUrl = `https://chatgpt.com/?hints=search&q=${encodeURIComponent(llmPrompt)}`;
 const claudeUrl = `https://claude.ai/new?q=${encodeURIComponent(llmPrompt)}`;
 ---
 
 <Layout
-  title="OpenEffects - CLI reference"
-  description="openeffectsctl command-line reference: control the OpenEffects camera daemon, toggle effects and script it into your window manager."
+  title="vinoOpenEffects - CLI reference"
+  description="vinoopeneffects-ctl command-line reference: control the vinoOpenEffects camera daemon, toggle effects and script it into your window manager."
 >
   <Header base="/" current="docs" />
 
@@ -99,7 +99,7 @@ const claudeUrl = `https://claude.ai/new?q=${encodeURIComponent(llmPrompt)}`;
         <article class="doc min-w-0">
           <div class="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
             <h1>
-              <code class="bg-transparent! p-0! text-fg!">openeffectsctl</code>
+              <code class="bg-transparent! p-0! text-fg!">vinoopeneffects-ctl</code>
             </h1>
 
             <!-- LLM actions: copy the page as Markdown, or hand it to an assistant -->
@@ -147,8 +147,8 @@ const claudeUrl = `https://claude.ai/new?q=${encodeURIComponent(llmPrompt)}`;
             </div>
           </div>
           <p class="lead">
-            The command-line control surface for the OpenEffects daemon. Every
-            command talks to a running <code>openeffectsd</code> over the session
+            The command-line control surface for the vinoOpenEffects daemon. Every
+            command talks to a running <code>vinoopeneffects-daemon</code> over the session
             bus, so the daemon has to be up first.
           </p>
 
@@ -171,33 +171,33 @@ const claudeUrl = `https://claude.ai/new?q=${encodeURIComponent(llmPrompt)}`;
               </thead>
               <tbody>
                 <tr>
-                  <td><code>openeffectsctl start</code></td>
+                  <td><code>vinoopeneffects-ctl start</code></td>
                   <td
                     >Arm the virtual camera. The real camera opens on demand
                     when a consumer (browser, OBS, …) connects.</td
                   >
                 </tr>
                 <tr>
-                  <td><code>openeffectsctl stop</code></td>
+                  <td><code>vinoopeneffects-ctl stop</code></td>
                   <td>Tear down the pipeline and release the camera.</td>
                 </tr>
                 <tr>
-                  <td><code>openeffectsctl status</code></td>
+                  <td><code>vinoopeneffects-ctl status</code></td>
                   <td
                     >Print status plus capabilities (execution provider, model
                     readiness, output sink).</td
                   >
                 </tr>
                 <tr>
-                  <td><code>openeffectsctl status --short</code></td>
+                  <td><code>vinoopeneffects-ctl status --short</code></td>
                   <td>One-word status, e.g. for Waybar.</td>
                 </tr>
                 <tr>
-                  <td><code>openeffectsctl status --json</code></td>
+                  <td><code>vinoopeneffects-ctl status --json</code></td>
                   <td>Machine-readable status.</td>
                 </tr>
                 <tr>
-                  <td><code>openeffectsctl watch</code></td>
+                  <td><code>vinoopeneffects-ctl watch</code></td>
                   <td
                     >Stream <code>EffectChanged</code> signals until interrupted (Ctrl-C).</td
                   >
@@ -223,18 +223,18 @@ const claudeUrl = `https://claude.ai/new?q=${encodeURIComponent(llmPrompt)}`;
               </thead>
               <tbody>
                 <tr>
-                  <td><code>openeffectsctl autostart enable</code></td>
+                  <td><code>vinoopeneffects-ctl autostart enable</code></td>
                   <td
                     >Start the daemon automatically when the graphical session
                     begins.</td
                   >
                 </tr>
                 <tr>
-                  <td><code>openeffectsctl autostart disable</code></td>
+                  <td><code>vinoopeneffects-ctl autostart disable</code></td>
                   <td>Stop starting it automatically.</td>
                 </tr>
                 <tr>
-                  <td><code>openeffectsctl autostart status</code></td>
+                  <td><code>vinoopeneffects-ctl autostart status</code></td>
                   <td
                     >Show whether autostart is enabled and whether the daemon is
                     running.</td

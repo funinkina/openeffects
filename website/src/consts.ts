@@ -1,4 +1,4 @@
-export const GITHUB = "https://github.com/funinkina/openeffects";
+export const GITHUB = "https://github.com/karanshukla/vinoOpenEffects";
 export const RELEASES = `${GITHUB}/releases/latest`;
 export const LICENSE = `${GITHUB}/blob/main/LICENSE`;
 
@@ -7,7 +7,7 @@ export const VERSION = __APP_VERSION__;
 export const RELEASE_NOTES = `${GITHUB}/releases/tag/${VERSION}`;
 // Local documentation page.
 export const DOCS = "/docs";
-export const FLATHUB = "https://flathub.org/apps/in.co.funinkina.OpenEffects";
+export const FLATHUB = "https://flathub.org/apps/io.github.karanshukla.vinoopeneffects";
 export const GNOME_EXTENSION = "https://extensions.gnome.org/";
 
 export const AUTHOR = "Aryan Kushwaha";

@@ -1,13 +1,13 @@
 //! Thin wrappers over `systemctl --user` for managing the daemon's user unit.
 //!
-//! Shared by the CLI (`openeffectsctl autostart …`) and the GUI (Startup
+//! Shared by the CLI (`vinoopeneffects-ctl autostart …`) and the GUI (Startup
 //! preferences). This is the only place in the workspace that shells out to an
 //! external process, so the unit name and command shape live here.
 
 use std::process::Command;
 
 /// The systemd user unit installed by packaging (`/usr/lib/systemd/user/`).
-pub const UNIT: &str = "openeffectsd.service";
+pub const UNIT: &str = "vinoopeneffects-daemon.service";
 
 fn systemctl(args: &[&str]) -> std::io::Result<std::process::Output> {
     Command::new("systemctl").arg("--user").args(args).output()

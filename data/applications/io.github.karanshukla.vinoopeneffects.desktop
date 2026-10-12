@@ -1,12 +1,12 @@
 [Desktop Entry]
 Type=Application
-Name=OpenEffects
+Name=vinoOpenEffects
 GenericName=Webcam Effects
 Comment=Apply real-time effects to your webcam
-Exec=openeffects
-Icon=in.co.funinkina.OpenEffects
+Exec=vinoopeneffects
+Icon=io.github.karanshukla.vinoopeneffects
 Terminal=false
-StartupWMClass=in.co.funinkina.OpenEffects
+StartupWMClass=io.github.karanshukla.vinoopeneffects
 Categories=AudioVideo;Video;
 Keywords=webcam;camera;effects;background;blur;portrait;virtual camera;
 StartupNotify=true
