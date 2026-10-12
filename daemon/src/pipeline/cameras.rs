@@ -203,43 +203,15 @@ fn better_fps(a: i32, b: i32) -> bool {
 /// so we control which property is set: `target-object` with the stable
 /// `node.name`, not a serial that gets invalidated when nodes reincarnate.
 pub fn build_source_for(info: &CameraInfo) -> Result<gst::Element> {
-    // In the Flatpak sandbox /dev/videoN is not accessible: physical cameras are
-    // only reachable through the camera portal's PipeWire remote, even when a
-    // node still carries v4l2 path metadata. Always capture via the portal fd,
-    // acquiring it now if the grant only landed after the GUI prompted.
-    crate::portal::ensure_camera_blocking();
-    if crate::portal::in_sandbox()
-        && let Some(fd) = crate::portal::dup_camera_fd()
-    {
-        if gst::ElementFactory::find("pipewiresrc").is_none() {
-            return Err(anyhow!("pipewiresrc plugin missing"));
-        }
-        use std::os::fd::IntoRawFd;
-        return gst::ElementFactory::make("pipewiresrc")
-            .property("fd", fd.into_raw_fd())
-            .build()
-            .context("create pipewiresrc (portal)");
-    }
     match info.api.as_str() {
         "pipewire" => {
             if gst::ElementFactory::find("pipewiresrc").is_none() {
                 return Err(anyhow!("pipewiresrc plugin missing"));
             }
-            let builder = gst::ElementFactory::make("pipewiresrc");
-            // In the Flatpak sandbox, capture through the camera portal's PipeWire
-            // remote (this is what lights up the shell's camera indicator).
-            // GStreamer takes ownership of the fd, so hand it a per-source dup.
-            // The portal remote exposes only the granted camera(s) under its own
-            // node ids, so `target-object` (a host-socket node.name) does not
-            // apply there — the portal's default camera is used.
-            let builder = match crate::portal::dup_camera_fd() {
-                Some(fd) => {
-                    use std::os::fd::IntoRawFd;
-                    builder.property("fd", fd.into_raw_fd())
-                }
-                None => builder.property("target-object", info.id.as_str()),
-            };
-            builder.build().context("create pipewiresrc")
+            gst::ElementFactory::make("pipewiresrc")
+                .property("target-object", info.id.as_str())
+                .build()
+                .context("create pipewiresrc")
         }
         "v4l2" => {
             if gst::ElementFactory::find("v4l2src").is_none() {

@@ -1,7 +1,6 @@
 mod dbus_server;
 mod inference;
 mod pipeline;
-mod portal;
 mod state;
 
 use std::sync::Arc;
@@ -152,13 +151,6 @@ async fn run() -> anyhow::Result<()> {
         }
     });
 
-    // Flatpak: let the sync pipeline thread reach the portal, try an early camera
-    // grab (lands only if already granted — the GUI prompts the user otherwise),
-    // and tell the shell we're a background app.
-    portal::set_runtime_handle(tokio::runtime::Handle::current());
-    portal::ensure_camera().await;
-    portal::set_background_status("Ready to apply webcam effects").await;
-
     if start_pipeline {
         let app = state.read().await.app.clone();
         {
@@ -169,8 +161,7 @@ async fn run() -> anyhow::Result<()> {
     }
 
     info!("vinoopeneffects-daemon is running on the session bus");
-    // SIGTERM covers systemd and manual kills; GNOME Shell's "Background Apps
-    // -> Quit" ends up as `flatpak kill` (SIGKILL), which needs no handler.
+    // SIGTERM covers systemd and manual kills.
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
         .context("install SIGTERM handler")?;
     tokio::select! {

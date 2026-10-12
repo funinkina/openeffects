@@ -97,7 +97,6 @@ Your config and downloaded models are migrated automatically on first start of t
 
 ### Remote repositories (coming soon)
 
-- **Flatpak (Flathub)** — _coming soon_ (PipeWire virtual camera only; `v4l2loopback` is unavailable inside the sandbox).
 - **Arch Linux (AUR)** — _coming soon_: `yay -S vinoopeneffects`
 - **Fedora (COPR)** — _coming soon_: `dnf copr enable <user>/vinoopeneffects && dnf install vinoopeneffects`
 - **Ubuntu / Debian (PPA)** — _coming soon_: `add-apt-repository ppa:<user>/vinoopeneffects && apt install vinoopeneffects`
