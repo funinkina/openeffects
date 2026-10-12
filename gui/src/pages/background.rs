@@ -510,7 +510,7 @@ fn image_box_child(class: &str) -> gtk::Box {
 fn ensure_preset_images() -> Vec<(&'static str, PathBuf)> {
     let dir = dirs::data_dir()
         .unwrap_or_else(std::env::temp_dir)
-        .join("openeffects/backgrounds");
+        .join("vinoopeneffects/backgrounds");
     let _ = std::fs::create_dir_all(&dir);
     BG_IMAGE_PRESETS
         .iter()

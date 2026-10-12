@@ -1,16 +1,16 @@
 [package]
-name = "openeffects"
+name = "vinoopeneffects"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 
 [[bin]]
-name = "openeffects"
+name = "vinoopeneffects"
 path = "src/main.rs"
 
 [dependencies]
-shared = { path = "../shared" }
+shared = { package = "vinoopeneffects-shared", path = "../shared" }
 anyhow.workspace = true
 dirs.workspace = true
 serde.workspace = true

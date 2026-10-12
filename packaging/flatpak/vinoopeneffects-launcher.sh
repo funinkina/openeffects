@@ -1,5 +1,5 @@
 #!/bin/sh
-# Flatpak entry point for OpenEffects.
+# Flatpak entry point for vinoOpenEffects.
 #
 # No systemd inside the sandbox, so this launcher starts both binaries. The
 # process layout is load-bearing: libflatpak's flatpak_instance_is_running()
@@ -18,10 +18,10 @@
 # falls back to `flatpak kill`, i.e. SIGKILL.
 #
 # To run the daemon headless (no GUI):
-#   flatpak run --command=openeffectsd in.co.funinkina.OpenEffects --start
+#   flatpak run --command=vinoopeneffects-daemon io.github.karanshukla.vinoopeneffects --start
 set -eu
 
-BUS_NAME=in.co.funinkina.Daemon
+BUS_NAME=io.github.karanshukla.vinoopeneffects.Daemon
 
 owned() {
     gdbus call --session \
@@ -33,8 +33,8 @@ owned() {
 
 if owned; then
     # Daemon already running in another instance: GUI-only launch.
-    exec openeffects "$@"
+    exec vinoopeneffects "$@"
 fi
 
-openeffects "$@" &
-exec openeffectsd --start
+vinoopeneffects "$@" &
+exec vinoopeneffects-daemon --start

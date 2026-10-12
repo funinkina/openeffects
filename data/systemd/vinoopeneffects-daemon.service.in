@@ -1,12 +1,12 @@
 [Unit]
-Description=OpenEffects webcam effects daemon
+Description=vinoOpenEffects webcam effects daemon
 After=pipewire.service wireplumber.service graphical-session.target
 Requires=pipewire.service
 
 [Service]
 Type=dbus
-BusName=in.co.funinkina.Daemon
-ExecStart=@bindir@/openeffectsd --start
+BusName=io.github.karanshukla.vinoopeneffects.Daemon
+ExecStart=@bindir@/vinoopeneffects-daemon --start
 Restart=on-failure
 
 [Install]

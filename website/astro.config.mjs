@@ -11,7 +11,7 @@ try {
 }
 
 export default defineConfig({
-  site: 'https://openeffects.funinkina.co.in',
+  site: 'https://karanshukla.github.io/vinoOpenEffects',
   vite: {
     plugins: [tailwindcss()],
     define: {

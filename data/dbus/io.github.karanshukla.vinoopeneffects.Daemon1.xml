@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
-<node name="/in/co/funinkina/Daemon">
-  <interface name="in.co.funinkina.Daemon1">
+<node name="/io/github/karanshukla/vinoopeneffects/Daemon">
+  <interface name="io.github.karanshukla.vinoopeneffects.Daemon1">
 
     <method name="Start" />
     <method name="Stop" />

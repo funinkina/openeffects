@@ -111,7 +111,7 @@ async fn run(
             // the daemon we just asked to quit (D-Bus / systemd activation).
             Ok(()) => break,
             Err(err) => {
-                tracing::warn!(%err, "lost connection to openeffectsd, retrying");
+                tracing::warn!(%err, "lost connection to vinoopeneffects-daemon, retrying");
                 let _ = update_tx.send(UiUpdate::Disconnected).await;
                 tokio::time::sleep(Duration::from_secs(2)).await;
             }

@@ -3,7 +3,7 @@
 //! every page and never covers the page controls or the narrow view-switcher.
 //! A header toggle button reveals it. Revealing starts a GStreamer pipeline
 //! that consumes the daemon's virtual-camera node
-//! (`pipewiresrc target-object=openeffects`) and renders it into a
+//! (`pipewiresrc target-object=vinoopeneffects`) and renders it into a
 //! `gtk::Picture` via `gtk4paintablesink`; hiding it tears the pipeline down so
 //! the real camera is released (the daemon's on-demand model keeps the camera
 //! open only while a consumer is linked).
@@ -140,7 +140,7 @@ impl Preview {
         }
     }
 
-    /// `pipewiresrc target-object=openeffects ! videoconvert ! gtk4paintablesink`,
+    /// `pipewiresrc target-object=vinoopeneffects ! videoconvert ! gtk4paintablesink`,
     /// wiring the sink's paintable into the `Picture`.
     fn build_pipeline(&self) -> Result<gst::Pipeline, glib::BoolError> {
         let src = gst::ElementFactory::make("pipewiresrc")

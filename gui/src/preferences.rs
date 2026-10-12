@@ -42,7 +42,7 @@ pub fn build(
     // Camera
     let camera_group = pref_group(
         "Camera",
-        "Choose the physical camera OpenEffects captures from",
+        "Choose the physical camera vinoOpenEffects captures from",
     );
     let camera_combo = adw::ComboRow::builder()
         .title("Source")
@@ -91,7 +91,7 @@ pub fn build(
     page.add(&models_group);
 
     // Startup
-    let startup = pref_group("Startup", "Control when the OpenEffects daemon runs");
+    let startup = pref_group("Startup", "Control when the vinoOpenEffects daemon runs");
 
     // No systemd unit inside the sandbox, so the boot-autostart row is desktop-only.
     let in_flatpak = std::env::var_os("FLATPAK_ID").is_some();

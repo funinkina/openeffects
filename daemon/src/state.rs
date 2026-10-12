@@ -84,7 +84,7 @@ impl DaemonState {
         values.insert("node_name".into(), str_value(&self.virtual_camera_name));
         values.insert(
             "description".into(),
-            str_value("OpenEffects Virtual Camera"),
+            str_value("vinoOpenEffects Virtual Camera"),
         );
         values.insert("sink".into(), str_value(&self.output_sink));
         if self.output_sink.starts_with("pipewire:") {

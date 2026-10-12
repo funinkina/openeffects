@@ -251,7 +251,7 @@ export function CenterStageSection(client) {
 }
 
 function ensurePreset(extPath, file) {
-    const destDir = GLib.build_filenamev([GLib.get_user_data_dir(), 'openeffects', 'backgrounds']);
+    const destDir = GLib.build_filenamev([GLib.get_user_data_dir(), 'vinoopeneffects', 'backgrounds']);
     GLib.mkdir_with_parents(destDir, 0o755);
     const dest = GLib.build_filenamev([destDir, file]);
     const destFile = Gio.File.new_for_path(dest);
@@ -260,7 +260,7 @@ function ensurePreset(extPath, file) {
         try {
             src.copy(destFile, Gio.FileCopyFlags.NONE, null, null);
         } catch (e) {
-            logError(e, 'OpenEffects: background preset copy failed');
+            logError(e, 'vinoOpenEffects: background preset copy failed');
         }
     }
     return dest;
@@ -278,7 +278,7 @@ function SwatchGrid(extPath, onPick, onAdd) {
         b.set_style(`background-image: url("file://${thumb}"); background-size: cover;`);
         b.connect('clicked', () => onPick(ensurePreset(extPath, file)));
         imgRow.add_child(b);
-        byValue.set(GLib.build_filenamev([GLib.get_user_data_dir(), 'openeffects', 'backgrounds', file]).toLowerCase(), b);
+        byValue.set(GLib.build_filenamev([GLib.get_user_data_dir(), 'vinoopeneffects', 'backgrounds', file]).toLowerCase(), b);
     }
     box.add_child(imgRow);
 

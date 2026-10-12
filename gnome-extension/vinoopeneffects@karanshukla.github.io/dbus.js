@@ -1,19 +1,19 @@
-// D-Bus client for the OpenEffects daemon (session bus in.co.funinkina.Daemon).
+// D-Bus client for the vinoOpenEffects daemon (session bus io.github.karanshukla.vinoopeneffects.Daemon).
 // Wraps the three daemon interfaces, exposes a flat state snapshot via refresh(),
 // and emits a single 'changed' signal whenever the daemon's state moves so the UI
-// can re-sync (covers changes made by the GTK app or openeffectsctl too).
+// can re-sync (covers changes made by the GTK app or vinoopeneffects-ctl too).
 
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 
-export const BUS_NAME = 'in.co.funinkina.Daemon';
-export const OBJECT_PATH = '/in/co/funinkina/Daemon';
+export const BUS_NAME = 'io.github.karanshukla.vinoopeneffects.Daemon';
+export const OBJECT_PATH = '/io/github/karanshukla/vinoopeneffects/Daemon';
 
 // Interface XML copied verbatim from data/dbus/*.xml. Only what the UI consumes.
 const DAEMON_XML = `
 <node>
-  <interface name="in.co.funinkina.Daemon1">
+  <interface name="io.github.karanshukla.vinoopeneffects.Daemon1">
     <method name="Start" />
     <method name="Stop" />
     <method name="Quit" />
@@ -25,7 +25,7 @@ const DAEMON_XML = `
 
 const EFFECTS_XML = `
 <node>
-  <interface name="in.co.funinkina.Effects1">
+  <interface name="io.github.karanshukla.vinoopeneffects.Effects1">
     <method name="ListEffects"><arg name="effect_ids" type="as" direction="out" /></method>
     <method name="SetEnabled"><arg name="id" type="s" direction="in" /><arg name="on" type="b" direction="in" /></method>
     <method name="SetParam"><arg name="id" type="s" direction="in" /><arg name="key" type="s" direction="in" /><arg name="value" type="v" direction="in" /></method>
@@ -41,7 +41,7 @@ const EFFECTS_XML = `
 
 const DEVICES_XML = `
 <node>
-  <interface name="in.co.funinkina.Devices1">
+  <interface name="io.github.karanshukla.vinoopeneffects.Devices1">
     <method name="ListCameras"><arg name="cameras" type="aa{sv}" direction="out" /></method>
     <method name="SelectCamera"><arg name="id" type="s" direction="in" /></method>
     <property name="ActiveCamera" type="s" access="read" />
@@ -68,7 +68,7 @@ export const Client = GObject.registerClass({
         'changed': {},
         'availability-changed': { param_types: [GObject.TYPE_BOOLEAN] },
     },
-}, class OpenEffectsClient extends GObject.Object {
+}, class vinoOpenEffectsClient extends GObject.Object {
     _init() {
         super._init();
         this._available = false;
@@ -85,7 +85,7 @@ export const Client = GObject.registerClass({
             this._devices = new DevicesProxy(bus, BUS_NAME, OBJECT_PATH, null, null, flags);
             this._proxies = [this._daemon, this._effects, this._devices];
         } catch (e) {
-            logError(e, 'OpenEffects: failed to create D-Bus proxies');
+            logError(e, 'vinoOpenEffects: failed to create D-Bus proxies');
         }
 
         // Daemon-side state changes -> re-sync the UI.
@@ -136,10 +136,10 @@ export const Client = GObject.registerClass({
         try {
             proxy[method](...args, (_ret, err) => {
                 if (err)
-                    logError(err, `OpenEffects: ${method} failed`);
+                    logError(err, `vinoOpenEffects: ${method} failed`);
             });
         } catch (e) {
-            logError(e, `OpenEffects: ${method} threw`);
+            logError(e, `vinoOpenEffects: ${method} threw`);
         }
     }
 
@@ -168,7 +168,7 @@ export const Client = GObject.registerClass({
             Gio.DBusCallFlags.NONE, -1, null,
             (conn, res) => {
                 try { conn.call_finish(res); }
-                catch (e) { logError(e, 'OpenEffects: StartServiceByName failed'); }
+                catch (e) { logError(e, 'vinoOpenEffects: StartServiceByName failed'); }
             });
     }
 
@@ -218,7 +218,7 @@ export const Client = GObject.registerClass({
             };
             state.reactions = { enabled: !!get(d, 'reactions.enabled', false) };
         } catch (e) {
-            logError(e, 'OpenEffects: GetAllState failed');
+            logError(e, 'vinoOpenEffects: GetAllState failed');
         }
 
         try {
@@ -236,7 +236,7 @@ export const Client = GObject.registerClass({
                 return { id: cam.id ?? '', name: cam.name ?? cam.id ?? '', active: !!cam.active };
             });
         } catch (e) {
-            logError(e, 'OpenEffects: ListCameras failed');
+            logError(e, 'vinoOpenEffects: ListCameras failed');
         }
 
         try {

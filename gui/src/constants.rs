@@ -1,12 +1,12 @@
 //! Static lookup tables shared across pages: app id, toggle-group option
 //! lists, built-in presets, and the view-stack page descriptors.
 
-pub const APP_ID: &str = "in.co.funinkina.OpenEffects";
+pub const APP_ID: &str = "io.github.karanshukla.vinoopeneffects";
 
 /// PipeWire node name the daemon advertises the virtual camera under. The
 /// preview pipeline targets this to show the processed output. Must match the
 /// daemon's `PIPEWIRE_NODE_NAME`.
-pub const VCAM_NODE_NAME: &str = "openeffects";
+pub const VCAM_NODE_NAME: &str = "vinoopeneffects";
 
 /// Center Stage framing levels (stored value, display label). "Off" is the
 /// page's master switch, so it is not a framing choice here.

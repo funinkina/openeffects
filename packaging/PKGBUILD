@@ -1,13 +1,14 @@
-# Maintainer: Aryan <hello@funinkina.co.in>
-# Contributor: Aryan <hello@funinkina.co.in>
+# Maintainer: Karan Shukla <3769191+karanshukla@users.noreply.github.com>
+# Contributor: Aryan <hello@funinkina.co.in>  (upstream: funinkina/openeffects)
 
-pkgbase=openeffects
-pkgname=('openeffectsd' 'openeffectsctl' 'openeffects')
+pkgbase=vinoopeneffects
+_reponame=vinoOpenEffects  # GitHub archive tarballs unpack to <repo>-<ver>, case preserved
+pkgname=('vinoopeneffects-daemon' 'vinoopeneffects-ctl' 'vinoopeneffects')
 pkgver=0.1.2
 pkgrel=1
 pkgdesc='Real-time webcam effects for Linux (PipeWire virtual camera)'
 arch=('x86_64')
-url='https://github.com/funinkina/openeffects'
+url='https://github.com/karanshukla/vinoOpenEffects'
 license=('GPL-3.0-or-later')
 makedepends=(
   'rust'
@@ -42,69 +43,26 @@ sha256sums=(
 )
 
 prepare() {
-  cd "$srcdir/$pkgbase-$pkgver"
+  cd "$srcdir/$_reponame-$pkgver"
 
-  # --- Rename data files (their paths are baked into packaging) ---
-
-  # D-Bus introspection XMLs
-  for src in data/dbus/org.openeffects.*.xml; do
-    mv "$src" "${src/org.openeffects/in.co.funinkina}"
-  done
-
-  # D-Bus service template
-  mv data/dbus-services/org.openeffects.Daemon.service.in \
-     data/dbus-services/in.co.funinkina.Daemon.service.in
-
-  # Desktop file + icon (SVG is pure markup, no identifiers)
-  mv data/applications/org.openeffects.OpenEffects.desktop \
-     data/applications/in.co.funinkina.OpenEffects.desktop
-  mv data/icons/org.openeffects.OpenEffects.svg \
-     data/icons/in.co.funinkina.OpenEffects.svg
-
-  # --- Patch D-Bus identifiers in every file that mentions them ---
-
-  # Dotted bus / interface / app names
-  sed -i 's/org\.openeffects/in.co.funinkina/g' \
-    data/dbus/in.co.funinkina.Daemon1.xml \
-    data/dbus/in.co.funinkina.Effects1.xml \
-    data/dbus/in.co.funinkina.Devices1.xml \
-    data/dbus-services/in.co.funinkina.Daemon.service.in \
-    data/applications/in.co.funinkina.OpenEffects.desktop \
-    data/systemd/openeffectsd.service.in \
-    shared/src/dbus.rs \
-    daemon/src/dbus_server.rs \
-    gui/src/constants.rs \
-    daemon/build.rs \
-    cli/build.rs \
-    gui/build.rs \
-    tests/integration/dbus_roundtrip.rs
-
-  # D-Bus object paths (/org/openeffects/ -> /in/co/funinkina/)
-  sed -i 's|/org/openeffects/|/in/co/funinkina/|g' \
-    data/dbus/in.co.funinkina.Daemon1.xml \
-    data/dbus/in.co.funinkina.Effects1.xml \
-    data/dbus/in.co.funinkina.Devices1.xml \
-    shared/src/dbus.rs \
-    daemon/build.rs \
-    cli/build.rs \
-    gui/build.rs \
-    tests/integration/dbus_roundtrip.rs
-
-  # --- Render service templates (@bindir@ -> /usr/bin) ---
-  sed 's|@bindir@|/usr/bin|g' data/dbus-services/in.co.funinkina.Daemon.service.in \
-    > data/dbus-services/in.co.funinkina.Daemon.service
-  sed 's|@bindir@|/usr/bin|g' data/systemd/openeffectsd.service.in \
-    > data/systemd/openeffectsd.service
+  # Render service templates (@bindir@ -> /usr/bin)
+  sed 's|@bindir@|/usr/bin|g' \
+    data/dbus-services/io.github.karanshukla.vinoopeneffects.Daemon.service.in \
+    > data/dbus-services/io.github.karanshukla.vinoopeneffects.Daemon.service
+  sed 's|@bindir@|/usr/bin|g' data/systemd/vinoopeneffects-daemon.service.in \
+    > data/systemd/vinoopeneffects-daemon.service
 }
 
 build() {
-  cd "$srcdir/$pkgbase-$pkgver"
+  cd "$srcdir/$_reponame-$pkgver"
 
   export CARGO_BUILD_JOBS="$(nproc)"
   cargo build --release --workspace --locked
 }
 
-package_openeffectsd() {
+package_vinoopeneffects-daemon() {
+  replaces=('openeffectsd')
+  conflicts=('openeffectsd')
   depends=(
     'pipewire'
     'wireplumber'
@@ -115,72 +73,76 @@ package_openeffectsd() {
     'dbus'
   )
 
-  cd "$srcdir/$pkgbase-$pkgver"
+  cd "$srcdir/$_reponame-$pkgver"
 
-  install -Dm755 target/release/openeffectsd "$pkgdir/usr/bin/openeffectsd"
+  install -Dm755 target/release/vinoopeneffects-daemon "$pkgdir/usr/bin/vinoopeneffects-daemon"
 
-  install -Dm644 data/dbus/in.co.funinkina.Daemon1.xml \
-    "$pkgdir/usr/share/dbus-1/interfaces/in.co.funinkina.Daemon1.xml"
-  install -Dm644 data/dbus/in.co.funinkina.Effects1.xml \
-    "$pkgdir/usr/share/dbus-1/interfaces/in.co.funinkina.Effects1.xml"
-  install -Dm644 data/dbus/in.co.funinkina.Devices1.xml \
-    "$pkgdir/usr/share/dbus-1/interfaces/in.co.funinkina.Devices1.xml"
+  install -Dm644 data/dbus/io.github.karanshukla.vinoopeneffects.Daemon1.xml \
+    "$pkgdir/usr/share/dbus-1/interfaces/io.github.karanshukla.vinoopeneffects.Daemon1.xml"
+  install -Dm644 data/dbus/io.github.karanshukla.vinoopeneffects.Effects1.xml \
+    "$pkgdir/usr/share/dbus-1/interfaces/io.github.karanshukla.vinoopeneffects.Effects1.xml"
+  install -Dm644 data/dbus/io.github.karanshukla.vinoopeneffects.Devices1.xml \
+    "$pkgdir/usr/share/dbus-1/interfaces/io.github.karanshukla.vinoopeneffects.Devices1.xml"
 
-  install -Dm644 data/dbus-services/in.co.funinkina.Daemon.service \
-    "$pkgdir/usr/share/dbus-1/services/in.co.funinkina.Daemon.service"
+  install -Dm644 data/dbus-services/io.github.karanshukla.vinoopeneffects.Daemon.service \
+    "$pkgdir/usr/share/dbus-1/services/io.github.karanshukla.vinoopeneffects.Daemon.service"
 
-  install -Dm644 data/systemd/openeffectsd.service \
-    "$pkgdir/usr/lib/systemd/user/openeffectsd.service"
+  install -Dm644 data/systemd/vinoopeneffects-daemon.service \
+    "$pkgdir/usr/lib/systemd/user/vinoopeneffects-daemon.service"
 
   install -Dm644 "$srcdir/yunet.onnx" \
-    "$pkgdir/usr/share/openeffects/models/yunet/face_detection_yunet_2026may.onnx"
+    "$pkgdir/usr/share/vinoopeneffects/models/yunet/face_detection_yunet_2026may.onnx"
   install -Dm644 data/models/yunet/manifest.toml \
-    "$pkgdir/usr/share/openeffects/models/yunet/manifest.toml"
+    "$pkgdir/usr/share/vinoopeneffects/models/yunet/manifest.toml"
 
   install -Dm644 "$srcdir/selfie_segmentation.onnx" \
-    "$pkgdir/usr/share/openeffects/models/selfie_segmentation/selfie_segmentation.onnx"
+    "$pkgdir/usr/share/vinoopeneffects/models/selfie_segmentation/selfie_segmentation.onnx"
   install -Dm644 data/models/selfie_segmentation/manifest.toml \
-    "$pkgdir/usr/share/openeffects/models/selfie_segmentation/manifest.toml"
+    "$pkgdir/usr/share/vinoopeneffects/models/selfie_segmentation/manifest.toml"
 
   install -Dm644 "$srcdir/hand_landmark.onnx" \
-    "$pkgdir/usr/share/openeffects/models/hand_landmark/handpose_estimation_mediapipe_2023feb.onnx"
+    "$pkgdir/usr/share/vinoopeneffects/models/hand_landmark/handpose_estimation_mediapipe_2023feb.onnx"
   install -Dm644 data/models/hand_landmark/manifest.toml \
-    "$pkgdir/usr/share/openeffects/models/hand_landmark/manifest.toml"
+    "$pkgdir/usr/share/vinoopeneffects/models/hand_landmark/manifest.toml"
 
   install -Dm644 "$srcdir/palm_detection.onnx" \
-    "$pkgdir/usr/share/openeffects/models/palm_detection/palm_detection_mediapipe_2023feb.onnx"
+    "$pkgdir/usr/share/vinoopeneffects/models/palm_detection/palm_detection_mediapipe_2023feb.onnx"
   install -Dm644 data/models/palm_detection/manifest.toml \
-    "$pkgdir/usr/share/openeffects/models/palm_detection/manifest.toml"
+    "$pkgdir/usr/share/vinoopeneffects/models/palm_detection/manifest.toml"
 
   install -Dm644 LICENSE \
-    "$pkgdir/usr/share/licenses/openeffectsd/LICENSE"
+    "$pkgdir/usr/share/licenses/vinoopeneffects-daemon/LICENSE"
   install -Dm644 "$srcdir/LICENSE.Apache-2.0" \
-    "$pkgdir/usr/share/licenses/openeffectsd/LICENSE.Apache-2.0"
+    "$pkgdir/usr/share/licenses/vinoopeneffects-daemon/LICENSE.Apache-2.0"
   install -Dm644 "$srcdir/LICENSE.MIT" \
-    "$pkgdir/usr/share/licenses/openeffectsd/LICENSE.MIT"
+    "$pkgdir/usr/share/licenses/vinoopeneffects-daemon/LICENSE.MIT"
 }
 
-package_openeffectsctl() {
-  depends=('openeffectsd' 'dbus')
+package_vinoopeneffects-ctl() {
+  replaces=('openeffectsctl')
+  conflicts=('openeffectsctl')
+  depends=('vinoopeneffects-daemon' 'dbus')
 
-  cd "$srcdir/$pkgbase-$pkgver"
+  cd "$srcdir/$_reponame-$pkgver"
 
-  install -Dm755 target/release/openeffectsctl "$pkgdir/usr/bin/openeffectsctl"
+  install -Dm755 target/release/vinoopeneffects-ctl "$pkgdir/usr/bin/vinoopeneffects-ctl"
 
-  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/openeffectsctl/LICENSE"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/vinoopeneffects-ctl/LICENSE"
 }
 
-package_openeffects() {
-  depends=('openeffectsd' 'gtk4' 'libadwaita')
+package_vinoopeneffects() {
+  replaces=('openeffects')
+  conflicts=('openeffects')
+  depends=('vinoopeneffects-daemon' 'gtk4' 'libadwaita')
 
-  cd "$srcdir/$pkgbase-$pkgver"
+  cd "$srcdir/$_reponame-$pkgver"
 
-  install -Dm755 target/release/openeffects "$pkgdir/usr/bin/openeffects"
+  install -Dm755 target/release/vinoopeneffects "$pkgdir/usr/bin/vinoopeneffects"
 
-  install -Dm644 data/icons/in.co.funinkina.OpenEffects.svg \
-    "$pkgdir/usr/share/icons/hicolor/scalable/apps/in.co.funinkina.OpenEffects.svg"
-  install -Dm644 data/applications/in.co.funinkina.OpenEffects.desktop \
-    "$pkgdir/usr/share/applications/in.co.funinkina.OpenEffects.desktop"
+  install -Dm644 data/icons/io.github.karanshukla.vinoopeneffects.svg \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/io.github.karanshukla.vinoopeneffects.svg"
+  install -Dm644 data/applications/io.github.karanshukla.vinoopeneffects.desktop \
+    "$pkgdir/usr/share/applications/io.github.karanshukla.vinoopeneffects.desktop"
 
-  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/openeffects/LICENSE"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/vinoopeneffects/LICENSE"
 }

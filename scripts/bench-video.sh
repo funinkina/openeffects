@@ -2,7 +2,7 @@
 # CPU vs NPU comparison on a real video clip: latency, throughput, CPU time per
 # frame, whole-system power (battery) and package energy (RAPL, root only).
 #
-# Needs the `npu` build of openeffectsd, an onnxruntime-openvino (ovfetch), and
+# Needs the `npu` build of vinoopeneffects-daemon, an onnxruntime-openvino (ovfetch), and
 # the models in the per-user model dir. Run on battery for the power numbers.
 #
 #   scripts/bench-video.sh [CLIP] [SECONDS]
@@ -11,11 +11,11 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-oed="${OED:-$repo_root/target/release/openeffectsd}"
-export ORT_DYLIB_PATH="${ORT_DYLIB_PATH:-$HOME/.local/lib/openeffects-ort/libonnxruntime.so}"
+oed="${OED:-$repo_root/target/release/vinoopeneffects-daemon}"
+export ORT_DYLIB_PATH="${ORT_DYLIB_PATH:-$HOME/.local/lib/vinoopeneffects-ort/libonnxruntime.so}"
 secs="${2:-45}"
 fps="${FPS:-30}"
-cache="${XDG_CACHE_HOME:-$HOME/.cache}/openeffects-bench"
+cache="${XDG_CACHE_HOME:-$HOME/.cache}/vinoopeneffects-bench"
 mkdir -p "$cache"
 
 # Public-domain interview (Wikimedia Commons), 1280x720 VP8. Title cards sit
@@ -27,7 +27,7 @@ if [ ! -f "$clip" ]; then
     full="$cache/liz.webm"
     if [ ! -f "$full" ]; then
         echo "downloading stock clip to $full"
-        curl -fsSL -A "openeffects-bench" "$src_url" -o "$full.tmp"
+        curl -fsSL -A "vinoopeneffects-bench" "$src_url" -o "$full.tmp"
         [ "$(sha256sum "$full.tmp" | cut -d' ' -f1)" = "$src_sha" ] \
             || { echo "sha256 mismatch for stock clip" >&2; rm -f "$full.tmp"; exit 1; }
         mv "$full.tmp" "$full"
@@ -39,8 +39,8 @@ bat=/sys/class/power_supply/BAT0
 rapl=/sys/class/powercap/intel-rapl:0/energy_uj
 npu_busy=/sys/class/accel/accel0/device/npu_busy_time_us
 log="$(mktemp)"
-trap 'rm -f "$log"; systemctl --user start openeffectsd 2>/dev/null || true' EXIT
-systemctl --user stop openeffectsd 2>/dev/null || true
+trap 'rm -f "$log"; systemctl --user start vinoopeneffects-daemon 2>/dev/null || true' EXIT
+systemctl --user stop vinoopeneffects-daemon 2>/dev/null || true
 
 on_battery=0
 [ "$(cat $bat/status 2>/dev/null)" = "Discharging" ] && on_battery=1
@@ -71,7 +71,7 @@ run_one() {
     if [ "$mode" = paced ]; then args="--fps $fps --seconds $secs"; else args="--seconds 20"; fi
     : > "$log"
     nb0=$(cat $npu_busy 2>/dev/null || echo 0)
-    OE_EP="$ep" "$oed" --bench-video "$clip" $args > "$log" 2>&1 &
+    VINOOPENEFFECTS_EP="$ep" "$oed" --bench-video "$clip" $args > "$log" 2>&1 &
     local pid=$!
     until grep -q '^# measuring' "$log"; do
         kill -0 $pid 2>/dev/null || { cat "$log" >&2; return 1; }

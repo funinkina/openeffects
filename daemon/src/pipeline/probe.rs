@@ -4,4 +4,4 @@
 //! provider advertises it, `cameras` skips it during enumeration, and the D-Bus
 //! state reports it).
 
-pub const PIPEWIRE_NODE_NAME: &str = "openeffects";
+pub const PIPEWIRE_NODE_NAME: &str = "vinoopeneffects";

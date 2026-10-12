@@ -1,4 +1,4 @@
-project('openeffects', 'rust',
+project('vinoopeneffects', 'rust',
   version: '0.1.4',
   meson_version: '>=1.2.0',
   license: 'GPL-3.0-or-later',
@@ -9,22 +9,22 @@ cargo_target_dir = meson.project_source_root() / 'target' / cargo_profile
 bindir = get_option('bindir')
 datadir = get_option('datadir')
 
-foreach bin : ['openeffectsd', 'openeffectsctl', 'openeffects']
+foreach bin : ['vinoopeneffects-daemon', 'vinoopeneffects-ctl', 'vinoopeneffects']
   install_data(cargo_target_dir / bin, install_dir: bindir, install_mode: 'rwxr-xr-x')
 endforeach
 
 install_data(
-  'data/dbus/in.co.funinkina.Daemon1.xml',
-  'data/dbus/in.co.funinkina.Effects1.xml',
-  'data/dbus/in.co.funinkina.Devices1.xml',
+  'data/dbus/io.github.karanshukla.vinoopeneffects.Daemon1.xml',
+  'data/dbus/io.github.karanshukla.vinoopeneffects.Effects1.xml',
+  'data/dbus/io.github.karanshukla.vinoopeneffects.Devices1.xml',
   install_dir: datadir / 'dbus-1/interfaces',
 )
 
 dbus_service_conf = configuration_data()
 dbus_service_conf.set('bindir', get_option('prefix') / bindir)
 configure_file(
-  input: 'data/dbus-services/in.co.funinkina.Daemon.service.in',
-  output: 'in.co.funinkina.Daemon.service',
+  input: 'data/dbus-services/io.github.karanshukla.vinoopeneffects.Daemon.service.in',
+  output: 'io.github.karanshukla.vinoopeneffects.Daemon.service',
   configuration: dbus_service_conf,
   install_dir: datadir / 'dbus-1/services',
 )
@@ -32,19 +32,19 @@ configure_file(
 systemd_service_conf = configuration_data()
 systemd_service_conf.set('bindir', get_option('prefix') / bindir)
 configure_file(
-  input: 'data/systemd/openeffectsd.service.in',
-  output: 'openeffectsd.service',
+  input: 'data/systemd/vinoopeneffects-daemon.service.in',
+  output: 'vinoopeneffects-daemon.service',
   configuration: systemd_service_conf,
   install_dir: datadir / 'systemd/user',
 )
 
 install_data(
-  'data/icons/in.co.funinkina.OpenEffects.svg',
+  'data/icons/io.github.karanshukla.vinoopeneffects.svg',
   install_dir: datadir / 'icons/hicolor/scalable/apps',
 )
 
 install_data(
-  'data/applications/in.co.funinkina.OpenEffects.desktop',
+  'data/applications/io.github.karanshukla.vinoopeneffects.desktop',
   install_dir: datadir / 'applications',
 )
 

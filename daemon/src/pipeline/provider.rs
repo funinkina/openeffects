@@ -90,7 +90,7 @@ fn run_inner(
 
     let stream = pw::stream::StreamRc::new(
         core,
-        "openeffects-source",
+        "vinoopeneffects-source",
         properties! {
             *pw::keys::MEDIA_TYPE => "Video",
             *pw::keys::MEDIA_CATEGORY => "Source",
@@ -99,7 +99,7 @@ fn run_inner(
             // a *camera* that consumers can pick, rather than a generic stream.
             *pw::keys::MEDIA_CLASS => "Video/Source",
             *pw::keys::NODE_NAME => PIPEWIRE_NODE_NAME,
-            *pw::keys::NODE_DESCRIPTION => "OpenEffects Virtual Camera",
+            *pw::keys::NODE_DESCRIPTION => "vinoOpenEffects Virtual Camera",
         },
     )?;
 

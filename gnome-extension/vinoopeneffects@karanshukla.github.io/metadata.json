@@ -1,0 +1,9 @@
+{
+  "uuid": "vinoopeneffects@karanshukla.github.io",
+  "name": "vinoOpenEffects Control Center",
+  "description": "Top-bar control center for the vinoOpenEffects webcam daemon. Toggle the global bypass, enable Center Stage / Background / Studio Light / Reactions, tune their settings and fire reactions — all over D-Bus, with no app window. Requires the vinoopeneffects-daemon daemon (io.github.karanshukla.vinoopeneffects.Daemon).",
+  "shell-version": ["45", "46", "47", "48", "49", "50"],
+  "url": "https://github.com/karanshukla/vinoOpenEffects",
+  "version": 1,
+  "version-name": "0.1.0"
+}

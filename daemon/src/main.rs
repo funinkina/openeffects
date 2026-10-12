@@ -162,7 +162,7 @@ async fn run() -> anyhow::Result<()> {
         pipeline_tx.send(PipelineCommand::Start(app)).await?;
     }
 
-    info!("openeffectsd is running on the session bus");
+    info!("vinoopeneffects-daemon is running on the session bus");
     // SIGTERM covers systemd and manual kills; GNOME Shell's "Background Apps
     // -> Quit" ends up as `flatpak kill` (SIGKILL), which needs no handler.
     let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
