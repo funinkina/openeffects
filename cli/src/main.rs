@@ -116,6 +116,13 @@ enum Command {
         /// Background brightness (-100 to 100).
         #[arg(long, value_parser = clap::value_parser!(i8).range(-100..=100))]
         bg_brightness: Option<i8>,
+        /// Auto light: a low-light model that brightens dark frames. Needs an
+        /// NPU; does nothing without one.
+        #[arg(long)]
+        auto_light: Option<bool>,
+        /// How much of auto light's correction to apply (0-100).
+        #[arg(long, value_parser = clap::value_parser!(u8).range(0..=100))]
+        auto_strength: Option<u8>,
     },
 
     /// Reactions: gesture/emoji overlay. Toggle the effect or fire a one-shot burst.
@@ -410,6 +417,8 @@ async fn main() -> anyhow::Result<()> {
             brightness,
             contrast,
             bg_brightness,
+            auto_light,
+            auto_strength,
         } => {
             let effects = effects_proxy(&conn).await?;
             let id = "studio_light";
@@ -425,6 +434,12 @@ async fn main() -> anyhow::Result<()> {
             }
             if let Some(v) = bg_brightness {
                 set_param_i32(&effects, id, "bg_brightness", v as i32).await?;
+            }
+            if let Some(v) = auto_light {
+                set_param_bool(&effects, id, "auto_light", v).await?;
+            }
+            if let Some(v) = auto_strength {
+                set_param_u32(&effects, id, "auto_strength", v as u32).await?;
             }
             show_effect(&conn, id).await?;
         }
@@ -592,6 +607,14 @@ async fn set_enabled(effects: &Proxy<'_>, id: &str, on: bool) -> anyhow::Result<
 
 async fn set_param_u32(effects: &Proxy<'_>, id: &str, key: &str, v: u32) -> anyhow::Result<()> {
     let value: Value<'_> = Value::U32(v);
+    effects
+        .call::<_, _, ()>("SetParam", &(id, key, value))
+        .await?;
+    Ok(())
+}
+
+async fn set_param_bool(effects: &Proxy<'_>, id: &str, key: &str, v: bool) -> anyhow::Result<()> {
+    let value: Value<'_> = Value::Bool(v);
     effects
         .call::<_, _, ()>("SetParam", &(id, key, value))
         .await?;

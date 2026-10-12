@@ -91,7 +91,18 @@ pub struct StudioLightState {
     pub contrast: u8,
     /// -100..100 mapped to background brightness in `oe_effects`
     pub bg_brightness: i8,
+    /// NPU-only low-light model. Silently does nothing without an NPU.
+    #[serde(default)]
+    pub auto_light: bool,
+    /// 0–100, how much of the model's correction to apply.
+    #[serde(default = "default_auto_strength")]
+    pub auto_strength: u8,
 }
+
+fn default_auto_strength() -> u8 {
+    80
+}
+
 impl Default for StudioLightState {
     fn default() -> Self {
         Self {
@@ -102,6 +113,8 @@ impl Default for StudioLightState {
             brightness: 30,
             contrast: 50,
             bg_brightness: 0,
+            auto_light: false,
+            auto_strength: default_auto_strength(),
         }
     }
 }

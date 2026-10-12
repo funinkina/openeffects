@@ -57,7 +57,7 @@ mod imp {
     use gstreamer_video::subclass::prelude::*;
     use tracing::warn;
 
-    use crate::inference::engine::{Face, Mask, SelfieSeg, YuNet};
+    use crate::inference::engine::{AutoLight, Face, Mask, SelfieSeg, YuNet};
     use crate::inference::gesture::{self, Gesture};
     use crate::inference::hand::{CropBox, HandLandmarker, HandLandmarks, PalmDetector};
     use crate::pipeline::filters::reactions::Reactions;
@@ -124,6 +124,15 @@ mod imp {
     /// stride the subject's mean luma is sampled at.
     const STUDIO_PIVOT_ALPHA: f32 = 0.1;
     const STUDIO_PIVOT_STRIDE: usize = 7;
+    /// Auto light: run the enhancer every Nth frame (≈7.5 Hz at 30 fps) and
+    /// smooth its gain map and on/off gate in between.
+    const AUTO_LIGHT_INTERVAL: u64 = 4;
+    const AUTO_GAIN_ALPHA: f32 = 0.4;
+    const AUTO_GATE_ALPHA: f32 = 0.15;
+    /// Mean frame luma at/below which auto light is fully on, and at/above
+    /// which it is off, so a well-lit frame passes through untouched.
+    const AUTO_GATE_DARK: f32 = 0.25;
+    const AUTO_GATE_BRIGHT: f32 = 0.55;
     /// Run the gesture pipeline every Nth frame (offset from the seg/face slots).
     const GESTURE_INTERVAL: u64 = 3;
     /// Consecutive gesture checks the same gesture must hold before triggering.
@@ -159,6 +168,10 @@ mod imp {
         /// auto-trigger bursts (manual bursts work regardless, via a one-shot
         /// property that doesn't touch this flag).
         reactions_enabled: bool,
+        /// Auto light (NPU-only low-light model), and how much of its
+        /// correction to apply, 0.0..1.0.
+        auto_light_enabled: bool,
+        auto_light_strength: f32,
     }
 
     impl Default for Settings {
@@ -176,6 +189,8 @@ mod imp {
                 studio_contrast: 1.0,
                 studio_bg_brightness: 0.0,
                 reactions_enabled: false,
+                auto_light_enabled: false,
+                auto_light_strength: 0.8,
             }
         }
     }
@@ -189,6 +204,7 @@ mod imp {
                 || self.studio_enabled
                 || (self.cs_enabled && self.cs_zoom != "off")
                 || self.reactions_enabled
+                || self.auto_light_enabled
         }
 
         /// Whether the blur/bg-replace composite step should run.
@@ -281,6 +297,7 @@ mod imp {
         yunet: Slot<YuNet>,
         palm: Slot<PalmDetector>,
         hand: Slot<HandLandmarker>,
+        auto_light: Slot<AutoLight>,
     }
 
     impl Engine {
@@ -312,13 +329,21 @@ mod imp {
             )
         }
 
+        fn auto_light(&mut self) -> Option<&mut AutoLight> {
+            self.auto_light.get(
+                AutoLight::load,
+                "auto light unavailable (needs an NPU and the iat_lowlight model)",
+            )
+        }
+
         /// Drop every model unused for `max_idle`; true if any was freed.
         fn unload_idle(&mut self, max_idle: Duration) -> bool {
             let selfie = self.selfie.unload_idle(max_idle);
             let yunet = self.yunet.unload_idle(max_idle);
             let palm = self.palm.unload_idle(max_idle);
             let hand = self.hand.unload_idle(max_idle);
-            selfie || yunet || palm || hand
+            let auto = self.auto_light.unload_idle(max_idle);
+            selfie || yunet || palm || hand || auto
         }
     }
 
@@ -395,6 +420,9 @@ mod imp {
         tracks: Vec<HandTrack>,
         /// Earliest frame palm re-detection may run again.
         redetect_at: u64,
+        /// Auto light's smoothed low-res gain map and on/off gate (0..1).
+        auto_gain: Option<Mask>,
+        auto_gate: f32,
         /// EMA of the subject's mean luma (0..1): the pivot Studio Light's
         /// contrast scales around, so contrast never changes how bright the
         /// face is overall. `None` until the first masked frame.
@@ -470,6 +498,12 @@ mod imp {
                         .default_value(Some(DEFAULT_MODE))
                         .build(),
                     glib::ParamSpecBoolean::builder("studio-light-enabled").build(),
+                    glib::ParamSpecBoolean::builder("auto-light-enabled").build(),
+                    glib::ParamSpecFloat::builder("auto-light-strength")
+                        .minimum(0.0)
+                        .maximum(1.0)
+                        .default_value(0.8)
+                        .build(),
                     glib::ParamSpecFloat::builder("studio-light-brightness")
                         .minimum(-1.0)
                         .maximum(1.0)
@@ -521,6 +555,8 @@ mod imp {
                         .unwrap_or_else(|| DEFAULT_MODE.into());
                 }
                 "studio-light-enabled" => state.settings.studio_enabled = value.get().unwrap(),
+                "auto-light-enabled" => state.settings.auto_light_enabled = value.get().unwrap(),
+                "auto-light-strength" => state.settings.auto_light_strength = value.get().unwrap(),
                 "studio-light-brightness" => {
                     state.settings.studio_brightness = value.get().unwrap()
                 }
@@ -557,6 +593,8 @@ mod imp {
                 "center-stage-zoom" => s.cs_zoom.to_value(),
                 "center-stage-mode" => s.cs_mode.to_value(),
                 "studio-light-enabled" => s.studio_enabled.to_value(),
+                "auto-light-enabled" => s.auto_light_enabled.to_value(),
+                "auto-light-strength" => s.auto_light_strength.to_value(),
                 "studio-light-brightness" => s.studio_brightness.to_value(),
                 "studio-light-contrast" => s.studio_contrast.to_value(),
                 "studio-light-bg-brightness" => s.studio_bg_brightness.to_value(),
@@ -649,6 +687,7 @@ mod imp {
             state.redetect_at = 0;
             state.mask_tracks.clear();
             state.mask_redetect_at = 0;
+            state.auto_gain = None;
             state.held = None;
             state.held_count = 0;
             drop(state);
@@ -689,6 +728,12 @@ mod imp {
             // enqueue a reaction burst, drawn by the overlay step below.
             if state.settings.reactions_enabled {
                 run_gestures(&mut state, &img, w, h);
+            }
+
+            // Auto light brightens the frame the segmenter and effects see, but
+            // runs after gestures, which keep the original.
+            if state.settings.auto_light_enabled {
+                auto_light(&mut state, &mut img, w, h);
             }
 
             let cs_active = state.settings.cs_enabled && state.settings.cs_zoom != "off";
@@ -1351,6 +1396,75 @@ mod imp {
         }
     }
 
+    /// How far auto light should act for a frame of this mean luma: 1 when
+    /// dark, 0 when already well lit, linear between.
+    fn auto_gate_target(mean_luma: f32) -> f32 {
+        ((AUTO_GATE_BRIGHT - mean_luma) / (AUTO_GATE_BRIGHT - AUTO_GATE_DARK)).clamp(0.0, 1.0)
+    }
+
+    /// Auto light: refresh the enhancer's gain map on its cadence, then apply
+    /// the smoothed map to the frame, scaled by the strength setting and the
+    /// darkness gate. Silently a no-op without an NPU or the model.
+    fn auto_light(state: &mut State, img: &mut [u8], w: usize, h: usize) {
+        if state.frame.is_multiple_of(AUTO_LIGHT_INTERVAL) {
+            let map = state
+                .engine
+                .auto_light()
+                .and_then(|m| m.analyze(img, w, h, w * 4).ok());
+            if let Some(map) = map {
+                let target = auto_gate_target(map.mean_luma);
+                match &mut state.auto_gain {
+                    Some(g) if g.values.len() == map.gain.values.len() => {
+                        state.auto_gate += (target - state.auto_gate) * AUTO_GATE_ALPHA;
+                        for (e, &n) in g.values.iter_mut().zip(&map.gain.values) {
+                            *e += (n - *e) * AUTO_GAIN_ALPHA;
+                        }
+                    }
+                    _ => {
+                        state.auto_gate = target;
+                        state.auto_gain = Some(map.gain);
+                    }
+                }
+            }
+        }
+        let amount = state.auto_gate * state.settings.auto_light_strength;
+        if let Some(gain) = &state.auto_gain
+            && amount >= 0.01
+        {
+            apply_gain(img, w, h, gain, amount);
+        }
+    }
+
+    /// Multiply RGB by `1 + (gain - 1)·amount`, with `gain` bilinearly
+    /// upsampled from its low-res grid to the frame.
+    fn apply_gain(img: &mut [u8], w: usize, h: usize, gain: &Mask, amount: f32) {
+        let s = gain.size;
+        let top = (s - 1) as f32;
+        let cols: Vec<(usize, usize, f32)> = (0..w)
+            .map(|x| {
+                let fx = ((x as f32 + 0.5) / w as f32 * s as f32 - 0.5).clamp(0.0, top);
+                let x0 = fx.floor() as usize;
+                (x0, (x0 + 1).min(s - 1), fx - x0 as f32)
+            })
+            .collect();
+        for y in 0..h {
+            let fy = ((y as f32 + 0.5) / h as f32 * s as f32 - 0.5).clamp(0.0, top);
+            let y0 = fy.floor() as usize;
+            let y1 = (y0 + 1).min(s - 1);
+            let ty = fy - y0 as f32;
+            let (r0, r1) = (&gain.values[y0 * s..], &gain.values[y1 * s..]);
+            let row = &mut img[y * w * 4..(y + 1) * w * 4];
+            for (px, &(x0, x1, tx)) in row.as_chunks_mut::<4>().0.iter_mut().zip(&cols) {
+                let a = r0[x0] + (r0[x1] - r0[x0]) * tx;
+                let b = r1[x0] + (r1[x1] - r1[x0]) * tx;
+                let g = 1.0 + (a + (b - a) * ty - 1.0) * amount;
+                for c in &mut px[..3] {
+                    *c = (*c as f32 * g + 0.5).min(255.0) as u8;
+                }
+            }
+        }
+    }
+
     /// Studio Light's per-frame contrast pivot: the subject's mean luma,
     /// sampled on a coarse grid weighted by the mask and EMA-smoothed so it
     /// can't flicker. Pivoting on the subject (not mid-grey) means contrast
@@ -1812,6 +1926,30 @@ mod imp {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        #[test]
+        fn auto_gate_is_off_when_lit_and_on_when_dark() {
+            assert_eq!(auto_gate_target(0.7), 0.0);
+            assert_eq!(auto_gate_target(0.1), 1.0);
+            let mid = auto_gate_target(0.4);
+            assert!(mid > 0.0 && mid < 1.0);
+        }
+
+        #[test]
+        fn apply_gain_scales_and_clamps() {
+            let gain = Mask {
+                size: 4,
+                values: vec![2.0; 16],
+            };
+            let mut img = vec![50, 100, 200, 255, 10, 10, 10, 255];
+            apply_gain(&mut img, 2, 1, &gain, 1.0);
+            assert_eq!(&img[..4], &[100, 200, 255, 255]);
+            assert_eq!(&img[4..8], &[20, 20, 20, 255]);
+            // Half strength is a gain of 1.5.
+            let mut img = vec![100, 100, 100, 255];
+            apply_gain(&mut img, 1, 1, &gain, 0.5);
+            assert_eq!(img[0], 150);
+        }
 
         #[test]
         fn studio_contrast_keeps_subject_brightness() {

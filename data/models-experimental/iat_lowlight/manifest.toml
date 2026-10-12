@@ -1,0 +1,30 @@
+# Experimental: not fetched by scripts/fetch-models.sh. Generate and install it
+# with scripts/export-iat.py. NPU only (~10 ms there, ~850 ms on CPU).
+[model]
+id = "iat_lowlight"
+name = "IAT low-light enhancer (LOL v1)"
+version = "1"
+license = "Apache-2.0"
+
+[model.input]
+name = "input"
+shape = [1, 3, 256, 256]
+layout = "NCHW"
+preprocessing = "scale_0_1"
+
+[model.output.output]
+name = "output"
+shape = [1, 3, 256, 256]
+postprocessing = "none"
+
+[model.execution]
+supported_eps = ["openvino"]
+min_vram_mb = 0
+
+[[model.variants]]
+name = "fp32"
+file = "iat_lol_v1_256.onnx"
+sha256 = "3587d7727df0e2156ea26406d2d7edc669e0acb1fbc9d7889e20ed5d29802338"
+
+[model.source]
+url = "https://github.com/cuiziteng/Illumination-Adaptive-Transformer"

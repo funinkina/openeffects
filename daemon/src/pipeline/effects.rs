@@ -88,6 +88,11 @@ pub fn apply_app_state_to_elements(effects: &gst::Element, app: &AppState) {
     let contrast_delta = (studio.contrast as f64 - 50.0) / 50.0;
     let contrast = 1.0 + contrast_delta * intensity;
     effects.set_property("studio-light-enabled", studio_enabled);
+    effects.set_property("auto-light-enabled", studio_enabled && studio.auto_light);
+    effects.set_property(
+        "auto-light-strength",
+        (studio.auto_strength as f32 / 100.0).clamp(0.0, 1.0),
+    );
     effects.set_property(
         "studio-light-brightness",
         brightness.clamp(-1.0, 1.0) as f32,

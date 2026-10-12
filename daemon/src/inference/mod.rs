@@ -65,6 +65,37 @@ pub fn load_session(model: &Path) -> anyhow::Result<ort::session::Session> {
     load(base_builder()?)
 }
 
+/// Load `model` on the NPU or fail: for models that are only usable there
+/// (too slow on CPU), where [`load_session`]'s CPU fallback would be a trap.
+#[cfg(feature = "npu")]
+pub fn load_session_npu(model: &Path) -> anyhow::Result<ort::session::Session> {
+    use anyhow::Context;
+    use ort::ep::{ExecutionProvider, OpenVINO};
+
+    anyhow::ensure!(
+        matches!(requested_ep().as_str(), "auto" | "npu"),
+        "needs the NPU, but VINOOPENEFFECTS_EP={}",
+        requested_ep()
+    );
+    anyhow::ensure!(npu_present(), "no NPU present");
+    let ep = OpenVINO::default().with_device_type("NPU");
+    anyhow::ensure!(
+        ep.is_available().unwrap_or(false),
+        "onnxruntime has no OpenVINO execution provider"
+    );
+    let mut builder = base_builder()?
+        .with_execution_providers([ep.build().error_on_failure()])
+        .map_err(|e| anyhow::anyhow!("register OpenVINO EP (NPU): {e}"))?;
+    builder
+        .commit_from_file(model)
+        .with_context(|| format!("load {} on the NPU", model.display()))
+}
+
+#[cfg(not(feature = "npu"))]
+pub fn load_session_npu(_model: &Path) -> anyhow::Result<ort::session::Session> {
+    anyhow::bail!("needs a build with --features npu")
+}
+
 /// Execution provider selected by `VINOOPENEFFECTS_EP`: `auto` (default: the
 /// NPU when one is present and usable, otherwise CPU), `cpu`, `npu`, or `gpu`.
 /// An explicit `npu`/`gpu` is strict: it errors rather than silently running
