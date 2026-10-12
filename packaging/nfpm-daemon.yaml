@@ -35,6 +35,12 @@ contents:
   - src: target/release/vinoopeneffects-daemon
     dst: /usr/bin/vinoopeneffects-daemon
 
+  # CPU onnxruntime, loaded at runtime (staged by build-packages.sh). An NPU
+  # user adds the OpenVINO build under ~/.local/lib/vinoopeneffects/ort with
+  # `ovfetch install`, which the daemon prefers when an NPU is present.
+  - src: dist/ort/*
+    dst: /usr/lib/vinoopeneffects/ort/
+
   # D-Bus interface introspection XML
   - src: data/dbus/io.github.karanshukla.vinoopeneffects.Daemon1.xml
     dst: /usr/share/dbus-1/interfaces/io.github.karanshukla.vinoopeneffects.Daemon1.xml

@@ -13,7 +13,7 @@ use anyhow::{Context, Result};
 use ort::session::Session;
 use ort::value::Tensor;
 
-use super::{build_session, registry};
+use super::{load_session, registry};
 
 /// Both exports take a single NHWC input named `input_1`.
 const INPUT: &str = "input_1";
@@ -70,6 +70,56 @@ impl HandLandmarks {
         (x0, y0, x1, y1)
     }
 
+    /// Union a soft hand silhouette into a `size`×`size` foreground `mask`
+    /// that stretches over the `w`×`h` frame it was segmented from. Distances
+    /// are measured in frame pixels so the capsules stay round when the mask
+    /// is stretched; existing values are never lowered.
+    pub fn paint_silhouette(&self, mask: &mut [f32], size: usize, w: usize, h: usize) {
+        if size == 0 || mask.len() < size * size {
+            return;
+        }
+        let (fw, fh) = (w as f32, h as f32);
+        let px: Vec<(f32, f32)> = self.points.iter().map(|p| (p[0] * fw, p[1] * fh)).collect();
+        let span = dist(px[0], px[9]);
+        let radius = SILHOUETTE_RADIUS * span;
+        if !radius.is_finite() || radius < 0.5 {
+            return;
+        }
+        // One mask cell in frame pixels: the antialiasing band.
+        let (cw, ch) = (fw / size as f32, fh / size as f32);
+        let feather = cw.max(ch);
+
+        let (x0, y0, x1, y1) = self.bbox();
+        let pad = radius + feather;
+        let lo_x = (((x0 * fw - pad) / cw).floor().max(0.0)) as usize;
+        let lo_y = (((y0 * fh - pad) / ch).floor().max(0.0)) as usize;
+        let hi_x = (((x1 * fw + pad) / cw).ceil().max(0.0) as usize).min(size);
+        let hi_y = (((y1 * fh + pad) / ch).ceil().max(0.0) as usize).min(size);
+
+        let mut segs: Vec<((f32, f32), (f32, f32))> =
+            BONES.iter().map(|&(a, b)| (px[a], px[b])).collect();
+        segs.push((px[17], px[0]));
+        let poly: Vec<(f32, f32)> = PALM_POLY.iter().map(|&i| px[i]).collect();
+
+        for my in lo_y..hi_y {
+            let fy = (my as f32 + 0.5) * ch;
+            for mx in lo_x..hi_x {
+                let fx = (mx as f32 + 0.5) * cw;
+                let p = (fx, fy);
+                let d = if in_polygon(p, &poly) {
+                    0.0
+                } else {
+                    segs.iter()
+                        .map(|&(a, b)| dist_to_segment(p, a, b))
+                        .fold(f32::INFINITY, f32::min)
+                };
+                let a = ((radius - d) / feather + 0.5).clamp(0.0, 1.0);
+                let cell = &mut mask[my * size + mx];
+                *cell = cell.max(a);
+            }
+        }
+    }
+
     /// A tracking crop for the next frame, derived from these landmarks
     /// (MediaPipe's hand-box enlarge ≈1.8, shifted up toward the fingers).
     pub fn tracking_crop(&self, w: usize, h: usize) -> CropBox {
@@ -84,6 +134,38 @@ impl HandLandmarks {
         }
     }
 }
+
+/// Finger half-thickness as a fraction of the wrist→middle-knuckle distance
+/// (a finger is ≈0.1 of hand length, and that span is ≈0.43 of it). Errs wide:
+/// a slightly fat silhouette is far less visible than a chopped finger.
+const SILHOUETTE_RADIUS: f32 = 0.14;
+/// Landmark pairs the silhouette sweeps a capsule along: thumb and the four
+/// fingers (wrist=0, knuckles 1/5/9/13/17, tips 4/8/12/16/20).
+const BONES: [(usize, usize); 20] = [
+    (0, 1),
+    (1, 2),
+    (2, 3),
+    (3, 4),
+    (5, 6),
+    (6, 7),
+    (7, 8),
+    (9, 10),
+    (10, 11),
+    (11, 12),
+    (13, 14),
+    (14, 15),
+    (15, 16),
+    (17, 18),
+    (18, 19),
+    (19, 20),
+    // palm outline, closed below by (17, 0)
+    (1, 5),
+    (5, 9),
+    (9, 13),
+    (13, 17),
+];
+/// The palm polygon, filled solid so the area between the knuckles is covered.
+const PALM_POLY: [usize; 6] = [0, 1, 5, 9, 13, 17];
 
 const PALM_SIZE: usize = 192;
 const HAND_SIZE: usize = 224;
@@ -102,9 +184,7 @@ impl PalmDetector {
     pub fn load() -> Result<Self> {
         let resolved = registry::find_model("palm_detection")
             .context("palm_detection model not found; run scripts/fetch-models.sh")?;
-        let session = build_session()?
-            .commit_from_file(&resolved.model_path)
-            .with_context(|| format!("load {}", resolved.model_path.display()))?;
+        let session = load_session(&resolved.model_path)?;
         Ok(Self {
             session,
             anchors: gen_anchors(),
@@ -203,9 +283,7 @@ impl HandLandmarker {
     pub fn load() -> Result<Self> {
         let resolved = registry::find_model("hand_landmark")
             .context("hand_landmark model not found; run scripts/fetch-models.sh")?;
-        let session = build_session()?
-            .commit_from_file(&resolved.model_path)
-            .with_context(|| format!("load {}", resolved.model_path.display()))?;
+        let session = load_session(&resolved.model_path)?;
         Ok(Self { session })
     }
 
@@ -397,6 +475,35 @@ fn palm_iou(a: &Palm, b: &Palm) -> f32 {
     if union <= 0.0 { 0.0 } else { inter / union }
 }
 
+fn dist(a: (f32, f32), b: (f32, f32)) -> f32 {
+    ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt()
+}
+
+fn dist_to_segment(p: (f32, f32), a: (f32, f32), b: (f32, f32)) -> f32 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let len2 = dx * dx + dy * dy;
+    if len2 <= f32::EPSILON {
+        return dist(p, a);
+    }
+    let t = (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / len2).clamp(0.0, 1.0);
+    dist(p, (a.0 + t * dx, a.1 + t * dy))
+}
+
+/// Even-odd point-in-polygon test.
+fn in_polygon(p: (f32, f32), poly: &[(f32, f32)]) -> bool {
+    let mut inside = false;
+    let mut j = poly.len() - 1;
+    for i in 0..poly.len() {
+        let (pi, pj) = (poly[i], poly[j]);
+        if (pi.1 > p.1) != (pj.1 > p.1) && p.0 < (pj.0 - pi.0) * (p.1 - pi.1) / (pj.1 - pi.1) + pi.0
+        {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -420,6 +527,64 @@ mod tests {
         let a = gen_anchors();
         assert!((a[0].0 - 0.5 / 24.0).abs() < 1e-6);
         assert!((a[0].1 - 0.5 / 24.0).abs() < 1e-6);
+    }
+
+    /// An upright open hand: wrist at the bottom, fingers fanned upward.
+    fn open_hand(cx: f32, cy: f32, span: f32) -> HandLandmarks {
+        let mut points = [[cx, cy, 0.0]; 21];
+        let at = |dx: f32, dy: f32| [cx + dx * span, cy - dy * span, 0.0];
+        points[0] = at(0.0, 0.0);
+        points[9] = at(0.0, 1.0);
+        for (k, dx) in [(1, -0.8), (5, -0.5), (9, 0.0), (13, 0.5), (17, 0.9)] {
+            points[k] = at(dx, if k == 1 { 0.3 } else { 1.0 });
+        }
+        for (base, dx) in [(5usize, -0.5f32), (9, 0.0), (13, 0.5), (17, 0.9)] {
+            for j in 1..=3 {
+                points[base + j] = at(dx, 1.0 + 0.5 * j as f32);
+            }
+        }
+        for (j, point) in points.iter_mut().enumerate().take(5).skip(2) {
+            *point = at(-0.8 - 0.2 * (j - 1) as f32, 0.3 + 0.3 * (j - 1) as f32);
+        }
+        HandLandmarks {
+            points,
+            confidence: 1.0,
+        }
+    }
+
+    #[test]
+    fn silhouette_covers_palm_and_fingertips_only() {
+        let size = 64;
+        let mut mask = vec![0f32; size * size];
+        let hand = open_hand(0.5, 0.9, 0.2);
+        hand.paint_silhouette(&mut mask, size, 640, 480);
+
+        let at =
+            |u: f32, v: f32| mask[(v * size as f32) as usize * size + (u * size as f32) as usize];
+        // Palm centre and the middle fingertip are inside.
+        assert!(at(0.5, 0.9 - 0.1) > 0.99);
+        assert!(at(0.5, 0.9 - 0.2 * 2.5) > 0.9);
+        // Far from the hand stays background.
+        assert_eq!(at(0.05, 0.05), 0.0);
+        assert_eq!(at(0.95, 0.5), 0.0);
+    }
+
+    #[test]
+    fn silhouette_never_lowers_existing_mask() {
+        let size = 32;
+        let mut mask = vec![0.7f32; size * size];
+        open_hand(0.5, 0.9, 0.2).paint_silhouette(&mut mask, size, 320, 240);
+        assert!(mask.iter().all(|&v| v >= 0.7));
+        assert!(mask.iter().any(|&v| v > 0.99));
+    }
+
+    #[test]
+    fn silhouette_survives_off_frame_hand() {
+        let size = 32;
+        let mut mask = vec![0f32; size * size];
+        open_hand(1.4, 1.3, 0.2).paint_silhouette(&mut mask, size, 320, 240);
+        open_hand(-0.5, -0.5, 0.2).paint_silhouette(&mut mask, size, 320, 240);
+        assert!(mask.iter().all(|v| v.is_finite()));
     }
 
     #[test]
