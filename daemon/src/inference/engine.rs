@@ -30,10 +30,22 @@ impl SelfieSeg {
     pub const OUTPUT: &'static str = "alphas";
 
     pub fn load() -> Result<Self> {
+        let (model, _, _) = Self::load_with_provider(&super::requested_ep())?;
+        Ok(model)
+    }
+
+    pub fn load_with_provider(provider: &str) -> Result<(Self, &'static str, Option<String>)> {
         let resolved = registry::find_model("selfie_segmentation")
             .context("selfie_segmentation model not found; run scripts/fetch-models.sh")?;
-        let session = load_session(&resolved.model_path)?;
-        Ok(Self { session, size: 256 })
+        let loaded = load_session(&resolved.model_path, provider)?;
+        Ok((
+            Self {
+                session: loaded.session,
+                size: 256,
+            },
+            loaded.active_ep,
+            loaded.fallback,
+        ))
     }
 
     /// Segment an RGBA frame, returning a `size`×`size` row-major foreground
@@ -92,12 +104,23 @@ impl AutoLight {
     /// Keeps the ratio finite in near-black regions.
     const LUMA_EPS: f32 = 0.03;
 
+    #[allow(dead_code)]
     pub fn load() -> Result<Self> {
+        let (model, _, _) = Self::load_with_provider(&super::requested_ep())?;
+        Ok(model)
+    }
+
+    pub fn load_with_provider(provider: &str) -> Result<(Self, &'static str, Option<String>)> {
         let resolved = registry::find_model("iat_lowlight")
             .context("iat_lowlight model not found; see scripts/export-iat.py")?;
-        Ok(Self {
-            session: load_session_npu(&resolved.model_path)?,
-        })
+        let loaded = load_session_npu(&resolved.model_path, provider)?;
+        Ok((
+            Self {
+                session: loaded.session,
+            },
+            loaded.active_ep,
+            loaded.fallback,
+        ))
     }
 
     pub fn analyze(&mut self, rgba: &[u8], w: usize, h: usize, stride: usize) -> Result<LightMap> {
@@ -201,10 +224,22 @@ impl YuNet {
     const STRIDES: [usize; 3] = [8, 16, 32];
 
     pub fn load() -> Result<Self> {
+        let (model, _, _) = Self::load_with_provider(&super::requested_ep())?;
+        Ok(model)
+    }
+
+    pub fn load_with_provider(provider: &str) -> Result<(Self, &'static str, Option<String>)> {
         let resolved = registry::find_model("yunet")
             .context("yunet model not found; run scripts/fetch-models.sh")?;
-        let session = load_session(&resolved.model_path)?;
-        Ok(Self { session, size: 640 })
+        let loaded = load_session(&resolved.model_path, provider)?;
+        Ok((
+            Self {
+                session: loaded.session,
+                size: 640,
+            },
+            loaded.active_ep,
+            loaded.fallback,
+        ))
     }
 
     /// Detect faces in an RGBA frame, returning boxes in normalized coords whose
@@ -387,6 +422,10 @@ mod tests {
             eprintln!("skipping: selfie_segmentation model not installed");
             return;
         }
+        if super::super::ensure_runtime().is_err() {
+            eprintln!("skipping: onnxruntime not available");
+            return;
+        }
         let (w, h) = (64usize, 48usize);
         let frame = synthetic_frame(w, h);
         let mut model = SelfieSeg::load().expect("load selfie seg");
@@ -404,6 +443,10 @@ mod tests {
             eprintln!("skipping: yunet model not installed");
             return;
         }
+        if super::super::ensure_runtime().is_err() {
+            eprintln!("skipping: onnxruntime not available");
+            return;
+        }
         let (w, h) = (64usize, 48usize);
         let frame = synthetic_frame(w, h);
         let mut model = YuNet::load().expect("load yunet");
@@ -418,12 +461,15 @@ mod tests {
     /// Needs an NPU and the exported model; skips with a message otherwise.
     #[test]
     fn auto_light_gain_is_bounded_when_available() {
-        if super::registry::find_model("iat_lowlight").is_none() {
-            eprintln!("skipping: iat_lowlight model not installed");
-            return;
-        }
+        // NPU first: the model is experimental (scripts/export-iat.py, not
+        // fetch-models.sh), and the models workflow fails on "model not
+        // installed", so a runner without an NPU must skip on that instead.
         if !super::super::npu_present() {
             eprintln!("skipping: no NPU hardware present");
+            return;
+        }
+        if super::registry::find_model("iat_lowlight").is_none() {
+            eprintln!("skipping: iat_lowlight model not installed");
             return;
         }
         let mut model = AutoLight::load().expect("load iat_lowlight on NPU");

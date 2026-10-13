@@ -14,6 +14,14 @@ case "$(uname -m)" in
     *) echo "error: no onnxruntime build for $(uname -m)" >&2; exit 1 ;;
 esac
 
+target="$dest/libonnxruntime.so.$version"
+if [ -s "$target" ]; then
+    ln -sf "libonnxruntime.so.$version" "$dest/libonnxruntime.so.1"
+    ln -sf "libonnxruntime.so.1" "$dest/libonnxruntime.so"
+    echo "onnxruntime $version ($arch) already present: $target"
+    exit 0
+fi
+
 name="onnxruntime-linux-$arch-$version"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT

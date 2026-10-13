@@ -36,12 +36,23 @@
 //! [`reactions`]: crate::pipeline::filters::reactions
 
 use gst::glib;
+use gst::glib::subclass::prelude::*;
 use gstreamer as gst;
 use gstreamer_video as gst_video;
 
 glib::wrapper! {
     pub struct OeEffects(ObjectSubclass<imp::OeEffects>)
         @extends gst_video::VideoFilter, gstreamer_base::BaseTransform, gst::Element, gst::Object;
+}
+
+impl OeEffects {
+    pub fn swap_provider(&self, target_provider: &str) -> anyhow::Result<(String, Option<String>)> {
+        self.imp().swap_provider(target_provider)
+    }
+
+    pub fn generation(&self) -> u64 {
+        self.imp().generation()
+    }
 }
 
 mod imp {
@@ -253,6 +264,7 @@ mod imp {
     /// an idle model can be dropped and reloaded on demand.
     struct Slot<T> {
         model: Option<T>,
+        active_ep: Option<&'static str>,
         failed: bool,
         used: Instant,
     }
@@ -261,6 +273,7 @@ mod imp {
         fn default() -> Self {
             Self {
                 model: None,
+                active_ep: None,
                 failed: false,
                 used: Instant::now(),
             }
@@ -268,31 +281,85 @@ mod imp {
     }
 
     impl<T> Slot<T> {
-        fn get(&mut self, load: fn() -> anyhow::Result<T>, unavailable: &str) -> Option<&mut T> {
+        fn ensure_loaded(
+            &mut self,
+            provider: &str,
+            load: impl FnOnce(&str) -> anyhow::Result<(T, &'static str, Option<String>)>,
+            unavailable: &str,
+            fallback_out: &mut Option<String>,
+        ) {
             if self.model.is_none() && !self.failed {
-                match load() {
-                    Ok(m) => self.model = Some(m),
+                match load(provider) {
+                    Ok((m, ep, fallback)) => {
+                        self.model = Some(m);
+                        self.active_ep = Some(ep);
+                        if let Some(fb) = fallback {
+                            *fallback_out = Some(fb);
+                        }
+                    }
                     Err(err) => {
                         warn!(%err, "{unavailable}");
                         self.failed = true;
                     }
                 }
             }
+        }
+
+        fn as_mut(&mut self) -> Option<&mut T> {
             self.used = Instant::now();
             self.model.as_mut()
+        }
+
+        #[cfg(test)]
+        fn get_simple(
+            &mut self,
+            load: impl FnOnce() -> anyhow::Result<T>,
+            unavailable: &str,
+        ) -> Option<&mut T> {
+            let mut fb = None;
+            self.ensure_loaded(
+                "cpu",
+                |_| load().map(|m| (m, "cpu", None)),
+                unavailable,
+                &mut fb,
+            );
+            self.as_mut()
+        }
+
+        fn is_loaded(&self) -> bool {
+            self.model.is_some()
+        }
+
+        /// Swap in a model loaded for a new provider, or drop the current one so
+        /// it reloads lazily on the new provider if it is still needed.
+        fn install(&mut self, loaded: Option<(T, &'static str)>) {
+            (self.model, self.active_ep) = match loaded {
+                Some((model, ep)) => (Some(model), Some(ep)),
+                None => (None, None),
+            };
+            self.failed = false;
+            self.used = Instant::now();
+        }
+
+        fn reset_failed(&mut self) {
+            self.failed = false;
         }
 
         fn unload_idle(&mut self, max_idle: Duration) -> bool {
             if self.model.is_some() && self.used.elapsed() >= max_idle {
                 self.model = None;
+                self.active_ep = None;
                 return true;
             }
             false
         }
     }
 
-    #[derive(Default)]
-    struct Engine {
+    pub struct Engine {
+        pub generation: u64,
+        pub provider: String,
+        pub active: &'static str,
+        pub detail: Option<String>,
         selfie: Slot<SelfieSeg>,
         yunet: Slot<YuNet>,
         palm: Slot<PalmDetector>,
@@ -300,40 +367,140 @@ mod imp {
         auto_light: Slot<AutoLight>,
     }
 
+    impl Default for Engine {
+        fn default() -> Self {
+            let requested = crate::inference::requested_ep();
+            let mut eng = Self {
+                generation: 0,
+                provider: requested,
+                active: "cpu",
+                detail: None,
+                selfie: Slot::default(),
+                yunet: Slot::default(),
+                palm: Slot::default(),
+                hand: Slot::default(),
+                auto_light: Slot::default(),
+            };
+            eng.update_active_status();
+            eng
+        }
+    }
+
     impl Engine {
+        pub fn update_active_status(&mut self) {
+            let eps: Vec<&'static str> = [
+                self.selfie.active_ep,
+                self.yunet.active_ep,
+                self.palm.active_ep,
+                self.hand.active_ep,
+                self.auto_light.active_ep,
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+            self.active = match eps.split_first() {
+                None => {
+                    let (active, detail) = crate::inference::predicted_active(&self.provider);
+                    self.detail = detail;
+                    active
+                }
+                Some((first, rest)) if rest.iter().all(|ep| ep == first) => first,
+                Some(_) => "mixed",
+            };
+        }
+
+        pub fn reset_all_failed(&mut self) {
+            self.selfie.reset_failed();
+            self.yunet.reset_failed();
+            self.palm.reset_failed();
+            self.hand.reset_failed();
+            self.auto_light.reset_failed();
+            crate::inference::reset_accel_failed();
+        }
+
         fn selfie(&mut self) -> Option<&mut SelfieSeg> {
-            self.selfie.get(
-                SelfieSeg::load,
-                "selfie segmentation unavailable; portrait blur / bg replace disabled",
-            )
+            if self.selfie.model.is_none() && !self.selfie.failed {
+                let mut fb = None;
+                self.selfie.ensure_loaded(
+                    &self.provider,
+                    SelfieSeg::load_with_provider,
+                    "selfie segmentation unavailable; portrait blur / bg replace disabled",
+                    &mut fb,
+                );
+                if let Some(f) = fb {
+                    self.detail = Some(f);
+                }
+                self.update_active_status();
+            }
+            self.selfie.as_mut()
         }
 
         fn yunet(&mut self) -> Option<&mut YuNet> {
-            self.yunet.get(
-                YuNet::load,
-                "yunet unavailable; center stage cannot track a subject",
-            )
+            if self.yunet.model.is_none() && !self.yunet.failed {
+                let mut fb = None;
+                self.yunet.ensure_loaded(
+                    &self.provider,
+                    YuNet::load_with_provider,
+                    "yunet unavailable; center stage cannot track a subject",
+                    &mut fb,
+                );
+                if let Some(f) = fb {
+                    self.detail = Some(f);
+                }
+                self.update_active_status();
+            }
+            self.yunet.as_mut()
         }
 
         fn palm(&mut self) -> Option<&mut PalmDetector> {
-            self.palm.get(
-                PalmDetector::load,
-                "palm detection unavailable; gesture reactions disabled",
-            )
+            if self.palm.model.is_none() && !self.palm.failed {
+                let mut fb = None;
+                self.palm.ensure_loaded(
+                    &self.provider,
+                    PalmDetector::load_with_provider,
+                    "palm detection unavailable; gesture reactions disabled",
+                    &mut fb,
+                );
+                if let Some(f) = fb {
+                    self.detail = Some(f);
+                }
+                self.update_active_status();
+            }
+            self.palm.as_mut()
         }
 
         fn hand(&mut self) -> Option<&mut HandLandmarker> {
-            self.hand.get(
-                HandLandmarker::load,
-                "hand landmark model unavailable; gesture reactions disabled",
-            )
+            if self.hand.model.is_none() && !self.hand.failed {
+                let mut fb = None;
+                self.hand.ensure_loaded(
+                    &self.provider,
+                    HandLandmarker::load_with_provider,
+                    "hand landmark model unavailable; gesture reactions disabled",
+                    &mut fb,
+                );
+                if let Some(f) = fb {
+                    self.detail = Some(f);
+                }
+                self.update_active_status();
+            }
+            self.hand.as_mut()
         }
 
         fn auto_light(&mut self) -> Option<&mut AutoLight> {
-            self.auto_light.get(
-                AutoLight::load,
-                "auto light unavailable (needs an NPU and the iat_lowlight model)",
-            )
+            if self.auto_light.model.is_none() && !self.auto_light.failed {
+                let mut fb = None;
+                self.auto_light.ensure_loaded(
+                    &self.provider,
+                    AutoLight::load_with_provider,
+                    "auto light unavailable (needs an NPU and the iat_lowlight model)",
+                    &mut fb,
+                );
+                if let Some(f) = fb {
+                    self.detail = Some(f);
+                }
+                self.update_active_status();
+            }
+            self.auto_light.as_mut()
         }
 
         /// Drop every model unused for `max_idle`; true if any was freed.
@@ -343,7 +510,11 @@ mod imp {
             let palm = self.palm.unload_idle(max_idle);
             let hand = self.hand.unload_idle(max_idle);
             let auto = self.auto_light.unload_idle(max_idle);
-            selfie || yunet || palm || hand || auto
+            let freed = selfie || yunet || palm || hand || auto;
+            if freed {
+                self.update_active_status();
+            }
+            freed
         }
     }
 
@@ -471,6 +642,98 @@ mod imp {
         state: Mutex<State>,
     }
 
+    impl OeEffects {
+        pub fn generation(&self) -> u64 {
+            self.state.lock().unwrap().engine.generation
+        }
+
+        /// Reload every loaded model on `target_provider` without holding the
+        /// state lock, so frames keep flowing on the old sessions while the new
+        /// ones compile, then swap them in at once. On error the models stay put.
+        pub fn swap_provider(
+            &self,
+            target_provider: &str,
+        ) -> anyhow::Result<(String, Option<String>)> {
+            let target = target_provider.trim().to_ascii_lowercase();
+            let (want_selfie, want_yunet, want_palm, want_hand, want_auto) = {
+                let state = self.state.lock().unwrap();
+                (
+                    state.engine.selfie.is_loaded(),
+                    state.engine.yunet.is_loaded(),
+                    state.engine.palm.is_loaded(),
+                    state.engine.hand.is_loaded(),
+                    state.engine.auto_light.is_loaded(),
+                )
+            };
+
+            // Before loading: a stale "accelerator failed" memo from the old
+            // provider would otherwise pin `auto` to CPU.
+            crate::inference::reset_accel_failed();
+            let mut detail = None;
+            let selfie = reload(
+                want_selfie,
+                SelfieSeg::load_with_provider,
+                &target,
+                &mut detail,
+            )?;
+            let yunet = reload(want_yunet, YuNet::load_with_provider, &target, &mut detail)?;
+            let palm = reload(
+                want_palm,
+                PalmDetector::load_with_provider,
+                &target,
+                &mut detail,
+            )?;
+            let hand = reload(
+                want_hand,
+                HandLandmarker::load_with_provider,
+                &target,
+                &mut detail,
+            )?;
+            // Auto light only runs on the NPU, so a provider it can't use turns it
+            // off (the lazy reload logs why) instead of failing the whole swap.
+            let auto_light = reload(
+                want_auto,
+                AutoLight::load_with_provider,
+                &target,
+                &mut detail,
+            )
+            .unwrap_or_default();
+
+            let mut state = self.state.lock().unwrap();
+            let engine = &mut state.engine;
+            engine.generation += 1;
+            engine.provider = target;
+            engine.detail = detail;
+            engine.reset_all_failed();
+            // A slot the streaming thread loaded since the snapshot is on the old
+            // provider; installing `None` drops it so it reloads on the new one.
+            engine.selfie.install(selfie);
+            engine.yunet.install(yunet);
+            engine.palm.install(palm);
+            engine.hand.install(hand);
+            engine.auto_light.install(auto_light);
+            engine.update_active_status();
+            Ok((engine.active.to_string(), engine.detail.clone()))
+        }
+    }
+
+    /// Load a model on `provider` if `wanted`, recording any CPU fallback reason.
+    fn reload<T>(
+        wanted: bool,
+        load: impl FnOnce(&str) -> anyhow::Result<(T, &'static str, Option<String>)>,
+        provider: &str,
+        detail: &mut Option<String>,
+    ) -> anyhow::Result<Option<(T, &'static str)>> {
+        if !wanted {
+            return Ok(None);
+        }
+        let (model, ep, fallback) = load(provider)?;
+        if fallback.is_some() {
+            *detail = fallback;
+        }
+        Ok(Some((model, ep)))
+    }
+
     #[glib::object_subclass]
     impl ObjectSubclass for OeEffects {
         const NAME: &'static str = "OeEffects";
@@ -525,6 +788,17 @@ mod imp {
                     glib::ParamSpecString::builder("trigger-reaction")
                         .flags(glib::ParamFlags::WRITABLE)
                         .build(),
+                    glib::ParamSpecString::builder("inference-provider")
+                        .default_value(Some("auto"))
+                        .build(),
+                    glib::ParamSpecUInt64::builder("inference-generation")
+                        .default_value(0)
+                        .read_only()
+                        .build(),
+                    glib::ParamSpecString::builder("inference-active")
+                        .default_value(Some("cpu"))
+                        .read_only()
+                        .build(),
                 ]
             });
             PROPERTIES.as_ref()
@@ -570,6 +844,17 @@ mod imp {
                     let frame = state.frame;
                     state.reactions.trigger(&id, frame);
                 }
+                "inference-provider" => {
+                    let p = value
+                        .get::<Option<String>>()
+                        .unwrap()
+                        .unwrap_or_else(|| "auto".into());
+                    drop(state);
+                    if let Err(err) = self.swap_provider(&p) {
+                        tracing::error!(%err, "failed to swap inference provider");
+                    }
+                    return;
+                }
                 _ => unimplemented!(),
             }
             let active = state.settings.active();
@@ -600,6 +885,9 @@ mod imp {
                 "studio-light-bg-brightness" => s.studio_bg_brightness.to_value(),
                 "reactions-enabled" => s.reactions_enabled.to_value(),
                 "trigger-reaction" => "".to_value(), // write-only; defensive
+                "inference-provider" => state.engine.provider.to_value(),
+                "inference-generation" => state.engine.generation.to_value(),
+                "inference-active" => state.engine.active.to_value(),
                 _ => unimplemented!(),
             }
         }
@@ -2000,18 +2288,58 @@ mod imp {
         #[test]
         fn idle_slot_unloads_then_reloads_on_demand() {
             let mut slot: Slot<u32> = Slot::default();
-            assert_eq!(slot.get(|| Ok(7), "x"), Some(&mut 7));
+            assert_eq!(slot.get_simple(|| Ok(7), "x"), Some(&mut 7));
             assert!(!slot.unload_idle(Duration::from_secs(60)));
             assert!(slot.unload_idle(Duration::ZERO));
             assert!(!slot.unload_idle(Duration::ZERO));
-            assert_eq!(slot.get(|| Ok(8), "x"), Some(&mut 8));
+            assert_eq!(slot.get_simple(|| Ok(8), "x"), Some(&mut 8));
         }
 
         #[test]
         fn failed_slot_is_not_retried() {
             let mut slot: Slot<u32> = Slot::default();
-            assert!(slot.get(|| anyhow::bail!("missing"), "x").is_none());
-            assert!(slot.get(|| Ok(1), "x").is_none());
+            assert!(slot.get_simple(|| anyhow::bail!("missing"), "x").is_none());
+            assert!(slot.get_simple(|| Ok(1), "x").is_none());
+        }
+
+        #[test]
+        fn failed_slot_can_be_reset() {
+            let mut slot: Slot<u32> = Slot::default();
+            assert!(slot.get_simple(|| anyhow::bail!("missing"), "x").is_none());
+            assert!(slot.failed);
+            slot.reset_failed();
+            assert!(!slot.failed);
+            assert_eq!(slot.get_simple(|| Ok(1), "x"), Some(&mut 1));
+        }
+
+        #[test]
+        fn element_swap_provider_bumps_generation_and_updates_active() {
+            let element = OeEffects::default();
+            assert_eq!(element.generation(), 0);
+
+            let (active, _) = element.swap_provider("cpu").expect("swap to cpu");
+            assert_eq!(element.generation(), 1);
+            assert_eq!(active, "cpu");
+
+            let (_active2, _) = element.swap_provider("auto").expect("swap to auto");
+            assert_eq!(element.generation(), 2);
+        }
+
+        #[test]
+        fn npu_request_without_npu_reports_cpu_and_why() {
+            if crate::inference::probe_npu_cached().available {
+                eprintln!("skipping: an NPU is present");
+                return;
+            }
+            let element = OeEffects::default();
+            let (active, detail) = element.swap_provider(" NPU ").expect("swap to npu");
+            assert_eq!(active, "cpu");
+            assert!(detail.is_some(), "the CPU fallback must say why");
+            assert_eq!(element.state.lock().unwrap().engine.provider, "npu");
+
+            // Switching away clears the stale fallback reason.
+            let (active, detail) = element.swap_provider("cpu").expect("swap to cpu");
+            assert_eq!((active.as_str(), detail), ("cpu", None));
         }
 
         /// Regression for #1: portrait blur must not bleed the subject's color

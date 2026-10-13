@@ -65,6 +65,27 @@ impl BuiltCapture {
             effects_el.set_property("trigger-reaction", id);
         }
     }
+
+    pub fn swap_inference(&self, provider: &str) -> anyhow::Result<(String, Option<String>)> {
+        match self.oe_effects() {
+            Some(oe) => oe.swap_provider(provider),
+            None => {
+                let (active, detail) = crate::inference::predicted_active(provider);
+                Ok((active.to_string(), detail))
+            }
+        }
+    }
+
+    /// The provider the live models are on, e.g. after a failed swap left them
+    /// where they were.
+    pub fn inference_active(&self) -> Option<String> {
+        self.oe_effects()
+            .map(|oe| oe.property::<String>("inference-active"))
+    }
+
+    fn oe_effects(&self) -> Option<crate::pipeline::filters::oe_effects::OeEffects> {
+        self.pipeline.by_name("oe_effects")?.downcast().ok()
+    }
 }
 
 /// The output caps: every processed frame the appsink delivers (and thus every

@@ -40,6 +40,11 @@ pub fn str_value(value: impl AsRef<str>) -> OwnedValue {
     OwnedValue::from(Str::from(value.as_ref().to_owned()))
 }
 
+pub fn str_array_value<S: AsRef<str>>(values: &[S]) -> OwnedValue {
+    let strings: Vec<String> = values.iter().map(|s| s.as_ref().to_owned()).collect();
+    OwnedValue::try_from(zvariant::Value::from(strings)).expect("convert str array to OwnedValue")
+}
+
 pub fn bool_value(value: bool) -> OwnedValue {
     OwnedValue::from(value)
 }
@@ -77,4 +82,11 @@ pub fn value_as_string(value: &OwnedValue) -> Option<String> {
         .try_clone()
         .ok()
         .and_then(|value| String::try_from(value).ok())
+}
+
+pub fn value_as_str_array(value: &OwnedValue) -> Option<Vec<String>> {
+    value
+        .try_clone()
+        .ok()
+        .and_then(|value| Vec::<String>::try_from(value).ok())
 }

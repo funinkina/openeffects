@@ -48,6 +48,12 @@ pub fn build_effects_bin(app: &AppState) -> Result<gst::Bin> {
         .context("create videoscale")?;
 
     apply_app_state_to_elements(&effects, app);
+    // Here rather than in apply_app_state_to_elements, which runs on every
+    // effect change: setting the provider reloads every loaded model.
+    let provider = crate::inference::effective_ep(app.inference.provider.as_str());
+    if effects.property::<String>("inference-provider") != provider {
+        effects.set_property("inference-provider", provider);
+    }
 
     bin.add_many([
         &queue,
@@ -400,5 +406,76 @@ mod tests {
         }
         pipeline.set_state(gst::State::Null).unwrap();
         assert!(saw_eos, "pipeline did not reach EOS within timeout");
+    }
+
+    #[test]
+    fn effects_bin_hot_swaps_provider_during_streaming() {
+        if !effects_available() || gst::ElementFactory::find("videotestsrc").is_none() {
+            eprintln!("skipping: GStreamer plugins not available");
+            return;
+        }
+        let mut app = AppState::default();
+        app.effects.portrait_blur.enabled = true;
+
+        let pipeline = gst::Pipeline::new();
+        let src = gst::ElementFactory::make("videotestsrc")
+            .property("num-buffers", 20i32)
+            .build()
+            .unwrap();
+        let caps = gst::ElementFactory::make("capsfilter")
+            .property(
+                "caps",
+                gst::Caps::builder("video/x-raw")
+                    .field("width", 320i32)
+                    .field("height", 240i32)
+                    .build(),
+            )
+            .build()
+            .unwrap();
+        let bin = build_effects_bin(&app).unwrap();
+        let sink = gst::ElementFactory::make("fakesink").build().unwrap();
+        pipeline
+            .add_many([&src, &caps, bin.upcast_ref(), &sink])
+            .unwrap();
+        gst::Element::link_many([&src, &caps, bin.upcast_ref(), &sink]).unwrap();
+
+        pipeline.set_state(gst::State::Playing).unwrap();
+
+        let effects = bin.by_name("oe_effects").unwrap();
+        let gen0: u64 = effects.property("inference-generation");
+        assert_eq!(gen0, 0);
+
+        effects.set_property("inference-provider", "cpu");
+        let gen1: u64 = effects.property("inference-generation");
+        assert_eq!(gen1, 1);
+
+        effects.set_property("inference-provider", "auto");
+        let gen2: u64 = effects.property("inference-generation");
+        assert_eq!(gen2, 2);
+
+        let bus = pipeline.bus().unwrap();
+        let mut saw_eos = false;
+        for msg in bus.iter_timed(gst::ClockTime::from_seconds(15)) {
+            match msg.view() {
+                gst::MessageView::Eos(_) => {
+                    saw_eos = true;
+                    break;
+                }
+                gst::MessageView::Error(err) => {
+                    pipeline.set_state(gst::State::Null).unwrap();
+                    panic!(
+                        "pipeline error during hot swap: {} ({:?})",
+                        err.error(),
+                        err.debug()
+                    );
+                }
+                _ => {}
+            }
+        }
+        pipeline.set_state(gst::State::Null).unwrap();
+        assert!(
+            saw_eos,
+            "pipeline did not reach EOS within timeout during hot swap"
+        );
     }
 }

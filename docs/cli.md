@@ -35,11 +35,26 @@ vinoopeneffects-ctl status
 | `vinoopeneffects-ctl status`         | Print status plus capabilities (execution provider, model readiness, output sink).            |
 | `vinoopeneffects-ctl status --short` | One-word status, e.g. for Waybar.                                                                   |
 | `vinoopeneffects-ctl status --json`  | Machine-readable status.                                                                            |
+| `vinoopeneffects-ctl inference [ep]` | View or switch the inference execution provider (`auto`, `cpu`, `npu`).                             |
 | `vinoopeneffects-ctl doctor`         | Run diagnostic checks across daemon, NPU, models, cameras, and pipeline.                            |
 | `vinoopeneffects-ctl watch`          | Stream `EffectChanged` signals until interrupted (Ctrl-C).                                          |
 
 Any command that talks to the daemon starts it first if it isn't already running
 (via the systemd user unit, falling back to D-Bus activation).
+
+## Inference execution provider (`inference`)
+
+View or switch the machine-learning execution provider between CPU and NPU at runtime:
+
+```bash
+vinoopeneffects-ctl inference          # show requested, active, available EPs, and any fallback detail
+vinoopeneffects-ctl inference npu      # switch to Intel NPU (OpenVINO EP)
+vinoopeneffects-ctl inference cpu      # switch to CPU
+vinoopeneffects-ctl inference auto     # auto-select NPU if present, CPU otherwise
+vinoopeneffects-ctl inference --json   # machine-readable output
+```
+
+Provider changes are persisted to `~/.config/vinoopeneffects/state.toml` under `[inference] provider`. Switching while streaming loads the new models alongside the old ones, so frames keep flowing on the old provider until the new one is ready. If `VINOOPENEFFECTS_EP` is set in the daemon's environment, it overrides this setting.
 
 ## Autostart
 

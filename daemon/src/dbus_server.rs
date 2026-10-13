@@ -81,6 +81,25 @@ impl Daemon1Iface {
         Ok(())
     }
 
+    async fn set_inference_provider(&self, provider: String) -> fdo::Result<()> {
+        let parsed: shared::config::InferenceProvider = provider
+            .parse()
+            .map_err(|e: anyhow::Error| fdo::Error::InvalidArgs(e.to_string()))?;
+        {
+            let mut state = self.state.write().await;
+            state.app.inference.provider = parsed;
+            let _ = state.sync_inference_from_config();
+            if let Err(e) = state.app.save() {
+                tracing::warn!(%e, "failed to persist inference config");
+            }
+        }
+        self.pipeline_tx
+            .send(PipelineCommand::SetInferenceProvider(parsed))
+            .await
+            .map_err(|err| fdo::Error::Failed(err.to_string()))?;
+        Ok(())
+    }
+
     #[zbus(property)]
     async fn status(&self) -> String {
         self.state.read().await.status.as_str().into()
@@ -96,6 +115,14 @@ impl Daemon1Iface {
     pub async fn daemon_status_changed(
         emitter: &SignalEmitter<'_>,
         new_status: &str,
+    ) -> zbus::Result<()>;
+
+    #[zbus(signal)]
+    #[zbus(name = "InferenceChanged")]
+    pub async fn inference_changed(
+        emitter: &SignalEmitter<'_>,
+        active: &str,
+        detail: &str,
     ) -> zbus::Result<()>;
 }
 

@@ -182,13 +182,22 @@ pub struct PalmDetector {
 
 impl PalmDetector {
     pub fn load() -> Result<Self> {
+        let (model, _, _) = Self::load_with_provider(&super::requested_ep())?;
+        Ok(model)
+    }
+
+    pub fn load_with_provider(provider: &str) -> Result<(Self, &'static str, Option<String>)> {
         let resolved = registry::find_model("palm_detection")
             .context("palm_detection model not found; run scripts/fetch-models.sh")?;
-        let session = load_session(&resolved.model_path)?;
-        Ok(Self {
-            session,
-            anchors: gen_anchors(),
-        })
+        let loaded = load_session(&resolved.model_path, provider)?;
+        Ok((
+            Self {
+                session: loaded.session,
+                anchors: gen_anchors(),
+            },
+            loaded.active_ep,
+            loaded.fallback,
+        ))
     }
 
     /// Detect palms with score ≥ `score_thresh`, returning at most 2 (after NMS)
@@ -281,10 +290,21 @@ pub struct HandLandmarker {
 
 impl HandLandmarker {
     pub fn load() -> Result<Self> {
+        let (model, _, _) = Self::load_with_provider(&super::requested_ep())?;
+        Ok(model)
+    }
+
+    pub fn load_with_provider(provider: &str) -> Result<(Self, &'static str, Option<String>)> {
         let resolved = registry::find_model("hand_landmark")
             .context("hand_landmark model not found; run scripts/fetch-models.sh")?;
-        let session = load_session(&resolved.model_path)?;
-        Ok(Self { session })
+        let loaded = load_session(&resolved.model_path, provider)?;
+        Ok((
+            Self {
+                session: loaded.session,
+            },
+            loaded.active_ep,
+            loaded.fallback,
+        ))
     }
 
     /// Regress landmarks from the square `crop` of the frame.
@@ -607,6 +627,10 @@ mod tests {
             eprintln!("skipping: palm_detection model not installed");
             return;
         }
+        if super::super::ensure_runtime().is_err() {
+            eprintln!("skipping: onnxruntime not available");
+            return;
+        }
         let (w, h) = (160usize, 120usize);
         let frame = synthetic_frame(w, h);
         let mut model = PalmDetector::load().expect("load palm");
@@ -621,6 +645,10 @@ mod tests {
     fn hand_landmarker_runs_without_panic() {
         if registry::find_model("hand_landmark").is_none() {
             eprintln!("skipping: hand_landmark model not installed");
+            return;
+        }
+        if super::super::ensure_runtime().is_err() {
+            eprintln!("skipping: onnxruntime not available");
             return;
         }
         let (w, h) = (160usize, 120usize);

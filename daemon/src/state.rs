@@ -48,12 +48,14 @@ pub struct DaemonState {
     pub virtual_camera_verified: Option<bool>,
     pub last_error: Option<String>,
     pub models_ready: bool,
+    pub inference_active: String,
+    pub inference_detail: Option<String>,
 }
 
 impl DaemonState {
     pub fn new(app: AppState, models_ready: bool) -> Self {
         let active_camera = app.camera.selected.clone();
-        Self {
+        let mut state = Self {
             status: DaemonStatus::Stopped,
             app,
             active_camera,
@@ -62,7 +64,23 @@ impl DaemonState {
             virtual_camera_verified: None,
             last_error: None,
             models_ready,
-        }
+            inference_active: "cpu".into(),
+            inference_detail: None,
+        };
+        state.sync_inference_from_config();
+        state
+    }
+
+    pub fn sync_inference_from_config(&mut self) -> (String, Option<String>) {
+        let (active, detail) =
+            crate::inference::predicted_active(&self.requested_inference_provider());
+        self.inference_active = active.into();
+        self.inference_detail = detail;
+        (self.inference_active.clone(), self.inference_detail.clone())
+    }
+
+    pub fn requested_inference_provider(&self) -> String {
+        crate::inference::effective_ep(self.app.inference.provider.as_str())
     }
 
     pub fn capabilities(&self) -> VariantMap {
@@ -75,6 +93,19 @@ impl DaemonState {
         );
         if let Some(error) = &self.last_error {
             values.insert("error".into(), str_value(error));
+        }
+
+        values.insert(
+            "inference_requested".into(),
+            str_value(self.requested_inference_provider()),
+        );
+        values.insert("inference_active".into(), str_value(&self.inference_active));
+        values.insert(
+            "inference_available".into(),
+            shared::dbus::str_array_value(&crate::inference::available_providers()),
+        );
+        if let Some(ref detail) = self.inference_detail {
+            values.insert("inference_detail".into(), str_value(detail));
         }
         values
     }
@@ -317,7 +348,7 @@ impl DaemonState {
 
 #[cfg(test)]
 mod tests {
-    use shared::dbus::{value_as_bool, value_as_u32};
+    use shared::dbus::{value_as_bool, value_as_string, value_as_u32};
 
     use super::{DaemonState, DaemonStatus};
 
@@ -373,5 +404,42 @@ mod tests {
         let state = DaemonState::new(shared::config::AppState::default(), true);
         let caps = state.capabilities();
         assert_eq!(caps.get("models_ready").and_then(value_as_bool), Some(true));
+
+        let req = caps.get("inference_requested").and_then(value_as_string);
+        assert_eq!(req.as_deref(), Some("auto"));
+
+        let act = caps.get("inference_active").and_then(value_as_string);
+        assert!(matches!(act.as_deref(), Some("cpu") | Some("npu")));
+
+        let avail = caps
+            .get("inference_available")
+            .and_then(shared::dbus::value_as_str_array);
+        assert!(avail.is_some());
+        let avail = avail.unwrap();
+        assert!(avail.contains(&"cpu".to_string()));
+    }
+
+    #[test]
+    fn sync_inference_from_config_updates_state() {
+        let mut state = DaemonState::new(shared::config::AppState::default(), true);
+        state.app.inference.provider = shared::config::InferenceProvider::Cpu;
+        let (active, detail) = state.sync_inference_from_config();
+        assert_eq!(active, "cpu");
+        assert_eq!(detail, None);
+
+        let caps = state.capabilities();
+        assert_eq!(
+            caps.get("inference_requested")
+                .and_then(value_as_string)
+                .as_deref(),
+            Some("cpu")
+        );
+        assert_eq!(
+            caps.get("inference_active")
+                .and_then(value_as_string)
+                .as_deref(),
+            Some("cpu")
+        );
+        assert!(!caps.contains_key("inference_detail"));
     }
 }

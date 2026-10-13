@@ -11,9 +11,57 @@ pub struct AppState {
     #[serde(default)]
     pub bypass: bool,
     #[serde(default)]
+    pub inference: InferenceConfig,
+    #[serde(default)]
     pub effects: EffectsConfig,
     #[serde(default)]
     pub camera: CameraConfig,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum InferenceProvider {
+    #[default]
+    Auto,
+    Cpu,
+    Npu,
+}
+
+impl InferenceProvider {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Cpu => "cpu",
+            Self::Npu => "npu",
+        }
+    }
+}
+
+impl std::fmt::Display for InferenceProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
+impl std::str::FromStr for InferenceProvider {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "auto" => Ok(Self::Auto),
+            "cpu" => Ok(Self::Cpu),
+            "npu" => Ok(Self::Npu),
+            other => {
+                anyhow::bail!("unknown inference provider '{other}': expected auto, cpu, or npu")
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+pub struct InferenceConfig {
+    #[serde(default)]
+    pub provider: InferenceProvider,
 }
 
 // effects
@@ -297,5 +345,51 @@ strength = 90
         // Unspecified fields should get serde defaults
         assert!(!state.effects.reactions.enabled);
         assert_eq!(state.effects.center_stage.zoom, "normal");
+    }
+
+    #[test]
+    fn config_round_trip_with_and_without_inference() {
+        let without_inf = r#"
+bypass = false
+[effects.portrait_blur]
+enabled = true
+strength = 50
+"#;
+        let loaded: AppState = toml::from_str(without_inf).expect("parse without inference table");
+        assert_eq!(loaded.inference.provider, InferenceProvider::Auto);
+
+        let with_inf = r#"
+[inference]
+provider = "npu"
+"#;
+        let loaded_npu: AppState = toml::from_str(with_inf).expect("parse with inference table");
+        assert_eq!(loaded_npu.inference.provider, InferenceProvider::Npu);
+
+        let text = toml::to_string_pretty(&loaded_npu).expect("serialize");
+        let reparsed: AppState = toml::from_str(&text).expect("reparse");
+        assert_eq!(reparsed.inference.provider, InferenceProvider::Npu);
+    }
+
+    #[test]
+    fn provider_string_parse_and_unknown_rejected() {
+        use std::str::FromStr;
+        assert_eq!(
+            InferenceProvider::from_str("auto").unwrap(),
+            InferenceProvider::Auto
+        );
+        assert_eq!(
+            InferenceProvider::from_str("cpu").unwrap(),
+            InferenceProvider::Cpu
+        );
+        assert_eq!(
+            InferenceProvider::from_str("npu").unwrap(),
+            InferenceProvider::Npu
+        );
+        assert_eq!(
+            InferenceProvider::from_str("  NPU  ").unwrap(),
+            InferenceProvider::Npu
+        );
+        assert!(InferenceProvider::from_str("unknown").is_err());
+        assert!(InferenceProvider::from_str("gpu").is_err());
     }
 }

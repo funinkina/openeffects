@@ -5,7 +5,7 @@ use adw::ApplicationWindow;
 use adw::glib;
 use adw::prelude::*;
 use gtk::gio;
-use shared::dbus::{EFFECT_IDS, VariantMap, value_as_bool, value_as_string};
+use shared::dbus::{EFFECT_IDS, VariantMap, value_as_bool, value_as_str_array, value_as_string};
 
 use crate::about;
 use crate::config::GuiConfig;
@@ -345,6 +345,9 @@ fn apply_update(w: &Widgets, update: UiUpdate) {
         UiUpdate::EffectChanged { id, params } => apply_effect(w, &id, &params),
         UiUpdate::Bypass(on) => apply_bypass(w, on),
         UiUpdate::Status(status) => apply_status_banner(w, &status),
+        UiUpdate::InferenceChanged { active, detail } => {
+            apply_inference_changed(w, &active, &detail);
+        }
         UiUpdate::Capabilities(caps) => apply_capabilities(w, &caps),
         UiUpdate::Cameras { cameras, active } => apply_cameras(w, &cameras, &active),
         UiUpdate::Disconnected => apply_status_banner(w, "disconnected"),
@@ -408,6 +411,103 @@ fn apply_capabilities(w: &Widgets, caps: &VariantMap) {
             pill.remove_css_class(stale_class);
             pill.add_css_class(pill_class);
         }
+    }
+
+    let inf_req = caps.get("inference_requested").and_then(value_as_string);
+    let inf_act = caps
+        .get("inference_active")
+        .and_then(value_as_string)
+        .unwrap_or_else(|| "cpu".into());
+    let inf_avail = caps
+        .get("inference_available")
+        .and_then(value_as_str_array)
+        .unwrap_or_default();
+    let inf_detail = caps.get("inference_detail").and_then(value_as_string);
+    apply_inference(
+        w,
+        inf_req.as_deref(),
+        &inf_act,
+        &inf_avail,
+        inf_detail.as_deref(),
+    );
+}
+
+fn apply_inference(
+    w: &Widgets,
+    requested: Option<&str>,
+    active: &str,
+    available: &[String],
+    detail: Option<&str>,
+) {
+    let has_npu = available.iter().any(|s| s == "npu");
+    w.prefs.inference_toggle_npu.set_enabled(has_npu);
+    if !has_npu {
+        let tip = detail.unwrap_or("Intel NPU hardware or OpenVINO execution provider unavailable");
+        w.prefs.inference_toggle_npu.set_tooltip(tip);
+    } else {
+        w.prefs.inference_toggle_npu.set_tooltip("");
+    }
+
+    if let Some(req) = requested {
+        w.prefs
+            .inference_group
+            .block_signal(&w.prefs.inference_handler);
+        w.prefs.inference_group.set_active_name(Some(req));
+        w.prefs
+            .inference_group
+            .unblock_signal(&w.prefs.inference_handler);
+    }
+
+    let (badge_text, badge_class) = match active {
+        "npu" => ("Active: NPU", "success"),
+        "mixed" => ("Active: Mixed", "accent"),
+        _ => ("Active: CPU", "dim-label"),
+    };
+    w.prefs.inference_badge.set_label(badge_text);
+    w.prefs.inference_badge.remove_css_class("dim-label");
+    w.prefs.inference_badge.remove_css_class("success");
+    w.prefs.inference_badge.remove_css_class("warning");
+    w.prefs.inference_badge.remove_css_class("accent");
+    w.prefs.inference_badge.add_css_class(badge_class);
+
+    if let Some(d) = detail {
+        if !d.is_empty() {
+            w.prefs
+                .inference_row
+                .set_subtitle(&format!("Falling back to CPU: {d}"));
+        } else {
+            w.prefs
+                .inference_row
+                .set_subtitle("Auto selects NPU when available, falls back to CPU");
+        }
+    } else {
+        w.prefs
+            .inference_row
+            .set_subtitle("Auto selects NPU when available, falls back to CPU");
+    }
+}
+
+fn apply_inference_changed(w: &Widgets, active: &str, detail: &str) {
+    let (badge_text, badge_class) = match active {
+        "npu" => ("Active: NPU", "success"),
+        "mixed" => ("Active: Mixed", "accent"),
+        _ => ("Active: CPU", "dim-label"),
+    };
+    w.prefs.inference_badge.set_label(badge_text);
+    w.prefs.inference_badge.remove_css_class("dim-label");
+    w.prefs.inference_badge.remove_css_class("success");
+    w.prefs.inference_badge.remove_css_class("warning");
+    w.prefs.inference_badge.remove_css_class("accent");
+    w.prefs.inference_badge.add_css_class(badge_class);
+
+    if !detail.is_empty() {
+        w.prefs
+            .inference_row
+            .set_subtitle(&format!("Falling back to CPU: {detail}"));
+    } else {
+        w.prefs
+            .inference_row
+            .set_subtitle("Auto selects NPU when available, falls back to CPU");
     }
 }
 

@@ -42,6 +42,8 @@ pub enum GuiCommand {
     TriggerReaction {
         id: String,
     },
+    /// Switch inference execution provider ("auto" | "cpu" | "npu").
+    SetInferenceProvider(String),
     /// Terminate the daemon process, then acknowledge with `UiUpdate::DaemonQuit`
     /// so the GUI can finish closing only after the call has been delivered.
     QuitDaemon,
@@ -64,6 +66,10 @@ pub enum UiUpdate {
     /// Master passthrough state changed.
     Bypass(bool),
     Status(String),
+    InferenceChanged {
+        active: String,
+        detail: String,
+    },
     Capabilities(VariantMap),
     Cameras {
         cameras: Vec<CameraInfo>,
@@ -134,6 +140,7 @@ async fn run_once(
     let mut effect_changed = effects.receive_effect_changed().await?;
     let mut bypass_changed = effects.receive_bypass_changed().await?;
     let mut status_changed = daemon.receive_daemon_status_changed().await?;
+    let mut inference_changed = daemon.receive_inference_changed().await?;
     let mut caps_changed = daemon.receive_capabilities_changed().await;
     let mut active_cam_changed = devices.receive_active_camera_changed().await;
 
@@ -169,6 +176,11 @@ async fn run_once(
                     Some(GuiCommand::TriggerReaction { id }) => {
                         if let Err(err) = effects.trigger_reaction(&id).await {
                             tracing::warn!(%err, id, "TriggerReaction failed");
+                        }
+                    }
+                    Some(GuiCommand::SetInferenceProvider(provider)) => {
+                        if let Err(err) = daemon.set_inference_provider(&provider).await {
+                            tracing::warn!(%err, provider, "SetInferenceProvider failed");
                         }
                     }
                     Some(GuiCommand::QuitDaemon) => {
@@ -215,6 +227,20 @@ async fn run_once(
                     .await
                     .ok();
                 // Refresh capabilities (models_ready, virtual_camera) on status change.
+                push_capabilities(&daemon, update_tx).await;
+            }
+            signal = inference_changed.next() => {
+                let Some(signal) = signal else {
+                    return Err(anyhow::anyhow!("InferenceChanged signal stream closed"));
+                };
+                let args = signal.args()?;
+                update_tx
+                    .send(UiUpdate::InferenceChanged {
+                        active: args.active.to_string(),
+                        detail: args.detail.to_string(),
+                    })
+                    .await
+                    .ok();
                 push_capabilities(&daemon, update_tx).await;
             }
             change = caps_changed.next() => {

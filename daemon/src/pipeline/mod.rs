@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use pipewire as pw;
 use shared::config::AppState;
 use tokio::sync::mpsc;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::pipeline::bridge::Bridge;
 use crate::pipeline::probe::PIPEWIRE_NODE_NAME;
@@ -70,17 +70,30 @@ pub enum PipelineCommand {
     /// the live `oe_effects` element. A no-op when no capture pipeline is up
     /// (nothing is consuming the virtual camera).
     TriggerReaction(String),
+    /// Persisted choice; `VINOOPENEFFECTS_EP`, when set, still wins.
+    SetInferenceProvider(shared::config::InferenceProvider),
     Shutdown,
 }
 
 #[derive(Debug, Clone)]
 pub enum PipelineEvent {
-    Advertised { sink: String },
-    Started { sink: String },
+    Advertised {
+        sink: String,
+    },
+    Started {
+        sink: String,
+    },
     Idle,
     Stopped,
     Error(String),
-    VirtualCameraVerified { node_name: String, found: bool },
+    VirtualCameraVerified {
+        node_name: String,
+        found: bool,
+    },
+    InferenceChanged {
+        active: String,
+        detail: Option<String>,
+    },
 }
 
 /// Internal gating signal: the provide node's consumer state drives the capture
@@ -241,6 +254,30 @@ fn worker_loop(
                 if let Some(c) = capture.as_ref() {
                     c.trigger_reaction(&id);
                 }
+            }
+            Some(WorkerMsg::Command(PipelineCommand::SetInferenceProvider(choice))) => {
+                if let Some(app) = stored_app.as_mut() {
+                    app.inference.provider = choice;
+                }
+                let provider = crate::inference::effective_ep(choice.as_str());
+                let (active, detail) = match capture.as_ref() {
+                    Some(c) => match c.swap_inference(&provider) {
+                        Ok(status) => status,
+                        Err(err) => {
+                            warn!(%err, "runtime inference swap failed; keeping current provider");
+                            let active = c.inference_active().unwrap_or_else(|| "cpu".into());
+                            (
+                                active,
+                                Some(format!("switch to {provider} failed: {err:#}")),
+                            )
+                        }
+                    },
+                    None => {
+                        let (active, detail) = crate::inference::predicted_active(&provider);
+                        (active.to_string(), detail)
+                    }
+                };
+                let _ = events.blocking_send(PipelineEvent::InferenceChanged { active, detail });
             }
             Some(WorkerMsg::Command(PipelineCommand::Shutdown)) => {
                 if let Some(c) = capture.take() {
