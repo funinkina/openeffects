@@ -35,6 +35,7 @@ vinoopeneffects-ctl status
 | `vinoopeneffects-ctl status`         | Print status plus capabilities (execution provider, model readiness, output sink).            |
 | `vinoopeneffects-ctl status --short` | One-word status, e.g. for Waybar.                                                                   |
 | `vinoopeneffects-ctl status --json`  | Machine-readable status.                                                                            |
+| `vinoopeneffects-ctl doctor`         | Run diagnostic checks across daemon, NPU, models, cameras, and pipeline.                            |
 | `vinoopeneffects-ctl watch`          | Stream `EffectChanged` signals until interrupted (Ctrl-C).                                          |
 
 Any command that talks to the daemon starts it first if it isn't already running
@@ -50,6 +51,31 @@ Control whether the daemon starts automatically with your desktop session
 | `vinoopeneffects-ctl autostart enable`  | Start the daemon automatically when the graphical session begins. |
 | `vinoopeneffects-ctl autostart disable` | Stop starting it automatically.                                   |
 | `vinoopeneffects-ctl autostart status`  | Show whether autostart is enabled and whether the daemon is running. |
+
+## Diagnostics (`doctor`)
+
+Inspect system environment, models, NPU hardware, camera classifications, and daemon health in one command:
+
+```bash
+vinoopeneffects-ctl doctor
+```
+
+Output checks:
+- **Daemon**: Reachability over D-Bus, D-Bus activation service file validity, systemd user unit status (diagnoses why activation failed if daemon is stopped).
+- **Inference**: NPU build feature, ONNX Runtime dynamic library and OpenVINO Execution Provider resolution, `/dev/accel` hardware nodes.
+- **Models**: Mandatory and optional model file discovery and SHA256 integrity verification against `manifest.toml`.
+- **Camera**: V4L2 device enumeration with format class tags (`RGB`, `IR`, `meta`), selected camera validation (warning and suggesting RGB alternative if an IR sensor is chosen).
+- **Pipeline**: PipeWire session socket connectivity and virtual camera node presence.
+- **GUI**: `gtk4paintablesink` GStreamer element availability (with distro-specific package suggestions if missing) and GTK 4 / libadwaita versions.
+- **Config**: `state.toml` existence, syntax validity, and unrecognized keys detection.
+
+Machine-readable JSON output for bug reports or scripts:
+
+```bash
+vinoopeneffects-ctl doctor --json
+```
+
+Exit status: exits non-zero (`1`) if any check returns `FAIL`, and `0` otherwise.
 
 ## Effects overview
 

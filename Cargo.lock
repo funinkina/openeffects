@@ -2564,7 +2564,9 @@ version = "0.1.4"
 dependencies = [
  "anyhow",
  "dirs",
+ "libc",
  "serde",
+ "sha2",
  "tempfile",
  "thiserror",
  "toml",

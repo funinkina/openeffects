@@ -33,6 +33,12 @@ enum Command {
         #[arg(long)]
         short: bool,
     },
+    /// Inspect system environment, models, NPU, cameras, and daemon health.
+    Doctor {
+        /// Emit machine-readable JSON.
+        #[arg(long)]
+        json: bool,
+    },
     /// Arm the virtual camera (camera opens on demand when a consumer connects).
     Start,
     /// Tear down the pipeline and release the camera.
@@ -310,6 +316,10 @@ async fn main() -> anyhow::Result<()> {
         return autostart(command);
     }
 
+    if let Command::Doctor { json } = cli.command {
+        return doctor(json).await;
+    }
+
     let conn = Connection::session().await?;
     // Every other command talks to the daemon; bring it up if it isn't running.
     ensure_daemon(&conn).await;
@@ -463,7 +473,52 @@ async fn main() -> anyhow::Result<()> {
         Command::Camera { command } => camera(&conn, command).await?,
         // Handled before the daemon connection above.
         Command::Autostart { .. } => unreachable!(),
+        Command::Doctor { .. } => unreachable!(),
         Command::Watch => watch(&conn).await?,
+    }
+
+    Ok(())
+}
+
+async fn doctor(json: bool) -> anyhow::Result<()> {
+    let dbus_status_res: Result<String, String> = async {
+        let conn = Connection::session().await.map_err(|e| e.to_string())?;
+        let dbus = zbus::fdo::DBusProxy::new(&conn)
+            .await
+            .map_err(|e| e.to_string())?;
+        let name = zbus::names::BusName::try_from(SERVICE_NAME).map_err(|e| e.to_string())?;
+        let has_owner = dbus.name_has_owner(name).await.map_err(|e| e.to_string())?;
+        if !has_owner {
+            return Err("daemon is not running".to_string());
+        }
+        let daemon = daemon_proxy(&conn).await.map_err(|e| e.to_string())?;
+        let status = daemon
+            .get_property::<String>("Status")
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(status)
+    }
+    .await;
+
+    let dbus_status_ref = match &dbus_status_res {
+        Ok(s) => Ok(s.as_str()),
+        Err(e) => Err(e.as_str()),
+    };
+
+    let checks = shared::doctor::run_all(dbus_status_ref);
+
+    if json {
+        let json_str = serde_json::to_string_pretty(&checks)?;
+        println!("{json_str}");
+    } else {
+        shared::doctor::print_report(&checks);
+    }
+
+    if checks
+        .iter()
+        .any(|c| c.status == shared::doctor::Status::Fail)
+    {
+        std::process::exit(1);
     }
 
     Ok(())
