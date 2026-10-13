@@ -65,6 +65,32 @@ jobs:
       # Model-backed tests no-op without models (see core inference/models.rs).
       - run: cargo test --workspace
 
+  # Core is pure logic, so this job installs no GStreamer, GTK or PipeWire.
+  # Clients reach the daemon only over D-Bus, so they must never link core or
+  # the daemon (that would pull ONNX Runtime into the GUI and CLI).
+  core:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install stable --profile minimal
+      - *cache
+      - name: Check crate boundaries
+        run: |
+          if cargo tree -p vinoopeneffects-core -e normal --prefix none \
+              | grep -E "^(gstreamer|gtk4|libadwaita|pipewire)"; then
+            echo "core must not link a media or GUI stack"; exit 1
+          fi
+          for client in vinoopeneffects vinoopeneffects-ctl; do
+            if cargo tree -p "$client" -e normal --prefix none \
+                | grep -E "^vinoopeneffects-(core|daemon) "; then
+              echo "$client must depend on shared only, not core or daemon"; exit 1
+            fi
+          done
+      - run: cargo test -p vinoopeneffects-core
+
   build-npu:
     runs-on: ubuntu-26.04
     timeout-minutes: 30
