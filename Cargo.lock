@@ -2544,8 +2544,6 @@ dependencies = [
  "image",
  "libc",
  "pipewire",
- "sha2",
- "tempfile",
  "thiserror",
  "tokio",
  "tracing",
