@@ -9,7 +9,7 @@
 //! 5-8 index; 9-12 middle; 13-16 ring; 17-20 pinky. Coordinates are normalized
 //! with y growing downward.
 
-use super::hand::HandLandmarks;
+use crate::inference::hand::HandLandmarks;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Gesture {

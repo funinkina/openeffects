@@ -33,7 +33,7 @@
 //!    last over the final canvas. Triggered manually (the `trigger-reaction`
 //!    property) or, when enabled, automatically by the hand-gesture pipeline.
 //!
-//! [`reactions`]: crate::pipeline::filters::reactions
+//! [`reactions`]: oe_core::effects::reactions
 
 use gst::glib;
 use gst::glib::subclass::prelude::*;
@@ -68,10 +68,10 @@ mod imp {
     use gstreamer_video::subclass::prelude::*;
     use tracing::warn;
 
-    use crate::pipeline::filters::reactions::Reactions;
-    use oe_core::inference::engine::{AutoLight, Face, Mask, SelfieSeg, YuNet};
-    use oe_core::inference::gesture::{self, Gesture};
+    use oe_core::effects::reactions::Reactions;
+    use oe_core::gesture::{self, Gesture};
     use oe_core::inference::hand::{CropBox, HandLandmarker, HandLandmarks, PalmDetector};
+    use oe_core::inference::models::{AutoLight, Face, Mask, SelfieSeg, YuNet};
 
     const DEFAULT_STRENGTH: u32 = 50;
     const DEFAULT_ZOOM: &str = "normal";

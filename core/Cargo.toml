@@ -14,6 +14,8 @@ default = ["npu"]
 npu = ["ort/load-dynamic", "ort/openvino"]
 
 [dependencies]
+shared = { package = "vinoopeneffects-shared", path = "../shared" }
+
 anyhow.workspace  = true
 serde.workspace   = true
 toml.workspace    = true
@@ -22,6 +24,7 @@ tracing.workspace = true
 
 ort.workspace   = true
 sha2.workspace  = true
+image.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

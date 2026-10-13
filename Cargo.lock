@@ -2503,12 +2503,14 @@ version = "0.1.4"
 dependencies = [
  "anyhow",
  "dirs",
+ "image",
  "ort",
  "serde",
  "sha2",
  "tempfile",
  "toml",
  "tracing",
+ "vinoopeneffects-shared",
 ]
 
 [[package]]

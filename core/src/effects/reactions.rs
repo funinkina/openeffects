@@ -19,16 +19,16 @@ use tracing::warn;
 /// [`REACTION_IDS`]: heart, thumbs_up, thumbs_down, tada, clap, wave, joy,
 /// open_mouth, cry, thinking.
 static EMOJI_PNG: [&[u8]; REACTION_IDS.len()] = [
-    include_bytes!("../../../assets/emoji/emoji_u1f496.png"),
-    include_bytes!("../../../assets/emoji/emoji_u1f44d.png"),
-    include_bytes!("../../../assets/emoji/emoji_u1f44e.png"),
-    include_bytes!("../../../assets/emoji/emoji_u1f389.png"),
-    include_bytes!("../../../assets/emoji/emoji_u1f44f.png"),
-    include_bytes!("../../../assets/emoji/emoji_u1f44b.png"),
-    include_bytes!("../../../assets/emoji/emoji_u1f602.png"),
-    include_bytes!("../../../assets/emoji/emoji_u1f62e.png"),
-    include_bytes!("../../../assets/emoji/emoji_u1f622.png"),
-    include_bytes!("../../../assets/emoji/emoji_u1f914.png"),
+    include_bytes!("../../assets/emoji/emoji_u1f496.png"),
+    include_bytes!("../../assets/emoji/emoji_u1f44d.png"),
+    include_bytes!("../../assets/emoji/emoji_u1f44e.png"),
+    include_bytes!("../../assets/emoji/emoji_u1f389.png"),
+    include_bytes!("../../assets/emoji/emoji_u1f44f.png"),
+    include_bytes!("../../assets/emoji/emoji_u1f44b.png"),
+    include_bytes!("../../assets/emoji/emoji_u1f602.png"),
+    include_bytes!("../../assets/emoji/emoji_u1f62e.png"),
+    include_bytes!("../../assets/emoji/emoji_u1f622.png"),
+    include_bytes!("../../assets/emoji/emoji_u1f914.png"),
 ];
 
 /// Particles spawned per burst.

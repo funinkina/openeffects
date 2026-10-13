@@ -9,8 +9,8 @@ use gstreamer_app::AppSink;
 
 use anyhow::{Context, Result};
 
-use oe_core::inference::engine::{SelfieSeg, YuNet};
 use oe_core::inference::hand::{CropBox, HandLandmarker, PalmDetector};
+use oe_core::inference::models::{SelfieSeg, YuNet};
 
 const WARMUP: usize = 10;
 const DEFAULT_ITERS: usize = 200;
