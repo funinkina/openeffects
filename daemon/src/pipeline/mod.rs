@@ -259,7 +259,7 @@ fn worker_loop(
                 if let Some(app) = stored_app.as_mut() {
                     app.inference.provider = choice;
                 }
-                let provider = crate::inference::effective_ep(choice.as_str());
+                let provider = oe_core::inference::effective_ep(choice.as_str());
                 let (active, detail) = match capture.as_ref() {
                     Some(c) => match c.swap_inference(&provider) {
                         Ok(status) => status,
@@ -273,7 +273,7 @@ fn worker_loop(
                         }
                     },
                     None => {
-                        let (active, detail) = crate::inference::predicted_active(&provider);
+                        let (active, detail) = oe_core::inference::predicted_active(&provider);
                         (active.to_string(), detail)
                     }
                 };

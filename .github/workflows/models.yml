@@ -11,7 +11,7 @@ on:
       - "data/models/**"
       - "scripts/fetch-models.sh"
       - "scripts/fetch-ort.sh"
-      - "daemon/src/inference/**"
+      - "core/src/inference/**"
       - ".github/workflows/models.yml"
   push:
     branches: [main]
@@ -19,7 +19,7 @@ on:
       - "data/models/**"
       - "scripts/fetch-models.sh"
       - "scripts/fetch-ort.sh"
-      - "daemon/src/inference/**"
+      - "core/src/inference/**"
       - ".github/workflows/models.yml"
   # Weekly, with the cache bypassed, so a moved or changed upstream file shows up
   # here rather than on a contributor's first fetch.

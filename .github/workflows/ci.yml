@@ -62,7 +62,7 @@ jobs:
       - run: rustup toolchain install stable --profile minimal
       - *apt
       - *cache
-      # Model-backed tests no-op without models (see daemon engine.rs).
+      # Model-backed tests no-op without models (see core inference/engine.rs).
       - run: cargo test --workspace
 
   build-npu:

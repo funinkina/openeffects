@@ -68,10 +68,10 @@ mod imp {
     use gstreamer_video::subclass::prelude::*;
     use tracing::warn;
 
-    use crate::inference::engine::{AutoLight, Face, Mask, SelfieSeg, YuNet};
-    use crate::inference::gesture::{self, Gesture};
-    use crate::inference::hand::{CropBox, HandLandmarker, HandLandmarks, PalmDetector};
     use crate::pipeline::filters::reactions::Reactions;
+    use oe_core::inference::engine::{AutoLight, Face, Mask, SelfieSeg, YuNet};
+    use oe_core::inference::gesture::{self, Gesture};
+    use oe_core::inference::hand::{CropBox, HandLandmarker, HandLandmarks, PalmDetector};
 
     const DEFAULT_STRENGTH: u32 = 50;
     const DEFAULT_ZOOM: &str = "normal";
@@ -369,7 +369,7 @@ mod imp {
 
     impl Default for Engine {
         fn default() -> Self {
-            let requested = crate::inference::requested_ep();
+            let requested = oe_core::inference::requested_ep();
             let mut eng = Self {
                 generation: 0,
                 provider: requested,
@@ -400,7 +400,7 @@ mod imp {
             .collect();
             self.active = match eps.split_first() {
                 None => {
-                    let (active, detail) = crate::inference::predicted_active(&self.provider);
+                    let (active, detail) = oe_core::inference::predicted_active(&self.provider);
                     self.detail = detail;
                     active
                 }
@@ -415,7 +415,7 @@ mod imp {
             self.palm.reset_failed();
             self.hand.reset_failed();
             self.auto_light.reset_failed();
-            crate::inference::reset_accel_failed();
+            oe_core::inference::reset_accel_failed();
         }
 
         fn selfie(&mut self) -> Option<&mut SelfieSeg> {
@@ -668,7 +668,7 @@ mod imp {
 
             // Before loading: a stale "accelerator failed" memo from the old
             // provider would otherwise pin `auto` to CPU.
-            crate::inference::reset_accel_failed();
+            oe_core::inference::reset_accel_failed();
             let mut detail = None;
             let selfie = reload(
                 want_selfie,
@@ -2330,7 +2330,7 @@ mod imp {
 
         #[test]
         fn npu_request_without_npu_reports_cpu_and_why() {
-            if crate::inference::probe_npu_cached().available {
+            if oe_core::inference::probe_npu_cached().available {
                 eprintln!("skipping: an NPU is present");
                 return;
             }

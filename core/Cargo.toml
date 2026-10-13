@@ -1,0 +1,27 @@
+[package]
+name    = "vinoopeneffects-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[features]
+# OpenVINO execution provider (NPU/GPU), on by default: onnxruntime is loaded at
+# runtime (ORT_DYLIB_PATH or lib/vinoopeneffects/ort) and the NPU is used when
+# present, falling back to CPU. `--no-default-features` links the CPU-only
+# onnxruntime statically instead.
+default = ["npu"]
+npu = ["ort/load-dynamic", "ort/openvino"]
+
+[dependencies]
+anyhow.workspace  = true
+serde.workspace   = true
+toml.workspace    = true
+dirs.workspace    = true
+tracing.workspace = true
+
+ort.workspace   = true
+sha2.workspace  = true
+
+[dev-dependencies]
+tempfile = "3"

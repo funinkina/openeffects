@@ -70,7 +70,7 @@ impl BuiltCapture {
         match self.oe_effects() {
             Some(oe) => oe.swap_provider(provider),
             None => {
-                let (active, detail) = crate::inference::predicted_active(provider);
+                let (active, detail) = oe_core::inference::predicted_active(provider);
                 Ok((active.to_string(), detail))
             }
         }

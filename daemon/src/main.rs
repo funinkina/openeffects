@@ -1,5 +1,5 @@
+mod bench;
 mod dbus_server;
-mod inference;
 mod pipeline;
 mod state;
 
@@ -23,11 +23,11 @@ use crate::{
 fn main() -> anyhow::Result<()> {
     if let Some(i) = std::env::args().position(|a| a == "--bench-inference") {
         let rest: Vec<String> = std::env::args().skip(i + 1).collect();
-        return inference::bench::run(&rest);
+        return bench::run(&rest);
     }
     if let Some(i) = std::env::args().position(|a| a == "--bench-video") {
         let rest: Vec<String> = std::env::args().skip(i + 1).collect();
-        return inference::bench::run_video(&rest);
+        return bench::run_video(&rest);
     }
     unsafe { libc::mallopt(libc::M_ARENA_MAX, 2) };
 
@@ -69,8 +69,8 @@ async fn run() -> anyhow::Result<()> {
             }
         }
     }
-    let models_ready = inference::registry::find_model("yunet").is_some()
-        && inference::registry::find_model("selfie_segmentation").is_some();
+    let models_ready = oe_core::inference::registry::find_model("yunet").is_some()
+        && oe_core::inference::registry::find_model("selfie_segmentation").is_some();
     if !models_ready {
         warn!(
             "ML models not found; run scripts/fetch-models.sh to enable Portrait Blur and Center Stage"

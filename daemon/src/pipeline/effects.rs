@@ -50,7 +50,7 @@ pub fn build_effects_bin(app: &AppState) -> Result<gst::Bin> {
     apply_app_state_to_elements(&effects, app);
     // Here rather than in apply_app_state_to_elements, which runs on every
     // effect change: setting the provider reloads every loaded model.
-    let provider = crate::inference::effective_ep(app.inference.provider.as_str());
+    let provider = oe_core::inference::effective_ep(app.inference.provider.as_str());
     if effects.property::<String>("inference-provider") != provider {
         effects.set_property("inference-provider", provider);
     }

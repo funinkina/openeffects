@@ -73,14 +73,14 @@ impl DaemonState {
 
     pub fn sync_inference_from_config(&mut self) -> (String, Option<String>) {
         let (active, detail) =
-            crate::inference::predicted_active(&self.requested_inference_provider());
+            oe_core::inference::predicted_active(&self.requested_inference_provider());
         self.inference_active = active.into();
         self.inference_detail = detail;
         (self.inference_active.clone(), self.inference_detail.clone())
     }
 
     pub fn requested_inference_provider(&self) -> String {
-        crate::inference::effective_ep(self.app.inference.provider.as_str())
+        oe_core::inference::effective_ep(self.app.inference.provider.as_str())
     }
 
     pub fn capabilities(&self) -> VariantMap {
@@ -102,7 +102,7 @@ impl DaemonState {
         values.insert("inference_active".into(), str_value(&self.inference_active));
         values.insert(
             "inference_available".into(),
-            shared::dbus::str_array_value(&crate::inference::available_providers()),
+            shared::dbus::str_array_value(&oe_core::inference::available_providers()),
         );
         if let Some(ref detail) = self.inference_detail {
             values.insert("inference_detail".into(), str_value(detail));

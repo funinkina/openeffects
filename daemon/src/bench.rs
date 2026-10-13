@@ -9,8 +9,8 @@ use gstreamer_app::AppSink;
 
 use anyhow::{Context, Result};
 
-use super::engine::{SelfieSeg, YuNet};
-use super::hand::{CropBox, HandLandmarker, PalmDetector};
+use oe_core::inference::engine::{SelfieSeg, YuNet};
+use oe_core::inference::hand::{CropBox, HandLandmarker, PalmDetector};
 
 const WARMUP: usize = 10;
 const DEFAULT_ITERS: usize = 200;
@@ -29,7 +29,7 @@ pub fn run(args: &[String]) -> Result<()> {
     let stride = w * 4;
     println!(
         "ep={} iters={iters} warmup={WARMUP} frame={w}x{h}{}",
-        super::requested_ep(),
+        oe_core::inference::requested_ep(),
         if frame_path.is_some() {
             ""
         } else {
@@ -197,7 +197,7 @@ pub fn run_video(args: &[String]) -> Result<()> {
     let pct = |p: f64| lat[((n - 1) as f64 * p).round() as usize];
     println!(
         "ep={} frames={n} fps={:.1} ms_mean={:.2} ms_p50={:.2} ms_p99={:.2} cpu_ms_per_frame={:.2} cpu_util_pct={:.1} wall_s={wall:.1}",
-        super::requested_ep(),
+        oe_core::inference::requested_ep(),
         n as f64 / wall,
         lat.iter().sum::<f64>() / n as f64,
         pct(0.5),

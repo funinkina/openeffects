@@ -81,7 +81,7 @@ You do **not** package these by hand — they resolve automatically:
 - **ML models.** Bundled into the package at build time. `scripts/build-packages.sh`
   downloads + sha256-verifies the 4 ONNX models and installs them to
   `/usr/share/vinoopeneffects/models/<id>/`. The daemon's `search_dirs()`
-  (`daemon/src/inference/registry.rs`) already searches:
+  (`core/src/inference/registry.rs`) already searches:
   1. `~/.local/share/vinoopeneffects/models` (per-user)
   2. `/usr/share/vinoopeneffects/models` (system — where packages put them)
 

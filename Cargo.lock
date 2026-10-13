@@ -2498,6 +2498,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "vinoopeneffects-core"
+version = "0.1.4"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "ort",
+ "serde",
+ "sha2",
+ "tempfile",
+ "toml",
+ "tracing",
+]
+
+[[package]]
 name = "vinoopeneffects-ctl"
 version = "0.1.4"
 dependencies = [
@@ -2521,23 +2535,20 @@ name = "vinoopeneffects-daemon"
 version = "0.1.4"
 dependencies = [
  "anyhow",
- "dirs",
  "gstreamer",
  "gstreamer-app",
  "gstreamer-base",
  "gstreamer-video",
  "image",
  "libc",
- "ort",
  "pipewire",
- "serde",
  "sha2",
  "tempfile",
  "thiserror",
  "tokio",
- "toml",
  "tracing",
  "tracing-subscriber",
+ "vinoopeneffects-core",
  "vinoopeneffects-shared",
  "zbus",
  "zbus_xml",
