@@ -422,6 +422,10 @@ mod tests {
             eprintln!("skipping: selfie_segmentation model not installed");
             return;
         }
+        if super::super::ensure_runtime().is_err() {
+            eprintln!("skipping: onnxruntime not available");
+            return;
+        }
         let (w, h) = (64usize, 48usize);
         let frame = synthetic_frame(w, h);
         let mut model = SelfieSeg::load().expect("load selfie seg");
@@ -437,6 +441,10 @@ mod tests {
     fn yunet_runs_without_panic() {
         if super::registry::find_model("yunet").is_none() {
             eprintln!("skipping: yunet model not installed");
+            return;
+        }
+        if super::super::ensure_runtime().is_err() {
+            eprintln!("skipping: onnxruntime not available");
             return;
         }
         let (w, h) = (64usize, 48usize);

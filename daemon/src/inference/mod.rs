@@ -281,7 +281,7 @@ fn runtime_dirs() -> Vec<std::path::PathBuf> {
 /// Load the onnxruntime shared library once, failing with a message instead of
 /// ort's panic when none can be found.
 #[cfg(feature = "npu")]
-fn ensure_runtime() -> anyhow::Result<()> {
+pub(crate) fn ensure_runtime() -> anyhow::Result<()> {
     use std::path::PathBuf;
     use std::sync::OnceLock;
     static LOADED: OnceLock<Result<PathBuf, String>> = OnceLock::new();
@@ -314,7 +314,7 @@ fn ensure_runtime() -> anyhow::Result<()> {
 }
 
 #[cfg(not(feature = "npu"))]
-fn ensure_runtime() -> anyhow::Result<()> {
+pub(crate) fn ensure_runtime() -> anyhow::Result<()> {
     Ok(())
 }
 

@@ -627,6 +627,10 @@ mod tests {
             eprintln!("skipping: palm_detection model not installed");
             return;
         }
+        if super::super::ensure_runtime().is_err() {
+            eprintln!("skipping: onnxruntime not available");
+            return;
+        }
         let (w, h) = (160usize, 120usize);
         let frame = synthetic_frame(w, h);
         let mut model = PalmDetector::load().expect("load palm");
@@ -641,6 +645,10 @@ mod tests {
     fn hand_landmarker_runs_without_panic() {
         if registry::find_model("hand_landmark").is_none() {
             eprintln!("skipping: hand_landmark model not installed");
+            return;
+        }
+        if super::super::ensure_runtime().is_err() {
+            eprintln!("skipping: onnxruntime not available");
             return;
         }
         let (w, h) = (160usize, 120usize);
