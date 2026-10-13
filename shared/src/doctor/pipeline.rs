@@ -38,7 +38,9 @@ pub fn virtual_camera_verdict(vcam_present: bool) -> Check {
             "pipeline",
             "virtual camera",
             Status::Info,
-            format!("virtual camera node '{VIRTUAL_CAMERA_NODE_NAME}' not active (created on demand when daemon runs)"),
+            format!(
+                "virtual camera node '{VIRTUAL_CAMERA_NODE_NAME}' not active (created on demand when daemon runs)"
+            ),
             None,
         )
     }
@@ -58,7 +60,10 @@ pub fn probe_pipewire(runtime_dir: Option<&Path>) -> bool {
 pub fn probe_virtual_camera() -> bool {
     use std::process::Command;
 
-    if let Ok(out) = Command::new("pw-cli").args(["list-objects", "Node"]).output() {
+    if let Ok(out) = Command::new("pw-cli")
+        .args(["list-objects", "Node"])
+        .output()
+    {
         let text = String::from_utf8_lossy(&out.stdout);
         if text.contains(VIRTUAL_CAMERA_NODE_NAME) {
             return true;

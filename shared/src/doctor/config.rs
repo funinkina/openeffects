@@ -28,7 +28,10 @@ pub fn find_unknown_keys(value: &toml::Value) -> Vec<String> {
                             "center_stage" => {
                                 if let toml::Value::Table(t) = ev {
                                     for key in t.keys() {
-                                        if !matches!(key.as_str(), "enabled" | "zoom" | "mode" | "crop") {
+                                        if !matches!(
+                                            key.as_str(),
+                                            "enabled" | "zoom" | "mode" | "crop"
+                                        ) {
                                             unknown.push(format!("effects.center_stage.{key}"));
                                         }
                                     }

@@ -27,16 +27,35 @@ pub fn gtk4_sink_package_remedy(distro: Option<&DistroInfo>) -> (&'static str, &
         None => ("", ""),
     };
 
-    if id == "fedora" || id == "rhel" || id == "centos" || like.contains("fedora") || like.contains("rhel") {
-        ("gstreamer1-plugin-gtk4", "sudo dnf install gstreamer1-plugin-gtk4")
-    } else if id == "ubuntu" || id == "debian" || id == "pop" || like.contains("debian") || like.contains("ubuntu") {
+    if id == "fedora"
+        || id == "rhel"
+        || id == "centos"
+        || like.contains("fedora")
+        || like.contains("rhel")
+    {
+        (
+            "gstreamer1-plugin-gtk4",
+            "sudo dnf install gstreamer1-plugin-gtk4",
+        )
+    } else if id == "ubuntu"
+        || id == "debian"
+        || id == "pop"
+        || like.contains("debian")
+        || like.contains("ubuntu")
+    {
         ("gstreamer1.0-gtk4", "sudo apt install gstreamer1.0-gtk4")
     } else if id == "arch" || id == "manjaro" || like.contains("arch") {
         ("gst-plugin-gtk4", "sudo pacman -S gst-plugin-gtk4")
     } else if id == "opensuse" || id == "suse" || like.contains("suse") {
-        ("gstreamer-plugin-gtk4", "sudo zypper install gstreamer-plugin-gtk4")
+        (
+            "gstreamer-plugin-gtk4",
+            "sudo zypper install gstreamer-plugin-gtk4",
+        )
     } else {
-        ("gstreamer1-plugin-gtk4", "install gstreamer1-plugin-gtk4 package")
+        (
+            "gstreamer1-plugin-gtk4",
+            "install gstreamer1-plugin-gtk4 package",
+        )
     }
 }
 
@@ -55,7 +74,9 @@ pub fn gtk4_sink_verdict(sink_found: bool, distro: Option<&DistroInfo>) -> Check
             "gui",
             "sink",
             Status::Fail,
-            format!("gtk4paintablesink element missing (needs {pkg}); live preview cannot render frames"),
+            format!(
+                "gtk4paintablesink element missing (needs {pkg}); live preview cannot render frames"
+            ),
             Some(cmd.to_string()),
         )
     }
@@ -70,13 +91,7 @@ pub fn gtk_versions_verdict(gtk_ver: Option<&str>, adw_ver: Option<&str>) -> Che
             format!("GTK {gtk}, Libadwaita {adw}"),
             None,
         ),
-        (Some(gtk), None) => Check::new(
-            "gui",
-            "libraries",
-            Status::Ok,
-            format!("GTK {gtk}"),
-            None,
-        ),
+        (Some(gtk), None) => Check::new("gui", "libraries", Status::Ok, format!("GTK {gtk}"), None),
         _ => Check::new(
             "gui",
             "libraries",
@@ -160,7 +175,10 @@ mod tests {
         let c = gtk4_sink_verdict(false, Some(&distro));
         assert_eq!(c.status, Status::Fail);
         assert!(c.detail.contains("gstreamer1-plugin-gtk4"));
-        assert_eq!(c.fix, Some("sudo dnf install gstreamer1-plugin-gtk4".into()));
+        assert_eq!(
+            c.fix,
+            Some("sudo dnf install gstreamer1-plugin-gtk4".into())
+        );
     }
 
     #[test]

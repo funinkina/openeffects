@@ -492,7 +492,10 @@ async fn doctor(json: bool) -> anyhow::Result<()> {
             return Err("daemon is not running".to_string());
         }
         let daemon = daemon_proxy(&conn).await.map_err(|e| e.to_string())?;
-        let status = daemon.get_property::<String>("Status").await.map_err(|e| e.to_string())?;
+        let status = daemon
+            .get_property::<String>("Status")
+            .await
+            .map_err(|e| e.to_string())?;
         Ok(status)
     }
     .await;
@@ -511,7 +514,10 @@ async fn doctor(json: bool) -> anyhow::Result<()> {
         shared::doctor::print_report(&checks);
     }
 
-    if checks.iter().any(|c| c.status == shared::doctor::Status::Fail) {
+    if checks
+        .iter()
+        .any(|c| c.status == shared::doctor::Status::Fail)
+    {
         std::process::exit(1);
     }
 

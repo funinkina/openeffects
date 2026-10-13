@@ -149,7 +149,11 @@ pub fn sha256_file(path: &Path) -> std::io::Result<String> {
         }
         hasher.update(&buf[..n]);
     }
-    Ok(hasher.finalize().iter().map(|b| format!("{b:02x}")).collect())
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect())
 }
 
 pub fn model_search_dirs(home: Option<&Path>) -> Vec<PathBuf> {
@@ -162,7 +166,10 @@ pub fn model_search_dirs(home: Option<&Path>) -> Vec<PathBuf> {
     dirs
 }
 
-pub fn probe_model(search_dirs: &[PathBuf], id: &str) -> (bool, bool, Option<bool>, Option<PathBuf>) {
+pub fn probe_model(
+    search_dirs: &[PathBuf],
+    id: &str,
+) -> (bool, bool, Option<bool>, Option<PathBuf>) {
     for base in search_dirs {
         let model_dir = base.join(id);
         let manifest_path = model_dir.join("manifest.toml");
@@ -197,14 +204,30 @@ mod tests {
     #[test]
     fn test_model_verdict_verified() {
         let p = PathBuf::from("/models/selfie_segmentation/model.onnx");
-        let c = model_verdict("selfie_segmentation", "Selfie", true, true, true, Some(true), Some(&p));
+        let c = model_verdict(
+            "selfie_segmentation",
+            "Selfie",
+            true,
+            true,
+            true,
+            Some(true),
+            Some(&p),
+        );
         assert_eq!(c.status, Status::Ok);
         assert!(c.detail.contains("verified"));
     }
 
     #[test]
     fn test_model_verdict_corrupted() {
-        let c = model_verdict("selfie_segmentation", "Selfie", true, true, true, Some(false), None);
+        let c = model_verdict(
+            "selfie_segmentation",
+            "Selfie",
+            true,
+            true,
+            true,
+            Some(false),
+            None,
+        );
         assert_eq!(c.status, Status::Fail);
         assert!(c.detail.contains("checksum mismatch"));
         assert!(c.fix.is_some());

@@ -1,8 +1,7 @@
 use super::types::{CameraClass, CameraNode, Check, Status};
 
 pub const COLOR_FORMATS: &[&str] = &[
-    "MJPG", "JPEG", "YUYV", "NV12", "NV21", "RGB3", "BGR3", "RGB4", "BGR4", "UYVY", "YV12",
-    "YU12",
+    "MJPG", "JPEG", "YUYV", "NV12", "NV21", "RGB3", "BGR3", "RGB4", "BGR4", "UYVY", "YV12", "YU12",
 ];
 
 pub const IR_FORMATS: &[&str] = &["GREY", "Y16", "Y10", "Y8", "Z16", "INZI"];
@@ -120,7 +119,10 @@ pub fn selected_camera_verdict(selected: &str, cameras: &[CameraNode]) -> Check 
                     "camera",
                     "selected",
                     Status::Fail,
-                    format!("{} is a metadata node, not a video capture device", node.path),
+                    format!(
+                        "{} is a metadata node, not a video capture device",
+                        node.path
+                    ),
                     fix,
                 )
             }
@@ -128,7 +130,11 @@ pub fn selected_camera_verdict(selected: &str, cameras: &[CameraNode]) -> Check 
                 "camera",
                 "selected",
                 Status::Warn,
-                format!("{} has unrecognized formats ({})", node.path, node.formats.join(", ")),
+                format!(
+                    "{} has unrecognized formats ({})",
+                    node.path,
+                    node.formats.join(", ")
+                ),
                 None,
             ),
         },
@@ -157,7 +163,11 @@ pub fn probe_cameras() -> Vec<CameraNode> {
         .filter(|n| n.starts_with("video"))
         .collect();
 
-    dev_names.sort_by_key(|n| n.trim_start_matches("video").parse::<u32>().unwrap_or(u32::MAX));
+    dev_names.sort_by_key(|n| {
+        n.trim_start_matches("video")
+            .parse::<u32>()
+            .unwrap_or(u32::MAX)
+    });
 
     for dev in dev_names {
         let path = format!("/dev/{dev}");
@@ -246,7 +256,13 @@ fn query_v4l2_caps_and_formats(device_path: &str) -> (bool, Vec<String>) {
             .pixelformat
             .to_le_bytes()
             .iter()
-            .map(|&b| if b.is_ascii_graphic() || b == b' ' { b as char } else { '?' })
+            .map(|&b| {
+                if b.is_ascii_graphic() || b == b' ' {
+                    b as char
+                } else {
+                    '?'
+                }
+            })
             .collect();
         let trimmed = fourcc.trim().to_string();
         if !trimmed.is_empty() && !formats.contains(&trimmed) {
@@ -272,12 +288,18 @@ mod tests {
 
     #[test]
     fn test_format_classification() {
-        assert_eq!(classify_formats(&["YUYV".into(), "MJPG".into()], false), CameraClass::Rgb);
+        assert_eq!(
+            classify_formats(&["YUYV".into(), "MJPG".into()], false),
+            CameraClass::Rgb
+        );
         assert_eq!(classify_formats(&["GREY".into()], false), CameraClass::Ir);
         assert_eq!(classify_formats(&["Y16".into()], false), CameraClass::Ir);
         assert_eq!(classify_formats(&[], true), CameraClass::Metadata);
         assert_eq!(classify_formats(&[], false), CameraClass::Metadata);
-        assert_eq!(classify_formats(&["FOOO".into()], false), CameraClass::Unknown);
+        assert_eq!(
+            classify_formats(&["FOOO".into()], false),
+            CameraClass::Unknown
+        );
     }
 
     #[test]
@@ -301,7 +323,10 @@ mod tests {
         assert_eq!(check.status, Status::Warn);
         assert!(check.detail.contains("IR camera"));
         assert!(check.detail.contains("/dev/video0"));
-        assert_eq!(check.fix, Some("vinoopeneffects-ctl camera /dev/video0".into()));
+        assert_eq!(
+            check.fix,
+            Some("vinoopeneffects-ctl camera /dev/video0".into())
+        );
     }
 
     #[test]

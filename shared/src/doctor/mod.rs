@@ -29,9 +29,14 @@ pub fn run_all(dbus_status: Result<&str, &str>) -> Vec<Check> {
     checks.push(daemon::systemd_unit_verdict(unit_state, unit_enabled));
 
     // 2. Inference & NPU
-    checks.push(inference::build_feature_verdict(inference::probe_built_with_npu()));
+    checks.push(inference::build_feature_verdict(
+        inference::probe_built_with_npu(),
+    ));
     let (ort_lib, has_openvino) = inference::probe_ort_runtime(home_ref);
-    checks.push(inference::ort_library_verdict(ort_lib.as_deref(), has_openvino));
+    checks.push(inference::ort_library_verdict(
+        ort_lib.as_deref(),
+        has_openvino,
+    ));
     let accel_count = inference::probe_npu_devices();
     checks.push(inference::npu_hardware_verdict(accel_count));
 
@@ -74,7 +79,10 @@ pub fn run_all(dbus_status: Result<&str, &str>) -> Vec<Check> {
     let sink_found = gui::probe_gtk4_sink();
     checks.push(gui::gtk4_sink_verdict(sink_found, distro.as_ref()));
     let (gtk_ver, adw_ver) = gui::probe_gtk_versions();
-    checks.push(gui::gtk_versions_verdict(gtk_ver.as_deref(), adw_ver.as_deref()));
+    checks.push(gui::gtk_versions_verdict(
+        gtk_ver.as_deref(),
+        adw_ver.as_deref(),
+    ));
 
     // 7. Config
     let (cfg_path, cfg_res) = config::probe_config(home_ref);
