@@ -89,6 +89,18 @@ pub fn effective_ep(configured: &str) -> String {
     env_ep().unwrap_or_else(|| configured.trim().to_ascii_lowercase())
 }
 
+/// The provider models will land on for `provider` before any is loaded, plus
+/// why it differs from the request (an `npu` request with no usable NPU).
+pub fn predicted_active(provider: &str) -> (&'static str, Option<String>) {
+    let probe = probe_npu_cached();
+    match provider {
+        "npu" | "auto" if probe.available => ("npu", None),
+        "npu" => ("cpu", probe.reason.clone()),
+        "gpu" => ("gpu", None),
+        _ => ("cpu", None),
+    }
+}
+
 /// A session builder with the shared CPU settings and no accelerator attached.
 fn base_builder() -> anyhow::Result<ort::session::builder::SessionBuilder> {
     use ort::memory::{AllocationDevice, AllocatorType, MemoryInfo, MemoryType};
@@ -123,8 +135,10 @@ pub struct LoadedSession {
 }
 
 /// Load `model` on the requested execution provider (`auto`, `cpu`, `npu`, `gpu`).
-/// In `auto` mode, an NPU compile failure falls back to CPU; in explicit `npu`/`gpu`/`cpu`,
-/// failure returns an error rather than silently falling back.
+/// In `auto` mode, an NPU compile failure falls back to CPU. An explicit `npu`
+/// with no usable NPU runs on CPU and reports why in `fallback` (the request is
+/// kept, so it takes effect once the NPU is there); an NPU that is present but
+/// fails to compile the model is an error, as is any explicit `gpu` failure.
 pub fn load_session(model: &Path, provider: &str) -> anyhow::Result<LoadedSession> {
     use anyhow::Context;
     let load = |mut builder: ort::session::builder::SessionBuilder| {
@@ -141,6 +155,14 @@ pub fn load_session(model: &Path, provider: &str) -> anyhow::Result<LoadedSessio
                 session,
                 active_ep: "cpu",
                 fallback: None,
+            })
+        }
+        "npu" if !probe_npu_cached().available => {
+            let session = load(base_builder()?)?;
+            Ok(LoadedSession {
+                session,
+                active_ep: "cpu",
+                fallback: probe_npu_cached().reason.clone(),
             })
         }
         "npu" => {

@@ -72,36 +72,10 @@ impl DaemonState {
     }
 
     pub fn sync_inference_from_config(&mut self) -> (String, Option<String>) {
-        let requested = self.requested_inference_provider();
-        let probe = crate::inference::probe_npu_cached();
-        match requested.as_str() {
-            "npu" => {
-                if probe.available {
-                    self.inference_active = "npu".into();
-                    self.inference_detail = None;
-                } else {
-                    self.inference_active = "cpu".into();
-                    self.inference_detail = probe.reason.clone();
-                }
-            }
-            "auto" => {
-                if probe.available {
-                    self.inference_active = "npu".into();
-                    self.inference_detail = None;
-                } else {
-                    self.inference_active = "cpu".into();
-                    self.inference_detail = None;
-                }
-            }
-            "cpu" => {
-                self.inference_active = "cpu".into();
-                self.inference_detail = None;
-            }
-            other => {
-                self.inference_active = other.to_string();
-                self.inference_detail = None;
-            }
-        }
+        let (active, detail) =
+            crate::inference::predicted_active(&self.requested_inference_provider());
+        self.inference_active = active.into();
+        self.inference_detail = detail;
         (self.inference_active.clone(), self.inference_detail.clone())
     }
 

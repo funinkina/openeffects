@@ -330,9 +330,13 @@ mod imp {
             self.model.is_some()
         }
 
-        fn replace(&mut self, model: T, ep: &'static str) {
-            self.model = Some(model);
-            self.active_ep = Some(ep);
+        /// Swap in a model loaded for a new provider, or drop the current one so
+        /// it reloads lazily on the new provider if it is still needed.
+        fn install(&mut self, loaded: Option<(T, &'static str)>) {
+            (self.model, self.active_ep) = match loaded {
+                Some((model, ep)) => (Some(model), Some(ep)),
+                None => (None, None),
+            };
             self.failed = false;
             self.used = Instant::now();
         }
@@ -384,41 +388,25 @@ mod imp {
 
     impl Engine {
         pub fn update_active_status(&mut self) {
-            let mut loaded_eps = Vec::new();
-            if let Some(ep) = self.selfie.active_ep {
-                loaded_eps.push(ep);
-            }
-            if let Some(ep) = self.yunet.active_ep {
-                loaded_eps.push(ep);
-            }
-            if let Some(ep) = self.palm.active_ep {
-                loaded_eps.push(ep);
-            }
-            if let Some(ep) = self.hand.active_ep {
-                loaded_eps.push(ep);
-            }
-            if let Some(ep) = self.auto_light.active_ep {
-                loaded_eps.push(ep);
-            }
-
-            if loaded_eps.is_empty() {
-                let npu_avail = crate::inference::probe_npu_cached().available;
-                self.active = match self.provider.as_str() {
-                    "npu" if npu_avail => "npu",
-                    "auto" if npu_avail => "npu",
-                    _ => "cpu",
-                };
-            } else {
-                let has_npu = loaded_eps.contains(&"npu");
-                let has_cpu = loaded_eps.contains(&"cpu");
-                if has_npu && has_cpu {
-                    self.active = "mixed";
-                } else if has_npu {
-                    self.active = "npu";
-                } else {
-                    self.active = "cpu";
+            let eps: Vec<&'static str> = [
+                self.selfie.active_ep,
+                self.yunet.active_ep,
+                self.palm.active_ep,
+                self.hand.active_ep,
+                self.auto_light.active_ep,
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+            self.active = match eps.split_first() {
+                None => {
+                    let (active, detail) = crate::inference::predicted_active(&self.provider);
+                    self.detail = detail;
+                    active
                 }
-            }
+                Some((first, rest)) if rest.iter().all(|ep| ep == first) => first,
+                Some(_) => "mixed",
+            };
         }
 
         pub fn reset_all_failed(&mut self) {
@@ -659,11 +647,15 @@ mod imp {
             self.state.lock().unwrap().engine.generation
         }
 
+        /// Reload every loaded model on `target_provider` without holding the
+        /// state lock, so frames keep flowing on the old sessions while the new
+        /// ones compile, then swap them in at once. On error the models stay put.
         pub fn swap_provider(
             &self,
             target_provider: &str,
         ) -> anyhow::Result<(String, Option<String>)> {
-            let (load_selfie, load_yunet, load_palm, load_hand, load_auto) = {
+            let target = target_provider.trim().to_ascii_lowercase();
+            let (want_selfie, want_yunet, want_palm, want_hand, want_auto) = {
                 let state = self.state.lock().unwrap();
                 (
                     state.engine.selfie.is_loaded(),
@@ -674,73 +666,72 @@ mod imp {
                 )
             };
 
-            let new_selfie = if load_selfie {
-                Some(SelfieSeg::load_with_provider(target_provider)?)
-            } else {
-                None
-            };
-            let new_yunet = if load_yunet {
-                Some(YuNet::load_with_provider(target_provider)?)
-            } else {
-                None
-            };
-            let new_palm = if load_palm {
-                Some(PalmDetector::load_with_provider(target_provider)?)
-            } else {
-                None
-            };
-            let new_hand = if load_hand {
-                Some(HandLandmarker::load_with_provider(target_provider)?)
-            } else {
-                None
-            };
-            let new_auto = if load_auto {
-                Some(AutoLight::load_with_provider(target_provider)?)
-            } else {
-                None
-            };
+            // Before loading: a stale "accelerator failed" memo from the old
+            // provider would otherwise pin `auto` to CPU.
+            crate::inference::reset_accel_failed();
+            let mut detail = None;
+            let selfie = reload(
+                want_selfie,
+                SelfieSeg::load_with_provider,
+                &target,
+                &mut detail,
+            )?;
+            let yunet = reload(want_yunet, YuNet::load_with_provider, &target, &mut detail)?;
+            let palm = reload(
+                want_palm,
+                PalmDetector::load_with_provider,
+                &target,
+                &mut detail,
+            )?;
+            let hand = reload(
+                want_hand,
+                HandLandmarker::load_with_provider,
+                &target,
+                &mut detail,
+            )?;
+            // Auto light only runs on the NPU, so a provider it can't use turns it
+            // off (the lazy reload logs why) instead of failing the whole swap.
+            let auto_light = reload(
+                want_auto,
+                AutoLight::load_with_provider,
+                &target,
+                &mut detail,
+            )
+            .unwrap_or_default();
 
             let mut state = self.state.lock().unwrap();
-            state.engine.generation += 1;
-            state.engine.provider = target_provider.to_string();
-            state.engine.reset_all_failed();
-
-            if let Some((model, ep, fb)) = new_selfie {
-                state.engine.selfie.replace(model, ep);
-                if let Some(f) = fb {
-                    state.engine.detail = Some(f);
-                }
-            }
-            if let Some((model, ep, fb)) = new_yunet {
-                state.engine.yunet.replace(model, ep);
-                if let Some(f) = fb {
-                    state.engine.detail = Some(f);
-                }
-            }
-            if let Some((model, ep, fb)) = new_palm {
-                state.engine.palm.replace(model, ep);
-                if let Some(f) = fb {
-                    state.engine.detail = Some(f);
-                }
-            }
-            if let Some((model, ep, fb)) = new_hand {
-                state.engine.hand.replace(model, ep);
-                if let Some(f) = fb {
-                    state.engine.detail = Some(f);
-                }
-            }
-            if let Some((model, ep, fb)) = new_auto {
-                state.engine.auto_light.replace(model, ep);
-                if let Some(f) = fb {
-                    state.engine.detail = Some(f);
-                }
-            }
-
-            state.engine.update_active_status();
-            let active = state.engine.active.to_string();
-            let detail = state.engine.detail.clone();
-            Ok((active, detail))
+            let engine = &mut state.engine;
+            engine.generation += 1;
+            engine.provider = target;
+            engine.detail = detail;
+            engine.reset_all_failed();
+            // A slot the streaming thread loaded since the snapshot is on the old
+            // provider; installing `None` drops it so it reloads on the new one.
+            engine.selfie.install(selfie);
+            engine.yunet.install(yunet);
+            engine.palm.install(palm);
+            engine.hand.install(hand);
+            engine.auto_light.install(auto_light);
+            engine.update_active_status();
+            Ok((engine.active.to_string(), engine.detail.clone()))
         }
+    }
+
+    /// Load a model on `provider` if `wanted`, recording any CPU fallback reason.
+    fn reload<T>(
+        wanted: bool,
+        load: impl FnOnce(&str) -> anyhow::Result<(T, &'static str, Option<String>)>,
+        provider: &str,
+        detail: &mut Option<String>,
+    ) -> anyhow::Result<Option<(T, &'static str)>> {
+        if !wanted {
+            return Ok(None);
+        }
+        let (model, ep, fallback) = load(provider)?;
+        if fallback.is_some() {
+            *detail = fallback;
+        }
+        Ok(Some((model, ep)))
     }
 
     #[glib::object_subclass]
@@ -2332,6 +2323,23 @@ mod imp {
 
             let (_active2, _) = element.swap_provider("auto").expect("swap to auto");
             assert_eq!(element.generation(), 2);
+        }
+
+        #[test]
+        fn npu_request_without_npu_reports_cpu_and_why() {
+            if crate::inference::probe_npu_cached().available {
+                eprintln!("skipping: an NPU is present");
+                return;
+            }
+            let element = OeEffects::default();
+            let (active, detail) = element.swap_provider(" NPU ").expect("swap to npu");
+            assert_eq!(active, "cpu");
+            assert!(detail.is_some(), "the CPU fallback must say why");
+            assert_eq!(element.state.lock().unwrap().engine.provider, "npu");
+
+            // Switching away clears the stale fallback reason.
+            let (active, detail) = element.swap_provider("cpu").expect("swap to cpu");
+            assert_eq!((active.as_str(), detail), ("cpu", None));
         }
 
         /// Regression for #1: portrait blur must not bleed the subject's color

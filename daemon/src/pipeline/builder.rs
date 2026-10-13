@@ -67,20 +67,24 @@ impl BuiltCapture {
     }
 
     pub fn swap_inference(&self, provider: &str) -> anyhow::Result<(String, Option<String>)> {
-        if let Some(effects_el) = self.pipeline.by_name("oe_effects") {
-            let oe = effects_el
-                .downcast::<crate::pipeline::filters::oe_effects::OeEffects>()
-                .map_err(|_| anyhow::anyhow!("oe_effects element has wrong type"))?;
-            oe.swap_provider(provider)
-        } else {
-            let npu_avail = crate::inference::probe_npu_cached().available;
-            let active = match provider {
-                "npu" if npu_avail => "npu",
-                "auto" if npu_avail => "npu",
-                _ => "cpu",
-            };
-            Ok((active.to_string(), None))
+        match self.oe_effects() {
+            Some(oe) => oe.swap_provider(provider),
+            None => {
+                let (active, detail) = crate::inference::predicted_active(provider);
+                Ok((active.to_string(), detail))
+            }
         }
+    }
+
+    /// The provider the live models are on, e.g. after a failed swap left them
+    /// where they were.
+    pub fn inference_active(&self) -> Option<String> {
+        self.oe_effects()
+            .map(|oe| oe.property::<String>("inference-active"))
+    }
+
+    fn oe_effects(&self) -> Option<crate::pipeline::filters::oe_effects::OeEffects> {
+        self.pipeline.by_name("oe_effects")?.downcast().ok()
     }
 }
 

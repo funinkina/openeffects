@@ -70,7 +70,8 @@ pub enum PipelineCommand {
     /// the live `oe_effects` element. A no-op when no capture pipeline is up
     /// (nothing is consuming the virtual camera).
     TriggerReaction(String),
-    SetInferenceProvider(String),
+    /// Persisted choice; `VINOOPENEFFECTS_EP`, when set, still wins.
+    SetInferenceProvider(shared::config::InferenceProvider),
     Shutdown,
 }
 
@@ -254,33 +255,27 @@ fn worker_loop(
                     c.trigger_reaction(&id);
                 }
             }
-            Some(WorkerMsg::Command(PipelineCommand::SetInferenceProvider(provider))) => {
-                if let Some(app) = stored_app.as_mut()
-                    && let Ok(p) = provider.parse()
-                {
-                    app.inference.provider = p;
+            Some(WorkerMsg::Command(PipelineCommand::SetInferenceProvider(choice))) => {
+                if let Some(app) = stored_app.as_mut() {
+                    app.inference.provider = choice;
                 }
-                let (active, detail) = if let Some(c) = capture.as_ref() {
-                    match c.swap_inference(&provider) {
-                        Ok((active, detail)) => (active, detail),
+                let provider = crate::inference::effective_ep(choice.as_str());
+                let (active, detail) = match capture.as_ref() {
+                    Some(c) => match c.swap_inference(&provider) {
+                        Ok(status) => status,
                         Err(err) => {
                             warn!(%err, "runtime inference swap failed; keeping current provider");
-                            ("cpu".to_string(), Some(err.to_string()))
+                            let active = c.inference_active().unwrap_or_else(|| "cpu".into());
+                            (
+                                active,
+                                Some(format!("switch to {provider} failed: {err:#}")),
+                            )
                         }
+                    },
+                    None => {
+                        let (active, detail) = crate::inference::predicted_active(&provider);
+                        (active.to_string(), detail)
                     }
-                } else {
-                    let probe = crate::inference::probe_npu_cached();
-                    let active = match provider.as_str() {
-                        "npu" if probe.available => "npu",
-                        "auto" if probe.available => "npu",
-                        _ => "cpu",
-                    };
-                    let detail = if provider == "npu" && !probe.available {
-                        probe.reason.clone()
-                    } else {
-                        None
-                    };
-                    (active.to_string(), detail)
                 };
                 let _ = events.blocking_send(PipelineEvent::InferenceChanged { active, detail });
             }

@@ -54,7 +54,7 @@ vinoopeneffects-ctl inference auto     # auto-select NPU if present, CPU otherwi
 vinoopeneffects-ctl inference --json   # machine-readable output
 ```
 
-Provider changes are persisted to `~/.config/vinoopeneffects/state.toml` under `[inference] provider`. Hot-swapping while streaming compiles models off-thread so the video pipeline never drops a frame.
+Provider changes are persisted to `~/.config/vinoopeneffects/state.toml` under `[inference] provider`. Switching while streaming loads the new models alongside the old ones, so frames keep flowing on the old provider until the new one is ready. If `VINOOPENEFFECTS_EP` is set in the daemon's environment, it overrides this setting.
 
 ## Autostart
 

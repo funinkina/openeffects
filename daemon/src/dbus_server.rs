@@ -94,7 +94,7 @@ impl Daemon1Iface {
             }
         }
         self.pipeline_tx
-            .send(PipelineCommand::SetInferenceProvider(provider))
+            .send(PipelineCommand::SetInferenceProvider(parsed))
             .await
             .map_err(|err| fdo::Error::Failed(err.to_string()))?;
         Ok(())

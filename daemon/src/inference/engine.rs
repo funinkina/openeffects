@@ -461,12 +461,15 @@ mod tests {
     /// Needs an NPU and the exported model; skips with a message otherwise.
     #[test]
     fn auto_light_gain_is_bounded_when_available() {
-        if super::registry::find_model("iat_lowlight").is_none() {
-            eprintln!("skipping: iat_lowlight model not installed");
-            return;
-        }
+        // NPU first: the model is experimental (scripts/export-iat.py, not
+        // fetch-models.sh), and the models workflow fails on "model not
+        // installed", so a runner without an NPU must skip on that instead.
         if !super::super::npu_present() {
             eprintln!("skipping: no NPU hardware present");
+            return;
+        }
+        if super::registry::find_model("iat_lowlight").is_none() {
+            eprintln!("skipping: iat_lowlight model not installed");
             return;
         }
         let mut model = AutoLight::load().expect("load iat_lowlight on NPU");
