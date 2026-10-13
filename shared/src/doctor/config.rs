@@ -12,6 +12,15 @@ pub fn find_unknown_keys(value: &toml::Value) -> Vec<String> {
     for (k, v) in top {
         match k.as_str() {
             "bypass" => {}
+            "inference" => {
+                if let toml::Value::Table(inf) = v {
+                    for ik in inf.keys() {
+                        if ik != "provider" {
+                            unknown.push(format!("inference.{ik}"));
+                        }
+                    }
+                }
+            }
             "camera" => {
                 if let toml::Value::Table(cam) = v {
                     for ck in cam.keys() {

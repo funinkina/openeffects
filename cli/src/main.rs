@@ -43,6 +43,14 @@ enum Command {
     Start,
     /// Tear down the pipeline and release the camera.
     Stop,
+    /// View or switch inference execution provider (auto, cpu, npu).
+    Inference {
+        /// Target provider (auto, cpu, npu). If omitted, displays current provider info.
+        provider: Option<String>,
+        /// Emit machine-readable JSON.
+        #[arg(long)]
+        json: bool,
+    },
 
     /// List every effect with its current enabled state.
     Effects,
@@ -326,6 +334,7 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Command::Status { json, short } => status(&conn, json, short).await?,
+        Command::Inference { provider, json } => inference(&conn, provider, json).await?,
         Command::Start => {
             daemon_proxy(&conn)
                 .await?
@@ -589,22 +598,72 @@ async fn status(conn: &Connection, json: bool, short: bool) -> anyhow::Result<()
         .get_property::<VariantMap>("Capabilities")
         .await
         .unwrap_or_default();
+    let inference = simple_value(&caps, "inference_active").unwrap_or_else(|| "cpu".into());
     let models = match simple_value(&caps, "models_ready").as_deref() {
         Some("true") => "ready",
         _ => "missing",
     };
     let sink = simple_value(&caps, "output_sink").unwrap_or_else(|| "unknown".into());
     if json {
+        let requested = simple_value(&caps, "inference_requested");
+        let available = caps
+            .get("inference_available")
+            .and_then(shared::dbus::value_as_str_array);
+        let detail = simple_value(&caps, "inference_detail");
         println!(
             "{}",
             serde_json::json!({
                 "status": status,
+                "inference": inference,
+                "inference_requested": requested,
+                "inference_available": available,
+                "inference_detail": detail,
                 "models": models,
                 "sink": sink,
             })
         );
     } else {
-        println!("{status} (models: {models}, sink: {sink})");
+        println!("{status} (inference: {inference}, models: {models}, sink: {sink})");
+    }
+    Ok(())
+}
+
+async fn inference(conn: &Connection, provider: Option<String>, json: bool) -> anyhow::Result<()> {
+    let daemon = daemon_proxy(conn).await?;
+    if let Some(target) = provider {
+        daemon
+            .call::<_, _, ()>("SetInferenceProvider", &(target.as_str()))
+            .await?;
+    }
+    let caps = daemon
+        .get_property::<VariantMap>("Capabilities")
+        .await
+        .unwrap_or_default();
+    let requested = simple_value(&caps, "inference_requested").unwrap_or_else(|| "auto".into());
+    let active = simple_value(&caps, "inference_active").unwrap_or_else(|| "cpu".into());
+    let available = caps
+        .get("inference_available")
+        .and_then(shared::dbus::value_as_str_array)
+        .unwrap_or_else(|| vec!["cpu".into()]);
+    let detail = simple_value(&caps, "inference_detail");
+
+    if json {
+        println!(
+            "{}",
+            serde_json::json!({
+                "requested": requested,
+                "active": active,
+                "available": available,
+                "detail": detail,
+            })
+        );
+    } else {
+        println!("requested: {requested}");
+        println!("active:    {active}");
+        println!("available: {}", available.join(", "));
+        if let Some(d) = detail {
+            println!("detail:    {d}");
+        }
     }
     Ok(())
 }

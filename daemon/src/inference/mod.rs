@@ -14,6 +14,81 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// straight to CPU instead of paying for another failed compile each.
 static ACCEL_FAILED: AtomicBool = AtomicBool::new(false);
 
+pub fn reset_accel_failed() {
+    ACCEL_FAILED.store(false, Ordering::Relaxed);
+}
+
+#[derive(Debug, Clone)]
+pub struct NpuProbe {
+    pub available: bool,
+    pub reason: Option<String>,
+}
+
+#[cfg(feature = "npu")]
+pub fn probe_npu() -> NpuProbe {
+    use ort::ep::ExecutionProvider;
+    if !npu_present() {
+        return NpuProbe {
+            available: false,
+            reason: Some("no Intel NPU hardware detected (/dev/accel has no accel nodes)".into()),
+        };
+    }
+    if let Err(e) = ensure_runtime() {
+        return NpuProbe {
+            available: false,
+            reason: Some(format!("onnxruntime library unavailable: {e}")),
+        };
+    }
+    let ep = ort::ep::OpenVINO::default().with_device_type("NPU");
+    if !ep.is_available().unwrap_or(false) {
+        return NpuProbe {
+            available: false,
+            reason: Some("onnxruntime has no OpenVINO execution provider".into()),
+        };
+    }
+    NpuProbe {
+        available: true,
+        reason: None,
+    }
+}
+
+#[cfg(not(feature = "npu"))]
+pub fn probe_npu() -> NpuProbe {
+    NpuProbe {
+        available: false,
+        reason: Some("built without `npu` feature (CPU-only build)".into()),
+    }
+}
+
+static PROBED_NPU: std::sync::OnceLock<NpuProbe> = std::sync::OnceLock::new();
+
+pub fn probe_npu_cached() -> &'static NpuProbe {
+    PROBED_NPU.get_or_init(probe_npu)
+}
+
+pub fn available_providers() -> Vec<&'static str> {
+    if probe_npu_cached().available {
+        vec!["cpu", "npu"]
+    } else {
+        vec!["cpu"]
+    }
+}
+
+pub fn env_ep() -> Option<String> {
+    std::env::var("VINOOPENEFFECTS_EP")
+        .map(|v| v.trim().to_ascii_lowercase())
+        .ok()
+        .filter(|v| !v.is_empty())
+}
+
+pub fn requested_ep() -> String {
+    env_ep().unwrap_or_else(|| "auto".into())
+}
+
+pub fn effective_ep(configured: &str) -> String {
+    env_ep().unwrap_or_else(|| configured.trim().to_ascii_lowercase())
+}
+
 /// A session builder with the shared CPU settings and no accelerator attached.
 fn base_builder() -> anyhow::Result<ort::session::builder::SessionBuilder> {
     use ort::memory::{AllocationDevice, AllocatorType, MemoryInfo, MemoryType};
@@ -37,49 +112,108 @@ fn base_builder() -> anyhow::Result<ort::session::builder::SessionBuilder> {
         .map_err(|e| anyhow::anyhow!("set non-arena CPU allocator: {e}"))
 }
 
-pub fn build_session() -> anyhow::Result<ort::session::builder::SessionBuilder> {
-    with_execution_provider(base_builder()?)
+pub fn build_session(provider: &str) -> anyhow::Result<ort::session::builder::SessionBuilder> {
+    with_execution_provider(base_builder()?, provider)
 }
 
-/// Load `model` on the requested execution provider. In `auto` mode a failure
-/// on the NPU (driver, compile, unsupported op) falls back to CPU for this and
-/// every later model; an explicit `npu`/`gpu`/`cpu` request never falls back.
-pub fn load_session(model: &Path) -> anyhow::Result<ort::session::Session> {
+pub struct LoadedSession {
+    pub session: ort::session::Session,
+    pub active_ep: &'static str,
+    pub fallback: Option<String>,
+}
+
+/// Load `model` on the requested execution provider (`auto`, `cpu`, `npu`, `gpu`).
+/// In `auto` mode, an NPU compile failure falls back to CPU; in explicit `npu`/`gpu`/`cpu`,
+/// failure returns an error rather than silently falling back.
+pub fn load_session(model: &Path, provider: &str) -> anyhow::Result<LoadedSession> {
     use anyhow::Context;
     let load = |mut builder: ort::session::builder::SessionBuilder| {
         builder
             .commit_from_file(model)
             .with_context(|| format!("load {}", model.display()))
     };
-    if requested_ep() != "auto" {
-        return load(build_session()?);
+
+    let target = provider.trim().to_ascii_lowercase();
+    match target.as_str() {
+        "cpu" => {
+            let session = load(base_builder()?)?;
+            Ok(LoadedSession {
+                session,
+                active_ep: "cpu",
+                fallback: None,
+            })
+        }
+        "npu" => {
+            let session = load(build_session("npu")?)?;
+            Ok(LoadedSession {
+                session,
+                active_ep: "npu",
+                fallback: None,
+            })
+        }
+        "gpu" => {
+            let session = load(build_session("gpu")?)?;
+            Ok(LoadedSession {
+                session,
+                active_ep: "gpu",
+                fallback: None,
+            })
+        }
+        "auto" => {
+            if !ACCEL_FAILED.load(Ordering::Relaxed) && probe_npu_cached().available {
+                match build_session("npu").and_then(load) {
+                    Ok(session) => {
+                        return Ok(LoadedSession {
+                            session,
+                            active_ep: "npu",
+                            fallback: None,
+                        });
+                    }
+                    Err(err) => {
+                        let msg = format!("NPU compile failed for {}: {err}", model.display());
+                        if !ACCEL_FAILED.swap(true, Ordering::Relaxed) {
+                            tracing::warn!("{msg}; falling back to CPU");
+                        }
+                        let session = load(base_builder()?)?;
+                        return Ok(LoadedSession {
+                            session,
+                            active_ep: "cpu",
+                            fallback: Some(msg),
+                        });
+                    }
+                }
+            }
+            let session = load(base_builder()?)?;
+            Ok(LoadedSession {
+                session,
+                active_ep: "cpu",
+                fallback: None,
+            })
+        }
+        other => {
+            anyhow::bail!("unknown execution provider '{other}': expected auto, cpu, npu or gpu")
+        }
     }
-    if !ACCEL_FAILED.load(Ordering::Relaxed)
-        && let Ok(session) = build_session().and_then(load)
-    {
-        return Ok(session);
-    }
-    if !ACCEL_FAILED.swap(true, Ordering::Relaxed) {
-        tracing::warn!("NPU/GPU unavailable for {}; using CPU", model.display());
-    }
-    load(base_builder()?)
 }
 
 /// Load `model` on the NPU or fail: for models that are only usable there
-/// (too slow on CPU), where [`load_session`]'s CPU fallback would be a trap.
+/// (too slow on CPU), where CPU fallback would be a trap.
 #[cfg(feature = "npu")]
-pub fn load_session_npu(model: &Path) -> anyhow::Result<ort::session::Session> {
+pub fn load_session_npu(model: &Path, provider: &str) -> anyhow::Result<LoadedSession> {
     use anyhow::Context;
     use ort::ep::{ExecutionProvider, OpenVINO};
 
+    let target = provider.trim().to_ascii_lowercase();
     anyhow::ensure!(
-        matches!(requested_ep().as_str(), "auto" | "npu"),
-        "needs the NPU, but VINOOPENEFFECTS_EP={}",
-        requested_ep()
+        matches!(target.as_str(), "auto" | "npu"),
+        "needs the NPU, but provider is {target}"
     );
-    anyhow::ensure!(npu_present(), "no NPU present");
-    // Before any ort call: `is_available` below would otherwise lazily load
-    // `libonnxruntime.so` by bare name and panic when it isn't on the loader path.
+    let probe = probe_npu_cached();
+    anyhow::ensure!(
+        probe.available,
+        "NPU unavailable: {}",
+        probe.reason.as_deref().unwrap_or("unknown reason")
+    );
     ensure_runtime()?;
     let ep = OpenVINO::default().with_device_type("NPU");
     anyhow::ensure!(
@@ -89,27 +223,19 @@ pub fn load_session_npu(model: &Path) -> anyhow::Result<ort::session::Session> {
     let mut builder = base_builder()?
         .with_execution_providers([ep.build().error_on_failure()])
         .map_err(|e| anyhow::anyhow!("register OpenVINO EP (NPU): {e}"))?;
-    builder
+    let session = builder
         .commit_from_file(model)
-        .with_context(|| format!("load {} on the NPU", model.display()))
+        .with_context(|| format!("load {} on the NPU", model.display()))?;
+    Ok(LoadedSession {
+        session,
+        active_ep: "npu",
+        fallback: None,
+    })
 }
 
 #[cfg(not(feature = "npu"))]
-pub fn load_session_npu(_model: &Path) -> anyhow::Result<ort::session::Session> {
+pub fn load_session_npu(_model: &Path, _provider: &str) -> anyhow::Result<LoadedSession> {
     anyhow::bail!("needs a build with --features npu")
-}
-
-/// Execution provider selected by `VINOOPENEFFECTS_EP`: `auto` (default: the
-/// NPU when one is present and usable, otherwise CPU), `cpu`, `npu`, or `gpu`.
-/// An explicit `npu`/`gpu` is strict: it errors rather than silently running
-/// on CPU. Accelerators need the `npu` feature and an OpenVINO-enabled
-/// onnxruntime (see [`ensure_runtime`]).
-pub fn requested_ep() -> String {
-    std::env::var("VINOOPENEFFECTS_EP")
-        .map(|v| v.trim().to_ascii_lowercase())
-        .ok()
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| "auto".into())
 }
 
 #[cfg(feature = "npu")]
@@ -129,12 +255,14 @@ pub(crate) fn npu_present() -> bool {
 }
 
 /// Directories searched for `libonnxruntime.so` when `ORT_DYLIB_PATH` is unset,
-/// most specific first: a per-user OpenVINO build (`ovfetch install --prefix
-/// ~/.local/lib/vinoopeneffects/ort`), the prefix this binary was installed
-/// under, then the packaged CPU runtime.
+/// most specific first: user data directory, user local lib, executable prefix,
+/// and system library paths.
 #[cfg(feature = "npu")]
 fn runtime_dirs() -> Vec<std::path::PathBuf> {
     let mut dirs = Vec::new();
+    if let Some(data) = dirs::data_dir() {
+        dirs.push(data.join("vinoopeneffects/ort"));
+    }
     if let Some(home) = dirs::home_dir() {
         dirs.push(home.join(".local/lib/vinoopeneffects/ort"));
     }
@@ -146,6 +274,7 @@ fn runtime_dirs() -> Vec<std::path::PathBuf> {
     }
     dirs.push("/usr/lib/vinoopeneffects/ort".into());
     dirs.push("/usr/lib64/vinoopeneffects/ort".into());
+    dirs.push("/usr/local/lib/vinoopeneffects/ort".into());
     dirs
 }
 
@@ -192,21 +321,32 @@ fn ensure_runtime() -> anyhow::Result<()> {
 #[cfg(feature = "npu")]
 fn with_execution_provider(
     builder: ort::session::builder::SessionBuilder,
+    requested: &str,
 ) -> anyhow::Result<ort::session::builder::SessionBuilder> {
     use ort::ep::{ExecutionProvider, OpenVINO};
 
-    let requested = requested_ep();
-    let (device, strict) = match requested.as_str() {
+    let (device, strict) = match requested {
         "cpu" => return Ok(builder),
         "auto" => {
-            if ACCEL_FAILED.load(Ordering::Relaxed) || !npu_present() {
+            if ACCEL_FAILED.load(Ordering::Relaxed) || !probe_npu_cached().available {
                 return Ok(builder);
             }
             ("NPU", false)
         }
-        "npu" => ("NPU", true),
+        "npu" => {
+            let probe = probe_npu_cached();
+            if !probe.available {
+                anyhow::bail!(
+                    "NPU requested but unavailable: {}",
+                    probe.reason.as_deref().unwrap_or("unknown error")
+                );
+            }
+            ("NPU", true)
+        }
         "gpu" => ("GPU", true),
-        other => anyhow::bail!("VINOOPENEFFECTS_EP={other:?}: expected auto, cpu, npu or gpu"),
+        other => {
+            anyhow::bail!("unknown execution provider '{other}': expected auto, cpu, npu or gpu")
+        }
     };
     let ep = OpenVINO::default().with_device_type(device);
     if !ep.is_available().unwrap_or(false) {
@@ -233,9 +373,10 @@ fn with_execution_provider(
 #[cfg(not(feature = "npu"))]
 fn with_execution_provider(
     builder: ort::session::builder::SessionBuilder,
+    requested: &str,
 ) -> anyhow::Result<ort::session::builder::SessionBuilder> {
-    match requested_ep().as_str() {
+    match requested {
         "cpu" | "auto" => Ok(builder),
-        other => anyhow::bail!("VINOOPENEFFECTS_EP={other:?} needs a build with --features npu"),
+        other => anyhow::bail!("execution provider '{other}' needs a build with --features npu"),
     }
 }

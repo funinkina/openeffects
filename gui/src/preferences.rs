@@ -25,6 +25,15 @@ pub struct Widgets {
     /// Node name of the virtual camera, shown on the "Virtual Camera" row.
     pub virtual_cam_label: gtk::Label,
     pub model_rows: HashMap<&'static str, adw::ActionRow>,
+    pub inference_row: adw::ActionRow,
+    pub inference_group: adw::ToggleGroup,
+    #[allow(dead_code)]
+    pub inference_toggle_auto: adw::Toggle,
+    #[allow(dead_code)]
+    pub inference_toggle_cpu: adw::Toggle,
+    pub inference_toggle_npu: adw::Toggle,
+    pub inference_handler: glib::SignalHandlerId,
+    pub inference_badge: gtk::Label,
 }
 
 pub fn build(
@@ -74,6 +83,57 @@ pub fn build(
     virtual_cam_row.add_suffix(&virtual_cam_label);
     camera_group.add(&virtual_cam_row);
     page.add(&camera_group);
+
+    // Inference
+    let inference_group_box = pref_group(
+        "Inference",
+        "Machine learning execution provider for effects (hot-swappable)",
+    );
+
+    let inference_row = adw::ActionRow::builder()
+        .title("Execution Provider")
+        .subtitle("Auto selects NPU when available, falls back to CPU")
+        .build();
+
+    let inference_toggle_auto = adw::Toggle::builder().name("auto").label("Auto").build();
+    let inference_toggle_cpu = adw::Toggle::builder().name("cpu").label("CPU").build();
+    let inference_toggle_npu = adw::Toggle::builder().name("npu").label("NPU").build();
+
+    let inference_group = adw::ToggleGroup::builder()
+        .valign(gtk::Align::Center)
+        .css_classes(["round"])
+        .build();
+    inference_group.add(inference_toggle_auto.clone());
+    inference_group.add(inference_toggle_cpu.clone());
+    inference_group.add(inference_toggle_npu.clone());
+    inference_group.set_active_name(Some("auto"));
+
+    let inference_badge = gtk::Label::builder()
+        .label("Active: CPU")
+        .valign(gtk::Align::Center)
+        .css_classes(["dim-label"])
+        .build();
+
+    let inference_handler = {
+        let cmd_tx = cmd_tx.clone();
+        inference_group.connect_active_notify(move |group| {
+            if let Some(name) = group.active_name() {
+                let _ = cmd_tx.send(GuiCommand::SetInferenceProvider(name.to_string()));
+            }
+        })
+    };
+
+    let suffix_box = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(12)
+        .valign(gtk::Align::Center)
+        .build();
+    suffix_box.append(&inference_badge);
+    suffix_box.append(&inference_group);
+
+    inference_row.add_suffix(&suffix_box);
+    inference_group_box.add(&inference_row);
+    page.add(&inference_group_box);
 
     // Bundled models
     let models_group = pref_group(
@@ -145,6 +205,13 @@ pub fn build(
             camera_ids,
             virtual_cam_label,
             model_rows,
+            inference_row,
+            inference_group,
+            inference_toggle_auto,
+            inference_toggle_cpu,
+            inference_toggle_npu,
+            inference_handler,
+            inference_badge,
         },
     )
 }

@@ -32,3 +32,34 @@ async fn daemon_status_roundtrip() -> anyhow::Result<()> {
     ));
     Ok(())
 }
+
+#[tokio::test]
+#[ignore = "requires a running vinoopeneffects-daemon instance on the session bus"]
+async fn daemon_set_inference_provider_roundtrip() -> anyhow::Result<()> {
+    let conn = zbus::Connection::session().await?;
+    let proxy = zbus::Proxy::new(&conn, SERVICE_NAME, OBJECT_PATH, DAEMON_INTERFACE).await?;
+
+    // Invalid provider raises InvalidArgs
+    let res = proxy
+        .call::<_, _, ()>("SetInferenceProvider", &("invalid_foo"))
+        .await;
+    assert!(res.is_err());
+
+    // Setting cpu succeeds
+    proxy
+        .call::<_, _, ()>("SetInferenceProvider", &("cpu"))
+        .await?;
+    let caps = proxy
+        .get_property::<shared::dbus::VariantMap>("Capabilities")
+        .await?;
+    let req = caps
+        .get("inference_requested")
+        .and_then(shared::dbus::value_as_string);
+    assert_eq!(req.as_deref(), Some("cpu"));
+
+    // Setting auto succeeds
+    proxy
+        .call::<_, _, ()>("SetInferenceProvider", &("auto"))
+        .await?;
+    Ok(())
+}

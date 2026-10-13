@@ -65,6 +65,23 @@ impl BuiltCapture {
             effects_el.set_property("trigger-reaction", id);
         }
     }
+
+    pub fn swap_inference(&self, provider: &str) -> anyhow::Result<(String, Option<String>)> {
+        if let Some(effects_el) = self.pipeline.by_name("oe_effects") {
+            let oe = effects_el
+                .downcast::<crate::pipeline::filters::oe_effects::OeEffects>()
+                .map_err(|_| anyhow::anyhow!("oe_effects element has wrong type"))?;
+            oe.swap_provider(provider)
+        } else {
+            let npu_avail = crate::inference::probe_npu_cached().available;
+            let active = match provider {
+                "npu" if npu_avail => "npu",
+                "auto" if npu_avail => "npu",
+                _ => "cpu",
+            };
+            Ok((active.to_string(), None))
+        }
+    }
 }
 
 /// The output caps: every processed frame the appsink delivers (and thus every

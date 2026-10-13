@@ -11,6 +11,13 @@
         the daemon kept alive. Stop only halts the pipeline; the process lives. -->
     <method name="Quit" />
 
+    <!-- "auto" | "cpu" | "npu". Unknown value raises InvalidArgs.
+        Requested-but-unavailable is accepted and reported, not an error,
+        so scripts don't race hardware. -->
+    <method name="SetInferenceProvider">
+      <arg name="provider" type="s" direction="in" />
+    </method>
+
     <!-- "running" | "idle" | "error" | "stopped". Changes are announced via the
         StatusChanged signal below, not org.freedesktop.DBus.Properties.PropertiesChanged
         (avoids a receive_status_changed naming collision in generated proxies). -->
@@ -18,13 +25,19 @@
       <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false" />
     </property>
 
-    <!-- models_ready, output_sink, virtual_camera, error -->
+    <!-- models_ready, output_sink, virtual_camera, error, inference_requested,
+        inference_active, inference_available, inference_detail -->
     <property name="Capabilities" type="a{sv}" access="read">
       <annotation name="org.freedesktop.DBus.Property.EmitsChangedSignal" value="false" />
     </property>
 
     <signal name="StatusChanged">
       <arg name="new_status" type="s" direction="out" />
+    </signal>
+
+    <signal name="InferenceChanged">
+      <arg name="active" type="s" direction="out" />
+      <arg name="detail" type="s" direction="out" />
     </signal>
 
   </interface>
