@@ -1,0 +1,26 @@
+# Release build environment for the .deb/.rpm/.pkg.tar.zst packages.
+#
+# Binaries only run on systems whose glibc/libadwaita are at least as new as the
+# ones they were linked against, so packages are built on the oldest target we
+# support (Ubuntu 24.04: glibc 2.39, GTK 4.14, libadwaita 1.5) instead of on a
+# rolling-release host. Used by scripts/build-packages.sh; see docs/packaging.md.
+FROM ubuntu:24.04
+
+ARG NFPM_VERSION=2.46.3
+
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        build-essential ca-certificates curl git pkg-config clang libclang-dev python3 binutils \
+        libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+        libpipewire-0.3-dev libspa-0.2-dev \
+        libgtk-4-dev libadwaita-1-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL -o /tmp/nfpm.deb \
+        "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_amd64.deb" \
+    && dpkg -i /tmp/nfpm.deb && rm /tmp/nfpm.deb
+
+ENV RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo PATH=/opt/cargo/bin:$PATH
+# rustfmt: zbus_xmlgen formats the GUI's generated D-Bus proxies with it.
+RUN curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable --component rustfmt
+
+WORKDIR /src

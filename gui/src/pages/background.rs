@@ -23,7 +23,7 @@ use crate::constants::{
     BG_BLUR, BG_IMAGE_PRESETS, BG_MODE_ICONS, BG_MODES, BG_PRESETS, BG_REPLACE, BLUR_LEVELS,
 };
 use crate::dbus_client::{CmdTx, GuiCommand};
-use crate::widgets::{ToggleCtl, pref_group, toggle_group, toggle_group_stacked};
+use crate::widgets::{ToggleCtl, active_name, pref_group, toggle_group, toggle_group_stacked};
 
 const CUSTOM_SWATCH_CLASS: &str = "oe-custom-swatch";
 const CUSTOM_IMAGE_CLASS: &str = "oe-custom-image";
@@ -92,7 +92,7 @@ pub fn build(cmd_tx: &CmdTx) -> (adw::PreferencesPage, Widgets) {
                 return;
             }
             if row.is_active() {
-                let replace = mode_group.active_name().as_deref() == Some(BG_REPLACE);
+                let replace = active_name(&mode_group).as_deref() == Some(BG_REPLACE);
                 set_mode(&cmd_tx, replace);
             } else {
                 let _ = cmd_tx.send(GuiCommand::SetEnabled {
@@ -298,7 +298,7 @@ impl Widgets {
         if self.blur_enabled.get() {
             return BG_BLUR;
         }
-        match self.mode.group.active_name().as_deref() {
+        match active_name(&self.mode.group).as_deref() {
             Some(BG_REPLACE) => BG_REPLACE,
             _ => BG_BLUR,
         }

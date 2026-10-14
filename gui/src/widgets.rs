@@ -30,21 +30,43 @@ const SLIDER_ECHO_HOLDOFF: Duration = Duration::from_millis(1000);
 /// effect id -> (enable switch, its notify::active handler)
 pub type Switches = HashMap<&'static str, (adw::SwitchRow, glib::SignalHandlerId)>;
 
-/// An `AdwToggleGroup` whose selection change is forwarded as a string value.
-/// State sync goes through [`ToggleCtl::set_value`], which blocks the change
-/// handler so it doesn't echo back to the daemon.
+/// A linked row of grouped `GtkToggleButton`s (segmented control) whose
+/// selection change is forwarded as a string value. Each button's widget name
+/// is its option name. Built from plain GTK rather than `AdwToggleGroup` so the
+/// GUI runs on libadwaita 1.5 (Ubuntu 24.04). State sync goes through
+/// [`ToggleCtl::set_value`], which suppresses the change callback so it
+/// doesn't echo back to the daemon.
 pub struct ToggleCtl {
-    pub group: adw::ToggleGroup,
-    handler: glib::SignalHandlerId,
+    pub group: gtk::Box,
+    suppress: Rc<Cell<bool>>,
 }
 
 impl ToggleCtl {
     /// Select the toggle whose name equals `value` (no-op if none matches).
     pub fn set_value(&self, value: &str) {
-        self.group.block_signal(&self.handler);
-        self.group.set_active_name(Some(value));
-        self.group.unblock_signal(&self.handler);
+        self.suppress.set(true);
+        if let Some(btn) = toggle_buttons(&self.group).find(|b| b.widget_name() == value) {
+            btn.set_active(true);
+        }
+        self.suppress.set(false);
     }
+}
+
+fn toggle_buttons(group: &gtk::Box) -> impl Iterator<Item = gtk::ToggleButton> {
+    let mut child = group.first_child();
+    std::iter::from_fn(move || {
+        let w = child.take()?;
+        child = w.next_sibling();
+        Some(w)
+    })
+    .filter_map(|w| w.downcast::<gtk::ToggleButton>().ok())
+}
+
+/// Name of the active toggle in a [`ToggleCtl::group`].
+pub fn active_name(group: &gtk::Box) -> Option<glib::GString> {
+    toggle_buttons(group)
+        .find(|b| b.is_active())
+        .map(|b| b.widget_name())
 }
 
 /// Build a homogeneous toggle group from `(name, label)` options. `on_change`
@@ -53,14 +75,11 @@ pub fn toggle_group(
     options: &[(&'static str, &'static str)],
     on_change: impl Fn(&str) + 'static,
 ) -> ToggleCtl {
-    let group = adw::ToggleGroup::builder()
-        .homogeneous(true)
-        .halign(gtk::Align::Fill)
-        .build();
-    for (name, label) in options {
-        group.add(adw::Toggle::builder().name(*name).label(*label).build());
-    }
-    finish_toggle_group(group, on_change)
+    let buttons = options
+        .iter()
+        .map(|(name, label)| (*name, gtk::ToggleButton::with_label(label)))
+        .collect();
+    finish_toggle_group(buttons, on_change)
 }
 
 /// Build a homogeneous toggle group whose toggles show a symbolic icon
@@ -70,39 +89,65 @@ pub fn toggle_group_stacked(
     icons: &[&'static str],
     on_change: impl Fn(&str) + 'static,
 ) -> ToggleCtl {
-    let group = adw::ToggleGroup::builder()
-        .homogeneous(true)
-        .halign(gtk::Align::Fill)
-        .build();
-    for (i, (name, label)) in options.iter().enumerate() {
-        let content = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(4)
-            .halign(gtk::Align::Center)
-            .valign(gtk::Align::Center)
-            .margin_top(8)
-            .margin_bottom(8)
-            .margin_start(8)
-            .margin_end(8)
-            .build();
-        let image = gtk::Image::from_icon_name(icons[i]);
-        image.set_pixel_size(32);
-        content.append(&image);
-        content.append(&gtk::Label::new(Some(label)));
-        let toggle = adw::Toggle::builder().name(*name).label(*label).build();
-        toggle.set_child(Some(&content));
-        group.add(toggle);
-    }
-    finish_toggle_group(group, on_change)
+    let buttons = options
+        .iter()
+        .zip(icons)
+        .map(|((name, label), icon)| {
+            let content = gtk::Box::builder()
+                .orientation(gtk::Orientation::Vertical)
+                .spacing(4)
+                .halign(gtk::Align::Center)
+                .valign(gtk::Align::Center)
+                .margin_top(8)
+                .margin_bottom(8)
+                .margin_start(8)
+                .margin_end(8)
+                .build();
+            let image = gtk::Image::from_icon_name(icon);
+            image.set_pixel_size(32);
+            content.append(&image);
+            content.append(&gtk::Label::new(Some(label)));
+            let btn = gtk::ToggleButton::new();
+            btn.set_child(Some(&content));
+            (*name, btn)
+        })
+        .collect();
+    finish_toggle_group(buttons, on_change)
 }
 
-fn finish_toggle_group(group: adw::ToggleGroup, on_change: impl Fn(&str) + 'static) -> ToggleCtl {
-    let handler = group.connect_active_notify(move |group| {
-        if let Some(name) = group.active_name() {
-            on_change(name.as_str());
+fn finish_toggle_group(
+    buttons: Vec<(&'static str, gtk::ToggleButton)>,
+    on_change: impl Fn(&str) + 'static,
+) -> ToggleCtl {
+    let group = gtk::Box::builder()
+        .homogeneous(true)
+        .halign(gtk::Align::Fill)
+        .css_classes(["linked"])
+        .build();
+    let suppress = Rc::new(Cell::new(false));
+    let on_change = Rc::new(on_change);
+    let first = buttons.first().map(|(_, b)| b.clone());
+    for (name, btn) in buttons {
+        btn.set_widget_name(name);
+        btn.set_hexpand(true);
+        if let Some(first) = first.as_ref().filter(|f| *f != &btn) {
+            btn.set_group(Some(first));
         }
-    });
-    ToggleCtl { group, handler }
+        let (suppress, on_change) = (suppress.clone(), on_change.clone());
+        btn.connect_toggled(move |b| {
+            if b.is_active() && !suppress.get() {
+                on_change(name);
+            }
+        });
+        group.append(&btn);
+    }
+    let ctl = ToggleCtl { group, suppress };
+    if let Some(first) = first {
+        ctl.suppress.set(true);
+        first.set_active(true);
+        ctl.suppress.set(false);
+    }
+    ctl
 }
 
 /// A slider row paired with the signal handler for its adjustment's

@@ -1691,6 +1691,7 @@ dependencies = [
  "dirs",
  "futures-util",
  "gstreamer",
+ "gstreamer-app",
  "gtk4",
  "libadwaita",
  "serde",

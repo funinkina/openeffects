@@ -8,7 +8,15 @@
 #   ./scripts/build-packages.sh              # all three formats
 #   ./scripts/build-packages.sh deb rpm      # selected formats
 #
-# Requires: cargo, nfpm (https://nfpm.goreleaser.com), curl, python3.
+# By default the build runs inside an Ubuntu 24.04 container
+# (packaging/Containerfile) so the binaries link against glibc 2.39 /
+# libadwaita 1.5 and run on every distro at least that new. OE_NATIVE=1 builds
+# on the host instead (local testing only: a rolling-release host produces
+# binaries that need its own glibc, which the glibc guard below rejects unless
+# OE_GLIBC_MAX is raised).
+#
+# Requires: docker (or podman via OE_CONTAINER=podman). Native: cargo, nfpm,
+# curl, python3, objdump.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -25,6 +33,21 @@ VERSION="$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "([^"]+)"/\1/
 if [ -z "$VERSION" ]; then
     echo "error: could not read version from Cargo.toml" >&2
     exit 1
+fi
+
+if [ "${OE_NATIVE:-0}" != 1 ]; then
+    engine="${OE_CONTAINER:-docker}"
+    image=openeffects-build:noble
+    echo "==> Building in $image ($engine)"
+    "$engine" build -t "$image" -f packaging/Containerfile packaging
+    # Separate target/ + cargo registry volumes: the host's target/ holds
+    # binaries linked against the host glibc and must not leak into packages.
+    exec "$engine" run --rm \
+        -v "$repo_root:/src" \
+        -v openeffects-noble-target:/src/target \
+        -v openeffects-noble-cargo:/opt/cargo/registry \
+        -e OE_NATIVE=1 -e OE_CHOWN="$(id -u):$(id -g)" -e ARCH \
+        "$image" ./scripts/build-packages.sh "$@"
 fi
 
 formats=("$@")
@@ -53,6 +76,20 @@ if ldd target/release/openeffectsd 2>/dev/null | grep -qi 'onnxruntime'; then
     exit 1
 fi
 
+# Lowest glibc the binaries run on = the newest GLIBC_x.y symbol version they
+# reference. Stamped into the deb/rpm Depends so package managers refuse to
+# install on an older system instead of failing at runtime.
+GLIBC_MIN="$(objdump -T target/release/openeffectsd target/release/openeffects \
+    target/release/openeffectsctl | grep -oE 'GLIBC_[0-9]+\.[0-9]+' | cut -d_ -f2 | sort -uV | tail -1)"
+GLIBC_MAX="${OE_GLIBC_MAX:-2.39}"
+echo "==> Binaries require glibc >= $GLIBC_MIN"
+if [ "$(printf '%s\n' "$GLIBC_MIN" "$GLIBC_MAX" | sort -V | tail -1)" != "$GLIBC_MAX" ]; then
+    echo "error: binaries need glibc $GLIBC_MIN, newer than the supported floor $GLIBC_MAX" >&2
+    echo "       (Ubuntu 24.04). Build in the container (unset OE_NATIVE)." >&2
+    exit 1
+fi
+export GLIBC_MIN
+
 rm -rf "$dist"
 mkdir -p "$dist"
 
@@ -77,6 +114,8 @@ for cfg in "${configs[@]}"; do
             --target "$dist/"
     done
 done
+
+[ -n "${OE_CHOWN:-}" ] && chown -R "$OE_CHOWN" "$dist"
 
 echo
 echo "==> Done. Artifacts in dist/:"

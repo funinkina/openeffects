@@ -4,7 +4,9 @@
 //! A header toggle button reveals it. Revealing starts a GStreamer pipeline
 //! that consumes the daemon's virtual-camera node
 //! (`pipewiresrc target-object=openeffects`) and renders it into a
-//! `gtk::Picture` via `gtk4paintablesink`; hiding it tears the pipeline down so
+//! `gtk::Picture` via an RGBA `appsink` -> `gdk::MemoryTexture` (only needs
+//! gst-plugins-base; `gtk4paintablesink` isn't packaged on Ubuntu 24.04 or
+//! older Debian); hiding it tears the pipeline down so
 //! the real camera is released (the daemon's on-demand model keeps the camera
 //! open only while a consumer is linked).
 
@@ -14,6 +16,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gst::prelude::*;
 use gstreamer as gst;
+use gstreamer_app as gst_app;
 use gtk::glib;
 
 use crate::constants::VCAM_NODE_NAME;
@@ -140,30 +143,99 @@ impl Preview {
         }
     }
 
-    /// `pipewiresrc target-object=openeffects ! videoconvert ! gtk4paintablesink`,
-    /// wiring the sink's paintable into the `Picture`.
+    /// `pipewiresrc target-object=openeffects ! videoconvert ! appsink(RGBA)`.
+    /// The streaming thread hands each sample to the main loop over a 1-slot
+    /// channel (frames the UI can't keep up with are dropped), where it is
+    /// wrapped zero-copy in a `MemoryTexture` and set on the `Picture`.
     fn build_pipeline(&self) -> Result<gst::Pipeline, glib::BoolError> {
         let src = gst::ElementFactory::make("pipewiresrc")
             .property("target-object", VCAM_NODE_NAME)
             .build()?;
         let convert = gst::ElementFactory::make("videoconvert").build()?;
-        let sink = gst::ElementFactory::make("gtk4paintablesink").build()?;
+        let sink = gst_app::AppSink::builder()
+            .caps(
+                &gst::Caps::builder("video/x-raw")
+                    .field("format", "RGBA")
+                    .build(),
+            )
+            .max_buffers(1)
+            .drop(true)
+            .build();
 
-        let paintable = sink.property::<gtk::gdk::Paintable>("paintable");
-        self.picture.set_paintable(Some(&paintable));
+        let (tx, rx) = async_channel::bounded::<gst::Sample>(1);
+        sink.set_callbacks(
+            gst_app::AppSinkCallbacks::builder()
+                .new_sample(move |sink| {
+                    let sample = sink.pull_sample().map_err(|_| gst::FlowError::Eos)?;
+                    let _ = tx.try_send(sample);
+                    Ok(gst::FlowSuccess::Ok)
+                })
+                .build(),
+        );
 
-        // Hide the hint once the first frame invalidates the paintable.
+        let picture = self.picture.downgrade();
         let status = self.status.downgrade();
-        paintable.connect_invalidate_contents(move |_| {
-            if let Some(status) = status.upgrade() {
-                status.set_visible(false);
+        glib::spawn_future_local(async move {
+            while let Ok(sample) = rx.recv().await {
+                let (Some(picture), Some(texture)) = (picture.upgrade(), sample_texture(&sample))
+                else {
+                    continue;
+                };
+                picture.set_paintable(Some(&texture));
+                // Hide the hint once frames flow.
+                if let Some(status) = status.upgrade() {
+                    status.set_visible(false);
+                }
             }
         });
 
+        let sink = sink.upcast::<gst::Element>();
         let pipeline = gst::Pipeline::new();
         pipeline.add_many([&src, &convert, &sink])?;
         gst::Element::link_many([&src, &convert, &sink])?;
 
         Ok(pipeline)
+    }
+}
+
+/// Wrap an RGBA sample's buffer in a texture without copying.
+fn sample_texture(sample: &gst::Sample) -> Option<gtk::gdk::MemoryTexture> {
+    let s = sample.caps()?.structure(0)?;
+    let (w, h) = (s.get::<i32>("width").ok()?, s.get::<i32>("height").ok()?);
+    let buf = sample.buffer_owned()?.into_mapped_buffer_readable().ok()?;
+    let stride = buf.len() / h.max(1) as usize;
+    Some(gtk::gdk::MemoryTexture::new(
+        w,
+        h,
+        gtk::gdk::MemoryFormat::R8g8b8a8,
+        &glib::Bytes::from_owned(buf),
+        stride,
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rgba_sample_becomes_texture() {
+        gst::init().unwrap();
+        let pipeline = gst::parse::launch(
+            "videotestsrc num-buffers=1 ! video/x-raw,width=321,height=181 ! videoconvert \
+             ! appsink name=sink caps=video/x-raw,format=RGBA",
+        )
+        .unwrap()
+        .downcast::<gst::Pipeline>()
+        .unwrap();
+        let sink = pipeline
+            .by_name("sink")
+            .unwrap()
+            .downcast::<gst_app::AppSink>()
+            .unwrap();
+        pipeline.set_state(gst::State::Playing).unwrap();
+        let sample = sink.pull_sample().unwrap();
+        let tex = sample_texture(&sample).unwrap();
+        pipeline.set_state(gst::State::Null).unwrap();
+        assert_eq!((tex.width(), tex.height()), (321, 181));
     }
 }

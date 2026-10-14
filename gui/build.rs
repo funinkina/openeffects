@@ -43,7 +43,7 @@ fn generate_proxies() -> Result<(), Box<dyn Error>> {
     // a `mod proxies { ... }` block, where inner doc comments are not allowed.
     let generated: String = generated
         .lines()
-        .skip_while(|line| line.starts_with("//!"))
+        .skip_while(|line| line.trim_start().starts_with("//!"))
         .collect::<Vec<_>>()
         .join("\n");
 
@@ -52,8 +52,16 @@ fn generate_proxies() -> Result<(), Box<dyn Error>> {
     // annotation. That collides with the `StatusChanged` signal's generated
     // `receive_status_changed()`. Rename the signal proxy method (keeping the
     // wire name `StatusChanged` via `name = "..."`) so both can coexist.
+    // The match relies on zbus_xmlgen's rustfmt pass, which it silently skips
+    // when rustfmt isn't installed; fail here rather than with a confusing
+    // duplicate-method error.
+    const SIGNAL: &str =
+        "#[zbus(signal)]\n    fn status_changed(&self, new_status: &str) -> zbus::Result<()>;";
+    if !generated.contains(SIGNAL) {
+        return Err("generated proxy has unexpected layout; is rustfmt installed?".into());
+    }
     let generated = generated.replace(
-        "#[zbus(signal)]\n    fn status_changed(&self, new_status: &str) -> zbus::Result<()>;",
+        SIGNAL,
         "#[zbus(signal, name = \"StatusChanged\")]\n    fn daemon_status_changed(&self, new_status: &str) -> zbus::Result<()>;",
     );
 

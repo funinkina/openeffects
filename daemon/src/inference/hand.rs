@@ -1,4 +1,5 @@
-//! Two-stage MediaPipe hand pipeline used by the reactions gesture trigger:
+//! Two-stage MediaPipe hand pipeline used by the reactions gesture trigger and
+//! to patch hands into the segmentation mask ([`HandLandmarks::paint_silhouette`]):
 //! [`PalmDetector`] (SSD over the whole frame) finds palms, then
 //! [`HandLandmarker`] regresses 21 keypoints from a square crop. Both are
 //! OpenCV-Zoo ONNX exports (`*_mediapipe_2023feb.onnx`), loaded the same way as
@@ -83,6 +84,98 @@ impl HandLandmarks {
             side: side_px / w as f32,
         }
     }
+}
+
+/// MediaPipe hand skeleton: thumb, four fingers, then the palm outline
+/// (0-1-5-9-13-17-0, which [`PALM_OUTLINE`] also fills).
+#[rustfmt::skip]
+const BONES: [(usize, usize); 21] = [
+    (1, 2), (2, 3), (3, 4),
+    (5, 6), (6, 7), (7, 8),
+    (9, 10), (10, 11), (11, 12),
+    (13, 14), (14, 15), (15, 16),
+    (17, 18), (18, 19), (19, 20),
+    (0, 1), (1, 5), (5, 9), (9, 13), (13, 17), (17, 0),
+];
+const PALM_OUTLINE: [usize; 6] = [0, 1, 5, 9, 13, 17];
+/// Bone capsule radius as a fraction of the knuckle span (landmarks 5–17).
+/// Tuned on real photos against the segmenter's mask where it does cover the
+/// hand: 0.20 keeps ~97% precision (overshoot paints background as subject,
+/// which the guided filter can't carve back when colors match) while
+/// covering ~80–88% of the hand; 0.25 trades precision down to ~93%.
+const BONE_RADIUS: f32 = 0.20;
+
+impl HandLandmarks {
+    /// Union this hand's silhouette (filled palm + capsules along the bones)
+    /// into a `size`×`size` foreground mask stretched over a frame of aspect
+    /// `w/h`. The edge is anti-aliased over one mask cell. Used to cover hands
+    /// held away from the body, which the selfie segmenter misses (#4).
+    pub fn paint_silhouette(&self, values: &mut [f32], size: usize, aspect: f32) {
+        // Work in an isotropic space (x scaled by aspect) so capsules are round.
+        let p = |i: usize| (self.points[i][0] * aspect, self.points[i][1]);
+        let span = dist2(p(5), p(17)).sqrt();
+        if !span.is_normal() {
+            return;
+        }
+        let r = BONE_RADIUS * span;
+        let soft = 1.0 / size as f32;
+        let palm = PALM_OUTLINE.map(p);
+        let pad = r + soft;
+        let (x0, y0, x1, y1) = self.bbox();
+        let n = size as f32;
+        let gx = |x: f32| ((x * n).max(0.0) as usize).min(size);
+        let (gx0, gx1) = (gx(x0 - pad / aspect), gx(x1 + pad / aspect + 1.0 / n));
+        let (gy0, gy1) = (gx(y0 - pad), gx(y1 + pad + 1.0 / n));
+        for gy in gy0..gy1 {
+            let qy = (gy as f32 + 0.5) / n;
+            for gxi in gx0..gx1 {
+                let q = ((gxi as f32 + 0.5) / n * aspect, qy);
+                let d = if inside(&palm, q) {
+                    -r
+                } else {
+                    BONES
+                        .iter()
+                        .map(|&(a, b)| seg_dist2(q, p(a), p(b)))
+                        .fold(f32::MAX, f32::min)
+                        .sqrt()
+                        - r
+                };
+                let alpha = (0.5 - d / soft).clamp(0.0, 1.0);
+                let v = &mut values[gy * size + gxi];
+                *v = v.max(alpha);
+            }
+        }
+    }
+}
+
+fn dist2(a: (f32, f32), b: (f32, f32)) -> f32 {
+    (a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)
+}
+
+/// Squared distance from `q` to segment `ab`.
+fn seg_dist2(q: (f32, f32), a: (f32, f32), b: (f32, f32)) -> f32 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let len2 = dx * dx + dy * dy;
+    let t = if len2 > 0.0 {
+        (((q.0 - a.0) * dx + (q.1 - a.1) * dy) / len2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    dist2(q, (a.0 + t * dx, a.1 + t * dy))
+}
+
+/// Even-odd point-in-polygon.
+fn inside(poly: &[(f32, f32)], q: (f32, f32)) -> bool {
+    let mut odd = false;
+    let mut j = poly.len() - 1;
+    for i in 0..poly.len() {
+        let (a, b) = (poly[i], poly[j]);
+        if (a.1 > q.1) != (b.1 > q.1) && q.0 < (b.0 - a.0) * (q.1 - a.1) / (b.1 - a.1) + a.0 {
+            odd = !odd;
+        }
+        j = i;
+    }
+    odd
 }
 
 const PALM_SIZE: usize = 192;
@@ -408,6 +501,54 @@ mod tests {
             px.copy_from_slice(&[v, v / 2, 200 - v / 2, 255]);
         }
         buf
+    }
+
+    /// An upright open hand centered in a square frame, palm ~0.2 wide.
+    fn open_hand() -> HandLandmarks {
+        let mut points = [[0.0f32; 3]; 21];
+        points[0] = [0.5, 0.8, 0.0];
+        // thumb out to the left
+        for (k, i) in (1..=4).enumerate() {
+            points[i] = [0.42 - 0.04 * k as f32, 0.72 - 0.04 * k as f32, 0.0];
+        }
+        // four fingers straight up from knuckles at y=0.6
+        for (f, base) in [5usize, 9, 13, 17].into_iter().enumerate() {
+            let x = 0.42 + 0.0533 * f as f32;
+            for j in 0..4 {
+                points[base + j] = [x, 0.6 - 0.07 * j as f32, 0.0];
+            }
+        }
+        HandLandmarks {
+            points,
+            confidence: 1.0,
+        }
+    }
+
+    #[test]
+    fn silhouette_covers_hand_and_spares_background() {
+        let size = 128;
+        let mut m = vec![0f32; size * size];
+        open_hand().paint_silhouette(&mut m, size, 1.0);
+        let at = |u: f32, v: f32| m[(v * size as f32) as usize * size + (u * size as f32) as usize];
+        assert_eq!(at(0.5, 0.7), 1.0, "palm interior");
+        assert_eq!(at(0.42, 0.45), 1.0, "index finger");
+        assert_eq!(at(0.58, 0.40), 1.0, "pinky tip");
+        assert_eq!(at(0.36, 0.48), 0.0, "gap between thumb and index finger");
+        assert_eq!(at(0.5, 0.2), 0.0, "above fingertips");
+        assert_eq!(at(0.8, 0.7), 0.0, "beside the hand");
+    }
+
+    #[test]
+    fn silhouette_only_raises_mask_and_survives_offscreen_hand() {
+        let size = 64;
+        let mut m = vec![0.7f32; size * size];
+        let mut hand = open_hand();
+        for p in &mut hand.points {
+            p[0] += 0.45; // mostly off the right edge
+        }
+        hand.paint_silhouette(&mut m, size, 16.0 / 9.0);
+        assert!(m.iter().all(|&v| (0.7..=1.0).contains(&v)));
+        assert!(m.contains(&1.0));
     }
 
     #[test]

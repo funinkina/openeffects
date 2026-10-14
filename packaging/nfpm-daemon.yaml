@@ -63,6 +63,7 @@ contents:
 overrides:
   deb:
     depends:
+      - libc6 (>= ${GLIBC_MIN})
       - pipewire
       - wireplumber
       - gstreamer1.0-plugins-base
@@ -71,6 +72,7 @@ overrides:
       - dbus
   rpm:
     depends:
+      - glibc >= ${GLIBC_MIN}
       - pipewire
       - wireplumber
       - gstreamer1-plugins-base

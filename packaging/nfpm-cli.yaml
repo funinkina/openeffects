@@ -23,10 +23,12 @@ contents:
 overrides:
   deb:
     depends:
+      - libc6 (>= ${GLIBC_MIN})
       - openeffectsd
       - dbus
   rpm:
     depends:
+      - glibc >= ${GLIBC_MIN}
       - openeffectsd
       - dbus
   archlinux:

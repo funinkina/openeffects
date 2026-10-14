@@ -29,19 +29,20 @@ contents:
 overrides:
   deb:
     depends:
+      - libc6 (>= ${GLIBC_MIN})
       - openeffectsd
-      - libgtk-4-1
-      - libadwaita-1-0
-      # gtk4paintablesink, used by the GUI's live preview
-      - gstreamer1.0-gtk4
+      # Floors match the bindings' feature flags (gtk4 v4_12, libadwaita v1_5).
+      - libgtk-4-1 (>= 4.12)
+      - libadwaita-1-0 (>= 1.5)
     scripts:
       postinstall: packaging/postinstall.sh
       postremove: packaging/postremove.sh
   rpm:
     depends:
+      - glibc >= ${GLIBC_MIN}
       - openeffectsd
-      - gtk4
-      - libadwaita
+      - gtk4 >= 4.12
+      - libadwaita >= 1.5
     scripts:
       postinstall: packaging/postinstall.sh
       postremove: packaging/postremove.sh
@@ -50,6 +51,4 @@ overrides:
       - openeffectsd
       - gtk4
       - libadwaita
-      # gtk4paintablesink, used by the GUI's live preview
-      - gst-plugin-gtk4
     # Arch updates the icon cache / desktop database via pacman hooks.

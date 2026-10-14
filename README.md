@@ -60,6 +60,8 @@ sudo apt install ./openeffectsd_*_amd64.deb ./openeffects_*_amd64.deb
 
 For a headless / CLI-only setup, install `openeffectsd` plus `openeffectsctl` instead. x86_64 only for now.
 
+The packages need glibc ≥ 2.39, GTK ≥ 4.12 and libadwaita ≥ 1.5: Ubuntu 24.04, Pop!_OS 24.04, Debian 13, Fedora 40, or anything newer.
+
 ### Remote repositories (coming soon)
 
 - **Flatpak (Flathub)** — _coming soon_ (PipeWire virtual camera only; `v4l2loopback` is unavailable inside the sandbox).

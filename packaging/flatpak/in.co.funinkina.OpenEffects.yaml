@@ -19,7 +19,7 @@ id: in.co.funinkina.OpenEffects
 
 # GNOME 50 is the current Flathub runtime (mid-2026); it's based on freedesktop
 # 25.08, so the SDK extensions below resolve to their //25.08 branches. The GUI
-# only needs gtk4 v4_12 + libadwaita v1_7 (GNOME 48+), so bump freely.
+# only needs gtk4 v4_12 + libadwaita v1_5 (GNOME 46+), so bump freely.
 runtime: org.gnome.Platform
 runtime-version: '50'
 sdk: org.gnome.Sdk

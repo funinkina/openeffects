@@ -12,7 +12,7 @@ OpenEffects ships as **three** packages so users install only what they need:
 | ---------------- | ------------------------------------------------------------------- | ------------------------------------ |
 | `openeffectsd`   | daemon binary, D-Bus service + systemd user unit, bundled ML models | pipewire/gstreamer stack, dbus       |
 | `openeffectsctl` | CLI binary                                                          | **`openeffectsd`**, dbus             |
-| `openeffects`    | GTK4/libadwaita GUI binary, `.desktop` + icon                       | **`openeffectsd`**, gtk4, libadwaita |
+| `openeffects`    | GTK4/libadwaita GUI binary, `.desktop` + icon                       | **`openeffectsd`**, gtk4 ≥ 4.12, libadwaita ≥ 1.5 |
 
 The daemon is the only process that touches the pipeline, so both clients declare a
 hard dependency on it. The dependency is unversioned (`Depends: openeffectsd`) and is
@@ -79,15 +79,29 @@ export PATH="$HOME/go/bin:$PATH"
 ./scripts/build-packages.sh deb        # one format
 ```
 
+The build runs inside an **Ubuntu 24.04 container** (`packaging/Containerfile`,
+needs a running docker daemon; `OE_CONTAINER=podman` works too). A binary only
+runs on systems whose glibc is at least as new as the one it linked against, so
+building on a rolling-release host produced packages that needed glibc 2.43 and
+failed on Ubuntu 24.04 (#6, #8). The container links against glibc 2.39 /
+GTK 4.14 / libadwaita 1.5; the result runs on every distro at least that new,
+Arch included. `target/` and the cargo registry live in docker volumes
+(`openeffects-noble-target`, `openeffects-noble-cargo`) so host-linked binaries
+never leak into a package. `OE_NATIVE=1` skips the container (local testing).
+
 What it does:
 1. Read `VERSION` from `Cargo.toml` (`[workspace.package].version`), `ARCH=amd64`.
 2. `cargo build --release --workspace`.
 3. `ldd` guard — fail if `openeffectsd` dynamically links onnxruntime.
-4. Render the `@bindir@` service templates (`data/{dbus-services,systemd}/*.in`)
+4. glibc guard — read the newest `GLIBC_x.y` symbol version the binaries need
+   (`objdump -T`), fail if it exceeds `OE_GLIBC_MAX` (default `2.39`), and export
+   it as `GLIBC_MIN`, which the nfpm configs stamp into `Depends: libc6 (>= …)` /
+   `Requires: glibc >= …` so apt/dnf refuse to install on an older system.
+5. Render the `@bindir@` service templates (`data/{dbus-services,systemd}/*.in`)
    into `dist/` with `@bindir@ → /usr/bin`.
-5. Stage models: `OE_MODELS_DEST=dist/models ./scripts/fetch-models.sh`
+6. Stage models: `OE_MODELS_DEST=dist/models ./scripts/fetch-models.sh`
    (downloads + sha256-verifies into the package staging tree).
-6. `nfpm pkg` for each of the 3 configs × each format → `dist/`.
+7. `nfpm pkg` for each of the 3 configs × each format → `dist/`.
 
 Output (3 packages × N formats):
 
@@ -176,15 +190,22 @@ It rewrites both files, runs `cargo update --workspace` to sync `Cargo.lock`,
 commits `chore: release v0.2.0`, and tags `v0.2.0`. It does **not** push.
 
 ```bash
-git push && git push origin v0.2.0   # pushing the tag fires the release CI
+git push && git push origin v0.2.0   # then build + upload, see Release below
 ```
 
-## Release CI
+## Release
 
-`.github/workflows/release.yml` triggers on `v*` tags. On `ubuntu-latest` it installs
-build deps + Rust + nfpm, runs `scripts/build-packages.sh`, and attaches
-`dist/*.{deb,rpm,pkg.tar.zst}` to the GitHub Release via `softprops/action-gh-release`.
-nfpm builds the Arch `.zst` fine on Ubuntu — no Arch host required.
+There is no release CI. After pushing the tag, run `./scripts/build-packages.sh`
+(containerized, see above) and attach `dist/*.{deb,rpm,pkg.tar.zst}` to the
+GitHub Release. nfpm builds the Arch `.zst` fine on Ubuntu — no Arch host required.
+
+**Runtime-dependency floors.** The GUI bindings are pinned to `gtk4` feature
+`v4_12` and `libadwaita` feature `v1_5` (`gui/Cargo.toml`), which makes using
+newer API a compile error; the `>=` floors in `nfpm-gui.yaml` mirror them. Raise
+both together, and only to versions the oldest supported distro (Ubuntu 24.04)
+ships. Same rule for runtime packages: `gstreamer1.0-gtk4` does not exist on
+24.04, which is why the GUI preview uses `appsink` instead of
+`gtk4paintablesink` (#7).
 
 ## Source build (no packaging)
 
