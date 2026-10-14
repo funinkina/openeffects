@@ -58,7 +58,7 @@ mod imp {
 
     use crate::inference::engine::{Face, Mask, SelfieSeg, YuNet};
     use crate::inference::gesture::{self, Gesture};
-    use crate::inference::hand::{CropBox, HandLandmarker, HandLandmarks, PalmDetector};
+    use crate::inference::hand::{CropBox, HandLandmarker, HandLandmarks, PalmDetector, chroma};
     use crate::pipeline::filters::reactions::Reactions;
 
     const DEFAULT_STRENGTH: u32 = 50;
@@ -136,6 +136,16 @@ mod imp {
     /// than the gesture one: a hand raised into the background stays mangled
     /// until it is picked up.
     const SEG_REDETECT_INTERVAL: u64 = 10;
+    /// Hand prior grid resolution (stretched over the frame like the mask).
+    const HAND_COV_SIZE: usize = 256;
+    /// The hand search region is the landmark silhouette grown by this factor,
+    /// so it covers the real hand despite landmark error and motion between
+    /// segmentations; skin chroma decides which pixels in it are hand.
+    const HAND_DILATE: f32 = 1.6;
+    /// Chroma distance (BT.601 Cb/Cr, 0..255) from the sampled skin color at
+    /// which a pixel is fully hand / fully not; smoothstep in between.
+    const SKIN_NEAR: f32 = 8.0;
+    const SKIN_FAR: f32 = 20.0;
 
     #[derive(Debug, Clone)]
     struct Settings {
@@ -299,6 +309,17 @@ mod imp {
         }
     }
 
+    /// A hand to layer into the mask: its pixel bbox (search region bound) and
+    /// sampled skin chroma.
+    struct HandSkin {
+        x0: usize,
+        y0: usize,
+        x1: usize,
+        y1: usize,
+        cb: f32,
+        cr: f32,
+    }
+
     /// A tracked hand: the crop to sample next frame, and how many consecutive
     /// frames the landmark model returned low confidence (dropped after 2).
     struct HandTrack {
@@ -376,6 +397,9 @@ mod imp {
         /// or center-stage ROI), painted into the mask; see `ensure_mask`.
         seg_tracks: Vec<HandTrack>,
         seg_redetect_at: u64,
+        /// Union of the dilated silhouettes of `hand_skins` (`HAND_COV_SIZE`²).
+        hand_cov: Option<Mask>,
+        hand_skins: Vec<HandSkin>,
         /// Gesture held across the last `held_count` checks (debounce).
         held: Option<Gesture>,
         held_count: u32,
@@ -595,6 +619,7 @@ mod imp {
             state.redetect_at = 0;
             state.seg_tracks.clear();
             state.seg_redetect_at = 0;
+            state.hand_skins.clear();
             state.held = None;
             state.held_count = 0;
             drop(state);
@@ -784,6 +809,8 @@ mod imp {
             return;
         }
 
+        apply_hands(state, img, w, h);
+
         // Studio light first. The guided-filter mask already has a soft,
         // image-aligned edge, so it's used directly (no separate blur pass).
         if state.settings.studio_enabled {
@@ -842,6 +869,74 @@ mod imp {
                 (radius / scale).max(1),
             );
             composite_low(img, &state.blur_low, lw, lh, scale, &state.mask_lut, w, h);
+        }
+    }
+
+    /// Rebuild the hand search regions from fresh landmarks: the union of their
+    /// dilated silhouettes plus each hand's pixel bbox and skin chroma.
+    fn update_hand_skins(
+        state: &mut State,
+        hands: &[HandLandmarks],
+        img: &[u8],
+        w: usize,
+        h: usize,
+    ) {
+        state.hand_skins.clear();
+        if hands.is_empty() {
+            return;
+        }
+        let n = HAND_COV_SIZE;
+        let cov = state.hand_cov.get_or_insert_with(|| Mask {
+            size: n,
+            values: vec![0.0; n * n],
+        });
+        cov.values.fill(0.0);
+        for hand in hands {
+            hand.paint_silhouette(&mut cov.values, n, w as f32 / h as f32, HAND_DILATE);
+            let (cb, cr) = hand.skin_chroma(img, w, h, w * 4);
+            // Generous bound on the dilated silhouette; `hand_cov` is exact.
+            let (x0, y0, x1, y1) = hand.bbox();
+            let pad = 0.3 * ((x1 - x0) * w as f32).max((y1 - y0) * h as f32);
+            let px = |v: f32, n: usize| (v.max(0.0) as usize).min(n);
+            state.hand_skins.push(HandSkin {
+                x0: px(x0 * w as f32 - pad, w),
+                y0: px(y0 * h as f32 - pad, h),
+                x1: px(x1 * w as f32 + pad + 1.0, w),
+                y1: px(y1 * h as f32 + pad + 1.0, h),
+                cb,
+                cr,
+            });
+        }
+    }
+
+    /// Layer tracked hands into the refined mask: inside each hand's search
+    /// region a pixel counts as hand by how close its chroma is to the sampled
+    /// skin. Done after the guided filter, per frame, against the live image:
+    /// the silhouette alone is a blob (fingers merge, edges overshoot) that
+    /// lit up as a halo under studio light, while chroma follows the real
+    /// outline, finger gaps included. Union only, so it never removes subject.
+    fn apply_hands(state: &mut State, img: &[u8], w: usize, h: usize) {
+        let Some(cov) = state.hand_cov.as_ref() else {
+            return;
+        };
+        let span = SKIN_FAR - SKIN_NEAR;
+        for hs in &state.hand_skins {
+            for y in hs.y0..hs.y1 {
+                let v = (y as f32 + 0.5) / h as f32;
+                for x in hs.x0..hs.x1 {
+                    let c = cov.sample((x as f32 + 0.5) / w as f32, v);
+                    if c <= 0.0 {
+                        continue;
+                    }
+                    let i = y * w + x;
+                    let (cb, cr) = chroma(&img[i * 4..]);
+                    let d = ((cb - hs.cb).powi(2) + (cr - hs.cr).powi(2)).sqrt();
+                    let t = ((SKIN_FAR - d) / span).clamp(0.0, 1.0);
+                    let a = (t * t * (3.0 - 2.0 * t) * c.min(1.0) * 255.0) as u8;
+                    let m = &mut state.mask_lut[i];
+                    *m = (*m).max(a);
+                }
+            }
         }
     }
 
@@ -1123,14 +1218,13 @@ mod imp {
         if space_changed {
             state.mask_ema = None;
             state.seg_tracks.clear();
+            state.hand_skins.clear();
         }
         if let Some(model) = state.engine.selfie() {
             match model.segment(buf, w, h, stride) {
                 Ok(mut mask) => {
-                    // The segmenter misses hands held away from the body (#4).
-                    // Union their landmark silhouettes into the raw mask so the
-                    // EMA smooths them and the guided filter snaps them onto
-                    // the real hand outline like any other subject edge.
+                    // The segmenter misses hands held away from the body (#4);
+                    // refresh the hand regions `apply_hands` layers back in.
                     let hands = track_hands(
                         &mut state.engine,
                         &mut state.seg_tracks,
@@ -1141,9 +1235,7 @@ mod imp {
                         w,
                         h,
                     );
-                    for hand in hands.iter().flatten() {
-                        hand.paint_silhouette(&mut mask.values, mask.size, w as f32 / h as f32);
-                    }
+                    update_hand_skins(state, hands.as_deref().unwrap_or_default(), buf, w, h);
                     let a = SEG_EMA_ALPHA;
                     match &mut state.mask_ema {
                         Some(e) if e.len() == mask.values.len() => {
@@ -1698,6 +1790,45 @@ mod imp {
     #[cfg(test)]
     mod tests {
         use super::*;
+
+        /// Hands are layered in by skin chroma inside the search region: a
+        /// skin pixel is raised to subject, a gray background pixel right next
+        /// to it (finger gap / halo band) is not, and nothing outside the
+        /// region is touched.
+        #[test]
+        fn hand_layer_follows_skin_not_silhouette() {
+            let (w, h) = (64usize, 64usize);
+            let skin = [224u8, 172, 140, 255];
+            let gray = [128u8, 128, 128, 255];
+            let mut img = Vec::with_capacity(w * h * 4);
+            for _ in 0..h {
+                for x in 0..w {
+                    img.extend_from_slice(if (x / 4) % 2 == 0 { &skin } else { &gray });
+                }
+            }
+            let (cb, cr) = chroma(&skin);
+            let n = HAND_COV_SIZE;
+            let mut values = vec![0.0; n * n];
+            for y in n / 4..3 * n / 4 {
+                values[y * n + n / 4..y * n + 3 * n / 4].fill(1.0);
+            }
+            let mut state = State::default();
+            state.hand_cov = Some(Mask { size: n, values });
+            state.hand_skins.push(HandSkin {
+                x0: 0,
+                y0: 0,
+                x1: w,
+                y1: h,
+                cb,
+                cr,
+            });
+            state.mask_lut = vec![0; w * h];
+            apply_hands(&mut state, &img, w, h);
+            let at = |x: usize, y: usize| state.mask_lut[y * w + x];
+            assert_eq!(at(33, 32), 255, "skin inside region");
+            assert_eq!(at(37, 32), 0, "gray gap inside region");
+            assert_eq!(at(1, 1), 0, "skin outside region");
+        }
 
         /// Regression for #1: portrait blur must not bleed the subject's color
         /// into the blurred background (the halo). A red subject on a blue

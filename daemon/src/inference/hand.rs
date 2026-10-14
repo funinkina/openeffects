@@ -1,5 +1,6 @@
 //! Two-stage MediaPipe hand pipeline used by the reactions gesture trigger and
-//! to patch hands into the segmentation mask ([`HandLandmarks::paint_silhouette`]):
+//! to patch hands into the segmentation mask ([`HandLandmarks::paint_silhouette`],
+//! [`HandLandmarks::skin_chroma`]):
 //! [`PalmDetector`] (SSD over the whole frame) finds palms, then
 //! [`HandLandmarker`] regresses 21 keypoints from a square crop. Both are
 //! OpenCV-Zoo ONNX exports (`*_mediapipe_2023feb.onnx`), loaded the same way as
@@ -99,25 +100,22 @@ const BONES: [(usize, usize); 21] = [
 ];
 const PALM_OUTLINE: [usize; 6] = [0, 1, 5, 9, 13, 17];
 /// Bone capsule radius as a fraction of the knuckle span (landmarks 5–17).
-/// Tuned on real photos against the segmenter's mask where it does cover the
-/// hand: 0.20 keeps ~97% precision (overshoot paints background as subject,
-/// which the guided filter can't carve back when colors match) while
-/// covering ~80–88% of the hand; 0.25 trades precision down to ~93%.
+/// On real photos the undilated silhouette lands ~97% inside the true hand
+/// and covers ~80–88% of it; callers dilate it into a search region.
 const BONE_RADIUS: f32 = 0.20;
 
 impl HandLandmarks {
-    /// Union this hand's silhouette (filled palm + capsules along the bones)
-    /// into a `size`×`size` foreground mask stretched over a frame of aspect
-    /// `w/h`. The edge is anti-aliased over one mask cell. Used to cover hands
-    /// held away from the body, which the selfie segmenter misses (#4).
-    pub fn paint_silhouette(&self, values: &mut [f32], size: usize, aspect: f32) {
+    /// Union this hand's silhouette (filled palm + capsules along the bones,
+    /// radius scaled by `dilate`) into a `size`×`size` grid stretched over a
+    /// frame of aspect `w/h`. The edge is anti-aliased over one grid cell.
+    pub fn paint_silhouette(&self, values: &mut [f32], size: usize, aspect: f32, dilate: f32) {
         // Work in an isotropic space (x scaled by aspect) so capsules are round.
         let p = |i: usize| (self.points[i][0] * aspect, self.points[i][1]);
         let span = dist2(p(5), p(17)).sqrt();
         if !span.is_normal() {
             return;
         }
-        let r = BONE_RADIUS * span;
+        let r = BONE_RADIUS * dilate * span;
         let soft = 1.0 / size as f32;
         let palm = PALM_OUTLINE.map(p);
         let pad = r + soft;
@@ -146,6 +144,53 @@ impl HandLandmarks {
             }
         }
     }
+}
+
+impl HandLandmarks {
+    /// Median skin chroma `(Cb, Cr)` (BT.601, `0..255`) sampled at interior
+    /// points — palm center and the middle of each proximal phalanx — where
+    /// the hand covers the pixel even if a landmark is a little off. Chroma
+    /// ignores shading, so one sample set describes the lit and shadowed side.
+    pub fn skin_chroma(&self, rgba: &[u8], w: usize, h: usize, stride: usize) -> (f32, f32) {
+        let pt = |i: usize| (self.points[i][0], self.points[i][1]);
+        let mid = |a: usize, b: usize| ((pt(a).0 + pt(b).0) / 2.0, (pt(a).1 + pt(b).1) / 2.0);
+        let palm = [0, 5, 9, 13, 17]
+            .map(pt)
+            .into_iter()
+            .fold((0.0, 0.0), |acc, p| (acc.0 + p.0 / 5.0, acc.1 + p.1 / 5.0));
+        let samples = [
+            palm,
+            mid(0, 9),
+            mid(5, 6),
+            mid(9, 10),
+            mid(13, 14),
+            mid(17, 18),
+            mid(2, 3),
+        ];
+        let (mut cb, mut cr): (Vec<f32>, Vec<f32>) = samples
+            .iter()
+            .map(|&(u, v)| {
+                let x = ((u * w as f32) as usize).min(w - 1);
+                let y = ((v * h as f32) as usize).min(h - 1);
+                chroma(&rgba[y * stride + x * 4..])
+            })
+            .unzip();
+        (median(&mut cb), median(&mut cr))
+    }
+}
+
+/// BT.601 `(Cb, Cr)` of an RGBA pixel.
+pub fn chroma(px: &[u8]) -> (f32, f32) {
+    let (r, g, b) = (px[0] as f32, px[1] as f32, px[2] as f32);
+    (
+        128.0 - 0.1687 * r - 0.3313 * g + 0.5 * b,
+        128.0 + 0.5 * r - 0.4187 * g - 0.0813 * b,
+    )
+}
+
+fn median(v: &mut [f32]) -> f32 {
+    v.sort_by(f32::total_cmp);
+    v[v.len() / 2]
 }
 
 fn dist2(a: (f32, f32), b: (f32, f32)) -> f32 {
@@ -528,7 +573,7 @@ mod tests {
     fn silhouette_covers_hand_and_spares_background() {
         let size = 128;
         let mut m = vec![0f32; size * size];
-        open_hand().paint_silhouette(&mut m, size, 1.0);
+        open_hand().paint_silhouette(&mut m, size, 1.0, 1.0);
         let at = |u: f32, v: f32| m[(v * size as f32) as usize * size + (u * size as f32) as usize];
         assert_eq!(at(0.5, 0.7), 1.0, "palm interior");
         assert_eq!(at(0.42, 0.45), 1.0, "index finger");
@@ -546,7 +591,7 @@ mod tests {
         for p in &mut hand.points {
             p[0] += 0.45; // mostly off the right edge
         }
-        hand.paint_silhouette(&mut m, size, 16.0 / 9.0);
+        hand.paint_silhouette(&mut m, size, 16.0 / 9.0, 1.0);
         assert!(m.iter().all(|&v| (0.7..=1.0).contains(&v)));
         assert!(m.contains(&1.0));
     }
