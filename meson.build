@@ -1,5 +1,5 @@
 project('openeffects', 'rust',
-  version: '0.1.4',
+  version: '0.1.5',
   meson_version: '>=1.2.0',
   license: 'GPL-3.0-or-later',
 )
