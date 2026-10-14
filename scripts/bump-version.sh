@@ -29,13 +29,16 @@ sed -i -E "0,/^version = \"[^\"]+\"/s//version = \"$new\"/" Cargo.toml
 # meson.build project version.
 sed -i -E "s/^  version: '[^']+',/  version: '$new',/" meson.build
 
+# Website fallback for builds without git tags.
+sed -i -E "s/^let version = 'v[^']+';/let version = 'v$new';/" website/astro.config.mjs
+
 # Sync the lockfile entries for the workspace crates.
 cargo update --workspace >/dev/null
 
-git add Cargo.toml meson.build Cargo.lock
+git add Cargo.toml meson.build Cargo.lock website/astro.config.mjs
 git commit -m "chore: release v$new"
 git tag "v$new"
 
 echo
-echo "==> Tagged v$new. To publish (fires release CI):"
+echo "==> Tagged v$new. Push, then build + upload (docs/packaging.md#release):"
 echo "    git push && git push origin v$new"
