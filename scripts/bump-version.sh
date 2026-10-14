@@ -37,7 +37,7 @@ cargo update --workspace >/dev/null
 
 git add Cargo.toml meson.build Cargo.lock website/astro.config.mjs
 git commit -m "chore: release v$new"
-git tag "v$new"
+git tag -m "v$new" "v$new"
 
 echo
 echo "==> Tagged v$new. Push, then build + upload (docs/packaging.md#release):"
